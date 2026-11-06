@@ -1398,6 +1398,7 @@ function netEvent(m) {
     myOid = m.oid || ''; Object.keys(owners).forEach(k => delete owners[k]); Object.assign(owners, m.plots || {}); syncHomes(); netId = m.id; remotes.forEach((r, id) => { if (id === netId) dropRemote(id); }); (m.players || []).forEach(addRemote); refreshNet(); }
   else if (m.t === 'join') addRemote(m.p);
   else if (m.t === 'leave') dropRemote(m.id);
+  else if (m.t === 'furn') { if (homeVisit && homeRoom && inHome.id === m.plot) { homeRoom.items.forEach(x => homeRoom.group.remove(x)); homeRoom.items.length = 0; (m.furn || []).forEach(f => addFurn(f)); } }
   else if (m.t === 'move') { const r = remotes.get(m.id); if (r) { r.x = m.x; r.z = m.z; r.f = m.f; r.mv = m.mv; r.w = m.w; } }
   else if (m.t === 'chat') { chatLine(m.name, m.text, false); }
 }
@@ -1408,19 +1409,19 @@ function startNet() {
   refreshNet();
 }
 function updateNet(dt) {
-  const here = inCity && !inHome;
-  remoteGroup.visible = here;
+  const w = inHome ? 'home:' + inHome.id : inCity ? 'city' : 'other';
+  remoteGroup.visible = w !== 'other';
   remotes.forEach(r => {
     const k = Math.min(1, dt * 9), m = r.mesh;
     const dx = r.x - m.position.x, dz = r.z - m.position.z, far = Math.hypot(dx, dz) > 8;
     m.position.x = far ? r.x : m.position.x + dx * k; m.position.z = far ? r.z : m.position.z + dz * k;
     m.rotation.y = angleLerp(m.rotation.y, r.f, k);
-    m.visible = r.w === 'city';
+    m.visible = r.w === w && w !== 'other';
     if (m.visible) animateHero(m, dt, { moving: !!r.mv });
   });
   if (!net || !net.connected) return;
   netAt += dt;
-  const p = player.position, w = here ? 'city' : 'other', moved = Math.hypot(p.x - netLast.x, p.z - netLast.z) > 0.05 || Math.abs(facing - netLast.f) > 0.1 || w !== netLast.w;
+  const p = player.position, moved = Math.hypot(p.x - netLast.x, p.z - netLast.z) > 0.05 || Math.abs(facing - netLast.f) > 0.1 || w !== netLast.w;
   if ((moved && netAt > 0.1) || netAt > 3) {
     netAt = 0; const mv = Math.hypot(p.x - netLast.x, p.z - netLast.z) > 0.05 ? 1 : 0;
     netLast = { x: p.x, z: p.z, f: facing, mv, w }; net.send({ t: 'move', x: +p.x.toFixed(2), z: +p.z.toFixed(2), f: +facing.toFixed(2), mv, w });
@@ -1430,7 +1431,7 @@ function openOnline() {
   if (isPaused()) return;
   const rows = [{ head: true, text: net && net.connected ? '🟢 Conectado — ' + (remotes.size + 1) + ' jogador(es) online' : '🔴 Sem conexão com o servidor. Tentando reconectar…' }];
   rows.push({ text: '🧍 ' + meName() + ' (você)\n' + (inHome ? 'Em casa' : inCity ? 'Na cidade' : 'Nas florestas') });
-  remotes.forEach(r => rows.push({ text: '🧍 ' + r.name + '\n' + (r.w === 'city' ? 'Na cidade de Aurora' : 'Em outra área') }));
+  remotes.forEach(r => rows.push({ text: '🧍 ' + r.name + '\n' + (r.w === 'city' ? 'Na cidade de Aurora' : r.w.startsWith('home:') ? 'Dentro de uma casa' : 'Em outra área') }));
   if (!remotes.size) rows.push({ text: 'Ninguém mais por aqui agora. Chame um amigo para abrir o link! Na cidade 🏰 vocês aparecem juntos.' });
   rows.push({ text: '👋 Fechar', btn: 'FECHAR', fn: closePanel });
   openPanel('🌐 ONLINE', rows);
@@ -1613,6 +1614,7 @@ if (qs.has('home')) {
   enterHome(hp_); if (qs.has('furn')) ['bed', 'sofa', 'table', 'shelf', 'rug', 'plant', 'fireplace', 'painting'].forEach((k, i) => addFurn({ k, x: -4 + (i % 4) * 2.6, z: -3 + Math.floor(i / 4) * 3.4, r: 0 }));
   if (qs.has('decor')) toggleDecor(true); }
 }
+if (qs.has('visit')) setTimeout(() => { setCityMode(true); net && net.send({ t: 'visit', plot: PLOTS[+qs.get('visit') || 0].id }); }, 3500);
 if (qs.get('edge')) { player.position.set(+qs.get('edge') - 0, 0, 0); }
 camera.position.copy(player.position).add(_co.copy(CAM_OFFSET).multiplyScalar(zoom));
 

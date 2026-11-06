@@ -10,10 +10,10 @@ export default {
     const url = new URL(req.url);
     if (url.pathname === '/ws') {
       if (req.headers.get('Upgrade') !== 'websocket') return new Response('Use WebSocket', { status: 426 });
-      return env.ROOM.get(env.ROOM.idFromName('aurora-v2')).fetch(req);
+      return env.ROOM.get(env.ROOM.idFromName('aurora-v3')).fetch(req);
     }
     if (url.pathname === '/online') {
-      const r = await env.ROOM.get(env.ROOM.idFromName('aurora-v2')).fetch(new Request('https://room/count'));
+      const r = await env.ROOM.get(env.ROOM.idFromName('aurora-v3')).fetch(new Request('https://room/count'));
       return new Response(await r.text(), { headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } });
     }
     return new Response('jogo-anime-online ok', { headers: { 'access-control-allow-origin': '*' } });
@@ -56,7 +56,7 @@ export class Room {
       this.broadcast({ t: 'join', p: this.pubP(me) }, ws);
     } else if (!me.name) { return; }
     else if (m.t === 'move') {
-      me.x = num(m.x, 400); me.z = num(m.z, 400); me.f = num(m.f, 7); me.mv = m.mv ? 1 : 0; me.w = m.w === 'city' ? 'city' : 'other';
+      me.x = num(m.x, 400); me.z = num(m.z, 400); me.f = num(m.f, 7); me.mv = m.mv ? 1 : 0; me.w = m.w === 'city' ? 'city' : /^home:p\d{1,3}$/.test(String(m.w)) ? m.w : 'other';
       ws.serializeAttachment(me);
       this.broadcast({ t: 'move', id: me.id, x: me.x, z: me.z, f: me.f, mv: me.mv, w: me.w }, ws);
     } else if (m.t === 'buy') {
@@ -69,7 +69,7 @@ export class Room {
       const id = String(m.plot || ''), pl = this.plots[id];
       if (!pl || pl.oid !== me.oid || !Array.isArray(m.furn)) return;
       pl.furn = m.furn.slice(0, 80).filter(f => f && FURN_RE.test(String(f.k))).map(f => ({ k: String(f.k), x: num(f.x, 20), z: num(f.z, 20), r: (f.r | 0) & 3 }));
-      await this.savePlots();
+      await this.savePlots(); this.broadcast({ t: 'furn', plot: id, furn: pl.furn }, ws);
     } else if (m.t === 'sell') {
       const id = String(m.plot || ''), pl = this.plots[id];
       if (pl && pl.oid === me.oid) { delete this.plots[id]; await this.savePlots(); this.broadcast({ t: 'plot', id, oid: '', name: '' }); this.send(ws, { t: 'plot', id, oid: '', name: '' }); }
