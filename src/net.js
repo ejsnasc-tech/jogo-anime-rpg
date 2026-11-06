@@ -1,7 +1,7 @@
 // Cliente online: conecta no servidor (Cloudflare Worker) e mostra os outros jogadores.
 import * as THREE from 'three';
 
-export const NET_URL = 'wss://jogo-anime-online.point-sucao.workers.dev/ws';
+export const NET_URL = 'wss://jogo-anime-online.ejsnasc.workers.dev/ws';
 
 export function createNet({ url, getMe, onEvent, onStatus }) {
   let ws = null, alive = true, retry = 0, timer = null, connected = false;

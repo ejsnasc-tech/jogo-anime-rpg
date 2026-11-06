@@ -22,7 +22,7 @@ const defaults = () => ({
   gold: 0, gems: 80, cash: 0, level: 1, kills: 0,
   owned: ['kaito'], team: ['kaito'], upgrades: { atk: 0, hp: 0 }, stars: {},
   pets: ['fox'], activePet: 'fox', petStars: {},
-  skills: {}, xp: 0, skillPts: 0, items: [], equip: {}, mats: {}, homes: {}, maxAct: 0, storyDone: false,
+  skills: {}, xp: 0, skillPts: 0, items: [], equip: {}, mats: {}, homes: {}, stock: {}, maxAct: 0, storyDone: false,
   act: 0, stage: 1, stageKills: 0, endless: false, seen: {}, account: null, custom: null, lastSeen: Date.now(),
 });
 function upsertPlayer(c) {
@@ -35,6 +35,7 @@ function load() {
   if (s.custom) upsertPlayer(s.custom);
   if (s.maxAct < s.act) s.maxAct = s.act;
   migrateItems(s);
+  if (!s.pid) s.pid = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)).replace(/-/g, '');
   if (s.endless) { s.storyDone = true; s.maxAct = 5; }
   const ids = HEROES.map(h => h.id);
   if (s.active && !s.team.length) s.team = [s.active];
@@ -262,7 +263,8 @@ const skillReady = {};
 let bossRef = null;
 let panelOpen = false, dialogOpen = false, creatorOpen = false;
 let inCity = false, city = null, nearNpc = null, walkGoal = null, invOpen = false, mmT = 0;
-let inHome = null, homeRoom = null;
+let inHome = null, homeRoom = null, homeVisit = null;
+const owners = {}; let myOid = '';
 const decor = { on: false, sel: null, drag: false, mark: null };
 const isPaused = () => panelOpen || dialogOpen || creatorOpen || invOpen;
 const joy = { active: false, id: null, ox: 0, oy: 0, dx: 0, dy: 0 };
@@ -323,7 +325,7 @@ function refreshHud() {
   $('hname').textContent = 'Nv.' + state.level + ' ' + hero.name.split(' ')[0];
   $('hgems').textContent = '💎' + state.gems; $('hgold').textContent = '🪙' + state.gold; $('hcash').textContent = '💵' + state.cash;
   const a = curAct();
-  $('stage').textContent = inHome ? '\u{1F3E0} ' + inHome.name + ' \u2014 ' + ROOMS[inHome.kind].label : inCity ? '🏰 Cidade de Aurora — fale com os moradores' : state.endless ? '♾ Aventura Infinita • abates ' + state.stageKills
+  $('stage').textContent = inHome ? '\u{1F3E0} ' + (homeVisit ? 'Visitando a casa de ' + homeVisit.name : inHome.name + ' \u2014 ' + ROOMS[inHome.kind].label) : inCity ? '🏰 Cidade de Aurora — fale com os moradores' : state.endless ? '♾ Aventura Infinita • abates ' + state.stageKills
     : 'Ato ' + (state.act + 1) + ' (Nv.' + zoneLv() + ') • ' + a.name + ' — ' + (state.stage === 5 ? 'CHEFE' : 'Estágio ' + state.stage + '/5  (' + state.stageKills + '/' + quota() + ')');
 }
 
@@ -971,7 +973,7 @@ function openGear(title, slots, mode, back, keep) {
   if (keep) $('card').scrollTop = st;
 }
 
-const ROLE_DESC = { smith: 'Melhora, compra e vende armas e escudos', armor: 'Melhora, compra e vende elmos, armaduras, calças e botas', merchant: 'Amuletos, anéis e compra de itens', summoner: 'Invoca heróis e criaturas', map: 'Mapa das florestas' };
+const ROLE_DESC = { deco: 'Móveis e decoração para sua casa', smith: 'Melhora, compra e vende armas e escudos', armor: 'Melhora, compra e vende elmos, armaduras, calças e botas', merchant: 'Amuletos, anéis e compra de itens', summoner: 'Invoca heróis e criaturas', map: 'Mapa das florestas' };
 const ROLE_SLOTS = { smith: ['weapon', 'offhand'], armor: ['helm', 'chest', 'legs', 'boots'], merchant: ['amulet', 'ring'] };
 const ROLE_WHAT = { smith: 'armas e escudos', armor: 'armaduras', merchant: 'joias' };
 function openNpcMenu(n) {
@@ -985,6 +987,7 @@ function openNpcMenu(n) {
     rows.push({ text: '🛒 Comprar ' + nm + '\nEquipamentos da loja', btn: 'ABRIR', fn: () => openGear('🛒 Comprar ' + nm, slots, 'buy', back) });
     rows.push({ text: '💰 Vender itens\nO que você coletou dos monstros', btn: 'ABRIR', fn: () => openGear('💰 Vender itens', SLOT_ORDER, 'sell', back) });
   }
+  if (n.role === 'deco') rows.push({ text: '🪑 Comprar móveis\nOs móveis vão para o seu baú. Depois, dentro da sua casa, toque em DECORAR para colocar.', btn: 'ABRIR', fn: () => openFurnShop(n) });
   if (n.role === 'summoner') rows.push({ text: '🔮 Invocar heróis e criaturas\nGaste 💎 para chamar aliados', btn: 'ABRIR', fn: () => openCrew() });
   if (n.role === 'map') {
     rows.push({ text: '🗺️ Mapa das florestas\nEscolha para onde viajar', btn: 'ABRIR', fn: () => openMap() });
@@ -994,6 +997,13 @@ function openNpcMenu(n) {
   openPanel(n.icon + ' ' + n.title.split(',')[0], rows);
 }
 function openNpc(n) { openNpcMenu(n); }
+function openFurnShop(n, keep) {
+  const st = keep ? $('card').scrollTop : 0, again = () => openFurnShop(n, true);
+  const rows = [{ text: '◀ Voltar ao menu', btn: 'VOLTAR', fn: () => openNpcMenu(n) }, { head: true, text: '🪙' + state.gold + '   Móveis no baú: ' + Object.values(state.stock).reduce((a, b) => a + b, 0) }];
+  FURN.forEach(f => rows.push({ text: f.icon + ' ' + f.name + '\nNo baú: ' + (state.stock[f.k] || 0), btn: '🪙' + f.price, enabled: state.gold >= f.price, fn: () => { state.gold -= f.price; state.stock[f.k] = (state.stock[f.k] || 0) + 1; save(state); refreshHud(); again(); } }));
+  openPanel('🪑 Comprar móveis', rows);
+  if (keep) $('card').scrollTop = st;
+}
 
 function walkTo(n) { walkGoal = { x: n.pos[0], z: n.pos[1], npc: n }; toast('🚶 Indo falar com ' + n.title.split(',')[0] + '…'); }
 function handleTap(x, y) {
@@ -1054,43 +1064,44 @@ function openCityMap() {
 }
 
 // ===================== Casas e apartamentos =====================
-const refreshPlots = () => { if (city) city.setOwned(state.homes); };
+const refreshPlots = () => { if (city) city.setOwned(state.homes, owners, myOid); };
 function syncCam() { pet.position.copy(player.position); camera.position.copy(player.position).add(_co.copy(CAM_OFFSET).multiplyScalar(zoom)); }
 
 function openPlotMenu(p) {
   if (isPaused()) return;
   walkGoal = null;
-  const own = state.homes[p.id], house = p.kind === 'house', R = ROOMS[p.kind], again = () => openPlotMenu(p);
-  const rows = [{ head: true, text: (house ? '🏠 ' : '🏢 ') + p.name + ' — ' + R.label + '\n' + (own ? 'Este lar é seu! Entre para decorar com móveis.' : house ? 'Casa ampla para decorar do seu jeito.' : 'Apartamento aconchegante para morar e decorar.') }];
+  const own = state.homes[p.id], o = owners[p.id], other = !own && o && o.oid !== myOid, house = p.kind === 'house', R = ROOMS[p.kind], again = () => openPlotMenu(p);
+  const rows = [{ head: true, text: (house ? '🏠 ' : '🏢 ') + p.name + ' — ' + R.label + '\n' + (own ? 'Este lar é seu! Entre para decorar com móveis.' : other ? 'Morada de ' + o.name + '. Você pode visitar e ver a decoração.' : house ? 'Casa ampla para decorar do seu jeito.' : 'Apartamento aconchegante para morar e decorar.') }];
   if (own) rows.push({ text: '🚪 Entrar\n' + (own.furn || []).length + ' móvel(is) na sala', btn: 'ENTRAR', fn: () => { closePanel(); enterHome(p); } });
+  else if (other) rows.push({ text: '👀 Visitar a casa de ' + o.name + '\nVeja os móveis dele', btn: 'VISITAR', enabled: !!(net && net.connected), fn: () => { closePanel(); net.send({ t: 'visit', plot: p.id }); } });
   else rows.push({
     text: (house ? '🛒 Comprar ' : '🔑 Alugar ') + p.name + '\nSala de ' + R.w + '×' + R.d + ' m para mobiliar', btn: '🪙' + p.price, enabled: state.gold >= p.price,
-    fn: () => { state.gold -= p.price; state.homes[p.id] = { furn: [] }; save(state); refreshHud(); refreshPlots(); closePanel(); toast(house ? '🏠 Casa comprada!' : '🏢 Apartamento alugado!'); again(); },
+    fn: () => { state.gold -= p.price; state.homes[p.id] = { furn: [] }; save(state); refreshHud(); if (net) net.send({ t: 'buy', plot: p.id }); refreshPlots(); closePanel(); toast(house ? '🏠 Casa comprada!' : '🏢 Apartamento alugado!'); again(); },
   });
   rows.push({ text: '👋 Voltar', btn: 'FECHAR', fn: closePanel });
   openPanel((house ? '🏠 ' : '🏢 ') + p.name, rows);
 }
 
-function enterHome(p) {
-  if (!state.homes[p.id]) return;
+function enterHome(p, visit) {
+  if (!visit && !state.homes[p.id]) return;
   if (inHome) cleanupHome();
-  inHome = p; homeRoom = buildRoom(p.kind); homeRoom.items = []; scene.add(homeRoom.group);
+  homeVisit = visit || null; inHome = p; homeRoom = buildRoom(p.kind); homeRoom.items = []; scene.add(homeRoom.group);
   const mk = new THREE.Group();
   mk.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffe14d, transparent: true, opacity: 0.28, depthWrite: false })));
   mk.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 0.1, 1)), new THREE.LineBasicMaterial({ color: 0xffe14d })));
   mk.visible = false; homeRoom.group.add(mk); decor.mark = mk; decor.sel = null;
-  (state.homes[p.id].furn || []).forEach(f => addFurn(f));
+  (visit ? visit.furn || [] : state.homes[p.id].furn || []).forEach(f => addFurn(f));
   if (city) city.group.visible = false;
   setSky(['#2b2140', '#4a3a66', '#7a5f8f']); scene.fog.color.set(0x2b2140); ground.material.color.set(0x241c33);
   clearEnemies(); nearNpc = null; walkGoal = null; $('talk').style.display = 'none';
   player.position.set(0, 0, homeRoom.hd - 1.8); facing = Math.PI;
   setZoom(1.7); zoom = zoomT; syncCam();
-  document.body.classList.add('inhome'); $('minimap').style.display = 'none'; $('homebar').style.display = 'flex'; $('decor').style.display = 'none';
-  $('citybtn').textContent = '🚪 SAIR'; refreshHud(); toast('🏠 ' + p.name + ' — toque em DECORAR para mobiliar');
+  document.body.classList.add('inhome'); $('minimap').style.display = 'none'; $('homebar').style.display = visit ? 'none' : 'flex'; $('decor').style.display = 'none';
+  $('citybtn').textContent = '🚪 SAIR'; refreshHud(); toast(visit ? '👀 Visitando a casa de ' + visit.name : '🏠 ' + p.name + ' — toque em DECORAR para mobiliar');
 }
 function cleanupHome() {
   if (homeRoom) scene.remove(homeRoom.group);
-  homeRoom = null; inHome = null; decor.on = false; decor.sel = null; decor.drag = false; decor.mark = null;
+  homeRoom = null; inHome = null; homeVisit = null; decor.on = false; decor.sel = null; decor.drag = false; decor.mark = null;
   document.body.classList.remove('inhome'); $('minimap').style.display = ''; $('homebar').style.display = 'none'; $('decor').style.display = 'none';
 }
 function leaveHome() {
@@ -1099,7 +1110,11 @@ function leaveHome() {
   player.position.set(p.door[0], 0, p.door[1]); facing = p.ry; syncCam(); refreshPlots();
 }
 
-function homeSave() { state.homes[inHome.id].furn = homeRoom.items.map(m => ({ k: m.userData.k, x: m.position.x, z: m.position.z, r: m.userData.r })); save(state); }
+function homeSave() {
+  if (homeVisit) return;
+  const f = homeRoom.items.map(m => ({ k: m.userData.k, x: m.position.x, z: m.position.z, r: m.userData.r }));
+  state.homes[inHome.id].furn = f; save(state); if (net) net.send({ t: 'furn', plot: inHome.id, furn: f });
+}
 function placeFurn(m, x, z) {
   const k = m.userData.k, [fw, fd] = footprint(k, m.userData.r), sn = (v) => Math.round(v * 2) / 2, C = THREE.MathUtils.clamp;
   m.position.x = C(sn(x), -homeRoom.hw + fw / 2, homeRoom.hw - fw / 2);
@@ -1115,20 +1130,21 @@ function updateMark() {
   const [fw, fd] = footprint(s.userData.k, s.userData.r); mk.scale.set(fw + 0.25, 1, fd + 0.25); mk.position.set(s.position.x, 0.06, s.position.z);
 }
 function buyFurn(f) {
-  if (!inHome || state.gold < f.price) return;
-  state.gold -= f.price; const m = addFurn({ k: f.k, x: 0, z: -1, r: 0 }); decor.sel = m; homeSave(); refreshHud(); updateMark(); renderDecor();
+  if (!inHome || homeVisit) return;
+  if ((state.stock[f.k] || 0) > 0) state.stock[f.k]--; else if (state.gold >= f.price) state.gold -= f.price; else return;
+  const m = addFurn({ k: f.k, x: 0, z: -1, r: 0 }); decor.sel = m; homeSave(); refreshHud(); updateMark(); renderDecor();
 }
 function rotFurn() { const m = decor.sel; if (!m || m.userData.k === 'painting') return; m.userData.r = (m.userData.r + 1) % 4; m.rotation.y = m.userData.r * Math.PI / 2; placeFurn(m, m.position.x, m.position.z); homeSave(); updateMark(); }
 function delFurn() {
   const m = decor.sel; if (!m) return;
-  state.gold += Math.floor(furnByKey(m.userData.k).price / 2); homeRoom.group.remove(m); homeRoom.items.splice(homeRoom.items.indexOf(m), 1); decor.sel = null;
-  homeSave(); refreshHud(); updateMark(); renderDecor(); toast('📦 Móvel guardado — devolvemos metade do preço');
+  state.stock[m.userData.k] = (state.stock[m.userData.k] || 0) + 1; homeRoom.group.remove(m); homeRoom.items.splice(homeRoom.items.indexOf(m), 1); decor.sel = null;
+  homeSave(); refreshHud(); updateMark(); renderDecor(); toast('📦 Móvel guardado no seu baú de móveis');
 }
 function renderDecor() {
   const shop = $('decshop'), keep = shop.scrollLeft; shop.innerHTML = '';
   FURN.forEach(f => {
-    const b = el('button', 'dcard', null, shop); el('div', 'dic', f.icon, b); el('div', 'dnm', f.name, b); el('div', 'dpr', '🪙' + f.price, b);
-    b.disabled = state.gold < f.price; b.onclick = () => buyFurn(f);
+    const have = state.stock[f.k] || 0, b = el('button', 'dcard', null, shop); el('div', 'dic', f.icon, b); el('div', 'dnm', f.name, b); el('div', 'dpr', have ? '📦 x' + have + ' grátis' : '🪙' + f.price, b);
+    b.disabled = !have && state.gold < f.price; b.onclick = () => buyFurn(f);
   });
   shop.scrollLeft = keep;
   const s = decor.sel, d = s && furnByKey(s.userData.k);
@@ -1136,7 +1152,7 @@ function renderDecor() {
   $('decrot').disabled = !s || s.userData.k === 'painting'; $('decdel').disabled = !s;
 }
 function toggleDecor(on) {
-  if (!inHome) return;
+  if (!inHome || homeVisit) return;
   decor.on = on; decor.sel = null; decor.drag = false; updateMark();
   $('decor').style.display = on ? 'block' : 'none'; $('homebar').style.display = on ? 'none' : 'flex';
   joy.active = false; joy.dx = joy.dy = 0; $('joy-base').style.display = $('joy-knob').style.display = 'none';
@@ -1366,8 +1382,20 @@ function chatLine(name, text, mine) {
   setTimeout(() => d.remove(), 14000);
 }
 function refreshNet() { $('netbtn').textContent = (net && net.connected ? '🟢 ' + (remotes.size + 1) : '🔴 offline'); }
+function syncHomes() {
+  Object.keys(state.homes).forEach(id => {
+    const o = owners[id];
+    if (o && o.oid !== myOid) { delete state.homes[id]; toast('⚠ ' + id + ' já pertence a ' + o.name); }
+    else if (!o && net) { net.send({ t: 'buy', plot: id }); net.send({ t: 'furn', plot: id, furn: state.homes[id].furn || [] }); }
+  });
+  save(state); refreshPlots();
+}
 function netEvent(m) {
-  if (m.t === 'hello') { netId = m.id; remotes.forEach((r, id) => { if (id === netId) dropRemote(id); }); (m.players || []).forEach(addRemote); refreshNet(); }
+  if (m.t === 'plot') { owners[m.id] = { oid: m.oid, name: m.name }; refreshPlots(); }
+  else if (m.t === 'buyfail') { delete state.homes[m.plot]; refreshPlots(); toast('⚠ Alguém comprou essa casa antes'); }
+  else if (m.t === 'home') { const p = PLOTS.find(x => x.id === m.plot); if (p && inCity && !inHome) enterHome(p, { name: m.name, furn: m.furn }); }
+  else if (m.t === 'hello') {
+    myOid = m.oid || ''; Object.keys(owners).forEach(k => delete owners[k]); Object.assign(owners, m.plots || {}); syncHomes(); netId = m.id; remotes.forEach((r, id) => { if (id === netId) dropRemote(id); }); (m.players || []).forEach(addRemote); refreshNet(); }
   else if (m.t === 'join') addRemote(m.p);
   else if (m.t === 'leave') dropRemote(m.id);
   else if (m.t === 'move') { const r = remotes.get(m.id); if (r) { r.x = m.x; r.z = m.z; r.f = m.f; r.mv = m.mv; r.w = m.w; } }
@@ -1376,7 +1404,7 @@ function netEvent(m) {
 function startNet() {
   const q = new URLSearchParams(location.search).get('net');
   if (testing || q === '0') { $('netbtn').style.display = $('chatbtn').style.display = 'none'; return; }
-  net = createNet({ url: q && q.startsWith('ws') ? q : NET_URL, getMe: () => ({ name: meName(), look: state.custom || null }), onEvent: netEvent, onStatus: (ok) => { if (!ok) { remotes.forEach((r, id) => dropRemote(id)); netId = null; } refreshNet(); } });
+  net = createNet({ url: q && q.startsWith('ws') ? q : NET_URL, getMe: () => ({ name: meName(), look: state.custom || null, pid: state.pid }), onEvent: netEvent, onStatus: (ok) => { if (!ok) { remotes.forEach((r, id) => dropRemote(id)); netId = null; } refreshNet(); } });
   refreshNet();
 }
 function updateNet(dt) {
@@ -1699,12 +1727,15 @@ function runSelfTest() {
         state.homes[q.id] = { furn: [] }; refreshPlots(); enterHome(q); toggleDecor(true);
         for (const f of FURN) buyFurn(f); decor.sel = homeRoom.items[0]; rotFurn(); placeFurn(decor.sel, 99, 99); homeSave(); renderDecor();
         if (homeRoom.items.length !== FURN.length) throw new Error('moveis');
-        const n = homeRoom.items.length, g0 = state.gold; delFurn(); if (homeRoom.items.length !== n - 1 || state.gold <= g0) throw new Error('guardar movel');
+        const n = homeRoom.items.length, k0 = decor.sel.userData.k, s0 = state.stock[k0] || 0; delFurn(); if (homeRoom.items.length !== n - 1 || (state.stock[k0] || 0) !== s0 + 1) throw new Error('guardar movel');
         toggleDecor(false); for (let i = 0; i < 20; i++) update(0.05);
         player.position.set(0, 0, homeRoom.hd + 0.5); update(0.05); if (inHome) throw new Error('nao saiu da casa');
         if (!inCity || state.homes[q.id].furn.length !== FURN.length - 1) throw new Error('moveis nao salvos');
         enterHome(q); if (homeRoom.items.length !== FURN.length - 1) throw new Error('recarregar moveis'); leaveHome();
       }
+      enterHome(pl, { name: 'Amigo', furn: [{ k: 'bed', x: 0, z: 0, r: 1 }] }); if (homeRoom.items.length !== 1 || !homeVisit) throw new Error('visita'); toggleDecor(true); if (decor.on) throw new Error('visitante decorou'); leaveHome();
+      owners.p3 = { oid: 'zz', name: 'Beto' }; refreshPlots(); openPlotMenu(PLOTS[3]); closePanel(); delete owners.p3; refreshPlots();
+      openNpc(city.npcs.find(x => x.role === 'deco')); openFurnShop(city.npcs.find(x => x.role === 'deco')); closePanel();
       openCityMap(); closePanel(); drawMap($('minimap'));
       walkGoal = { x: pl.door[0], z: pl.door[1], plot: pl }; player.position.set(pl.door[0] + 6, 0, pl.door[1]); for (let i = 0; i < 200 && walkGoal; i++) update(0.05); if (!panelOpen) throw new Error('casa nao abriu ao chegar'); closePanel();
       out.push('casas/predios/moveis: ok'); }

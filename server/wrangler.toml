@@ -1,6 +1,6 @@
+account_id = "4486f5377d83216c279533b9c55905fc"
 name = "jogo-anime-online"
 main = "worker.js"
-account_id = "ffff5857a9304ab1ed3849e25508e830"
 compatibility_date = "2025-01-01"
 
 [[durable_objects.bindings]]

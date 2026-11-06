@@ -30,6 +30,7 @@ export const NPC_DEFS = [
   { role: 'armor', icon: '🛡️', color: '#4fc3f7', title: 'Mara, a Armeira', pos: arc(122, 15), premade: 7, talk: 'Uma boa armadura salva vidas. Já vi muito herói bonito cair por economizar no peitoral.' },
   { role: 'map', icon: '🗺️', color: '#ffd54f', title: 'Shiro, Guia dos Mapas', pos: arc(90, 15), premade: 2, talk: 'Cada floresta tem seus perigos e seus tesouros. Eu conheço todas. Para onde vamos, viajante?' },
   { role: 'merchant', icon: '💰', color: '#81c784', title: 'Ilyra, Mercadora', pos: arc(58, 15), premade: 3, talk: 'Amuletos raros e bons preços! E compro tudo o que você coletou nas florestas.' },
+  { role: 'deco', icon: '\u{1FA91}', color: '#ffb74d', title: 'Lia, a Decoradora', pos: arc(188, 15), premade: 5, talk: 'Casa bonita \u00E9 casa feliz! Compre os m\u00F3veis aqui e depois coloque onde quiser dentro da sua casa.' },
   { role: 'summoner', icon: '🔮', color: '#ba68c8', title: 'Orin, o Invocador', pos: arc(25, 15), premade: 4, talk: 'Os fios do destino trazem heróis e criaturas até nós. Quer chamar um?' },
 ];
 
@@ -113,10 +114,11 @@ export function buildCity() {
     ring.rotation.x = -Math.PI / 2; ring.position.set(p.door[0], 0.13, p.door[1]); group.add(ring);
     return { p, tag, ring };
   });
-  const setOwned = (homes) => plotViews.forEach(v => {
-    const own = !!homes[v.p.id];
-    v.tag.userData.draw(own ? '\u{1F3E0} ' + v.p.name + ' \u2014 seu lar' : (v.p.kind === 'house' ? '\u{1F3E0} \u00C0 venda \u{1FA99}' : '\u{1F3E2} Alugar \u{1FA99}') + v.p.price, own ? '#66e08a' : '#f5c542');
-    v.ring.material.color.set(own ? 0x66e08a : 0xffd54f);
+  const setOwned = (homes, owners, myOid) => plotViews.forEach(v => {
+    const own = !!homes[v.p.id], o = owners && owners[v.p.id], other = !own && o && o.oid !== myOid, house = v.p.kind === 'house';
+    const txt = own ? '\u{1F3E0} ' + v.p.name + ' \u2014 seu lar' : other ? (house ? '\u{1F3E0} Casa de ' : '\u{1F3E2} Apto de ') + o.name : (house ? '\u{1F3E0} \u00C0 venda \u{1FA99}' : '\u{1F3E2} Alugar \u{1FA99}') + v.p.price;
+    v.tag.userData.draw(txt, own ? '#66e08a' : other ? '#7fb8ff' : '#f5c542');
+    v.ring.material.color.set(own ? 0x66e08a : other ? 0x7fb8ff : 0xffd54f);
   });
 
   // ---- Grande Salão ao norte ----
