@@ -653,7 +653,7 @@ function hitPlayer(e) {
   if (hp <= 0) {
     hp = maxHp; state.gold = Math.floor(state.gold * 0.9);
     clearEnemies(); ftAt(player.position, 'DERROTADO!', '#ff6b6b', 2.5); invuln = T + 3;
-    timers.push({ at: T + 1.1, fn: () => { if (!inCity) { setCityMode(true); toast('2620 Voc00EA foi derrotado e levado de volta 00E0 cidade {1F3F0} (perdeu 10% do ouro)'); } } });
+    timers.push({ at: T + 1.1, fn: () => { if (!inCity) { setCityMode(true); toast('☠ Você foi derrotado e levado de volta à cidade 🏰 (perdeu 10% do ouro)'); } } });
     refreshHud(); save(state);
   }
 }
