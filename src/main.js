@@ -264,7 +264,7 @@ let bossRef = null;
 let panelOpen = false, dialogOpen = false, creatorOpen = false;
 let inCity = false, city = null, nearNpc = null, walkGoal = null, invOpen = false, mmT = 0;
 let inHome = null, homeRoom = null, homeVisit = null;
-const owners = {}; let myOid = '';
+const owners = {}; let myOid = ''; const recover = new Set();
 const decor = { on: false, sel: null, drag: false, mark: null };
 const isPaused = () => panelOpen || dialogOpen || creatorOpen || invOpen;
 const joy = { active: false, id: null, ox: 0, oy: 0, dx: 0, dy: 0 };
@@ -442,6 +442,8 @@ function openProfile(keep) {
   const rows = [{ head: true, text: '🪙' + state.gold + '  💎' + state.gems + '  💵' + state.cash + '  •  Abates: ' + state.kills + '\n' + MATS.map((m, i) => m.icon + (state.mats[i] || 0)).join('  ') }];
   rows.push({ text: '🎒 Mochila e equipamento\nUse os botões 🧍 EQUIP e 🎒 BAG no canto superior esquerdo.' });
   rows.push({ text: 'Aparência do personagem\nMude nome, classe e visual', btn: 'EDITAR', fn: editCharacter });
+  rows.push({ text: '🔑 Código da conta (guarde!)\n' + state.pid + '\nÉ ele que prova que suas casas são suas. Use o mesmo código em outro aparelho ou navegador.', btn: 'COPIAR', fn: () => { try { navigator.clipboard.writeText(state.pid); toast('🔑 Código copiado'); } catch (e) { window.prompt('Copie seu código:', state.pid); } } });
+  rows.push({ text: 'Entrar com um código de conta\nRecupera suas casas neste aparelho', btn: 'USAR', fn: () => { const c = (window.prompt('Cole o código da conta:') || '').trim().replace(/[^a-zA-Z0-9]/g, ''); if (c.length >= 16) { state.pid = c; state.homes = {}; save(state); location.reload(); } else if (c) toast('Código inválido'); } });
   rows.push({ text: 'Treino de ataque +25%\nNível ' + state.upgrades.atk, btn: '🪙' + cost('atk'), enabled: state.gold >= cost('atk'), fn: () => { state.gold -= cost('atk'); state.upgrades.atk++; save(state); refreshHud(); again(); } });
   rows.push({ text: 'Treino de vitalidade +20 HP\nNível ' + state.upgrades.hp, btn: '🪙' + cost('hp'), enabled: state.gold >= cost('hp'), fn: () => { state.gold -= cost('hp'); state.upgrades.hp++; maxHp = calcMaxHp(); hp = maxHp; save(state); refreshHud(); again(); } });
   openPanel('👤 PERFIL', rows);
@@ -1073,6 +1075,7 @@ function openPlotMenu(p) {
   walkGoal = null;
   const own = state.homes[p.id], o = owners[p.id], other = !own && o && o.oid !== myOid, house = p.kind === 'house', R = ROOMS[p.kind], again = () => openPlotMenu(p);
   const rows = [{ head: true, text: (house ? '🏠 ' : '🏢 ') + p.name + ' — ' + R.label + '\n' + (own ? 'Este lar é seu! Entre para decorar com móveis.' : other ? 'Morada de ' + o.name + '. Você pode visitar e ver a decoração.' : house ? 'Casa ampla para decorar do seu jeito.' : 'Apartamento aconchegante para morar e decorar.') }];
+  if (other && o.name === meName()) rows.push({ head: true, text: '⚠ Esta casa tem o mesmo nome que o seu, mas foi comprada em outro navegador/aparelho, por isso você só pode visitar. Para ter acesso de dono, abra PERFIL → “Entrar com um código de conta” e use o código do navegador onde comprou.' });
   if (own) rows.push({ text: '🚪 Entrar\n' + (own.furn || []).length + ' móvel(is) na sala', btn: 'ENTRAR', fn: () => { closePanel(); enterHome(p); } });
   else if (other) rows.push({ text: '👀 Visitar a casa de ' + o.name + '\nVeja os móveis dele', btn: 'VISITAR', enabled: !!(net && net.connected), fn: () => { closePanel(); net.send({ t: 'visit', plot: p.id }); } });
   else rows.push({
@@ -1384,6 +1387,7 @@ function chatLine(name, text, mine) {
 }
 function refreshNet() { $('netbtn').textContent = (net && net.connected ? '🟢 ' + (remotes.size + 1) : '🔴 offline'); }
 function syncHomes() {
+  Object.keys(owners).forEach(id => { if (owners[id].oid === myOid && !state.homes[id]) { state.homes[id] = { furn: [] }; recover.add(id); net && net.send({ t: 'visit', plot: id }); } });
   Object.keys(state.homes).forEach(id => {
     const o = owners[id];
     if (o && o.oid !== myOid) { delete state.homes[id]; toast('⚠ ' + id + ' já pertence a ' + o.name); }
@@ -1394,6 +1398,7 @@ function syncHomes() {
 function netEvent(m) {
   if (m.t === 'plot') { owners[m.id] = { oid: m.oid, name: m.name }; refreshPlots(); }
   else if (m.t === 'buyfail') { delete state.homes[m.plot]; refreshPlots(); toast('⚠ Alguém comprou essa casa antes'); }
+  else if (m.t === 'home' && recover.has(m.plot)) { recover.delete(m.plot); if (state.homes[m.plot]) { state.homes[m.plot].furn = m.furn || []; save(state); } toast('🏠 Casa recuperada: ' + m.plot); }
   else if (m.t === 'home') { const p = PLOTS.find(x => x.id === m.plot); if (p && inCity && !inHome) enterHome(p, { name: m.name, furn: m.furn }); }
   else if (m.t === 'hello') {
     myOid = m.oid || ''; Object.keys(owners).forEach(k => delete owners[k]); Object.assign(owners, m.plots || {}); syncHomes(); netId = m.id; remotes.forEach((r, id) => { if (id === netId) dropRemote(id); }); (m.players || []).forEach(addRemote); refreshNet(); }
