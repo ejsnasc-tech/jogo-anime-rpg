@@ -7,6 +7,7 @@ import { SKILLS, SKILL_MAX, skillById, rollChoices } from './skills.js';
 import { SLOTS, SLOT_ORDER, EQUIP_KEYS, KINDS, WEAPON_KIND, OFF_KIND, RAR, MATS, FOREST_LV, MAX_PLUS, newItem, itemValue, itemStat, itemIcon, itemFmt, statFmt, itemName, itemLine, sellPrice, buyPrice, upgradeCost, rollDrop, migrateItems } from './items.js';
 import { itemArt, ghostArt } from './itemart.js';
 import { buildCity, CITY_R, CITY_SPAWN, PLOTS } from './city.js';
+import { createNet, nameTag, NET_URL } from './net.js';
 import { ROOMS, FURN, furnByKey, makeFurniture, footprint, buildRoom } from './home.js';
 
 const WORLD = 200;          // metade do tamanho do mapa
@@ -1345,6 +1346,77 @@ cv.addEventListener('touchstart', (e) => {
 cv.addEventListener('touchmove', (e) => { if (pinch && e.touches.length === 2) setZoom(pinch.z * pinch.d / Math.max(10, tdist(e.touches))); }, { passive: true });
 cv.addEventListener('touchend', (e) => { if (e.touches.length < 2) pinch = null; }, { passive: true });
 
+// ===================== Online: outros jogadores =====================
+const remoteGroup = new THREE.Group(); scene.add(remoteGroup);
+const remotes = new Map();
+let net = null, netLast = { x: 1e9, z: 1e9, f: 0, mv: 0, w: '' }, netAt = 0, netId = null;
+const meName = () => ((state.custom && state.custom.name) || state.account || 'Viajante').toString().slice(0, 16);
+function addRemote(p) {
+  if (!p || p.id === netId || remotes.has(p.id)) return;
+  let mesh; try { mesh = makeHero(buildPlayerHero(Object.assign({}, PREMADE[0], p.look || {}, { name: p.name }))); } catch (e) { mesh = makeHero(buildPlayerHero(PREMADE[0])); }
+  const tag = nameTag(p.name || '?'); tag.position.set(0, 3.1, 0); mesh.add(tag);
+  mesh.position.set(p.x || 0, 0, p.z || 0); remoteGroup.add(mesh);
+  remotes.set(p.id, { id: p.id, name: p.name, mesh, x: p.x || 0, z: p.z || 0, f: p.f || 0, mv: 0, w: p.w || 'other' });
+  refreshNet();
+}
+function dropRemote(id) { const r = remotes.get(id); if (!r) return; remoteGroup.remove(r.mesh); remotes.delete(id); refreshNet(); }
+function chatLine(name, text, mine) {
+  const log = $('chatlog'), d = document.createElement('div'); d.className = 'cl' + (mine ? ' me' : '');
+  d.textContent = name + ': ' + text; log.appendChild(d); while (log.children.length > 6) log.removeChild(log.firstChild);
+  setTimeout(() => d.remove(), 14000);
+}
+function refreshNet() { $('netbtn').textContent = (net && net.connected ? '🟢 ' + (remotes.size + 1) : '🔴 offline'); }
+function netEvent(m) {
+  if (m.t === 'hello') { netId = m.id; remotes.forEach((r, id) => { if (id === netId) dropRemote(id); }); (m.players || []).forEach(addRemote); refreshNet(); }
+  else if (m.t === 'join') addRemote(m.p);
+  else if (m.t === 'leave') dropRemote(m.id);
+  else if (m.t === 'move') { const r = remotes.get(m.id); if (r) { r.x = m.x; r.z = m.z; r.f = m.f; r.mv = m.mv; r.w = m.w; } }
+  else if (m.t === 'chat') { chatLine(m.name, m.text, false); }
+}
+function startNet() {
+  const q = new URLSearchParams(location.search).get('net');
+  if (testing || q === '0') { $('netbtn').style.display = $('chatbtn').style.display = 'none'; return; }
+  net = createNet({ url: q && q.startsWith('ws') ? q : NET_URL, getMe: () => ({ name: meName(), look: state.custom || null }), onEvent: netEvent, onStatus: (ok) => { if (!ok) { remotes.forEach((r, id) => dropRemote(id)); netId = null; } refreshNet(); } });
+  refreshNet();
+}
+function updateNet(dt) {
+  const here = inCity && !inHome;
+  remoteGroup.visible = here;
+  remotes.forEach(r => {
+    const k = Math.min(1, dt * 9), m = r.mesh;
+    const dx = r.x - m.position.x, dz = r.z - m.position.z, far = Math.hypot(dx, dz) > 8;
+    m.position.x = far ? r.x : m.position.x + dx * k; m.position.z = far ? r.z : m.position.z + dz * k;
+    m.rotation.y = angleLerp(m.rotation.y, r.f, k);
+    m.visible = r.w === 'city';
+    if (m.visible) animateHero(m, dt, { moving: !!r.mv });
+  });
+  if (!net || !net.connected) return;
+  netAt += dt;
+  const p = player.position, w = here ? 'city' : 'other', moved = Math.hypot(p.x - netLast.x, p.z - netLast.z) > 0.05 || Math.abs(facing - netLast.f) > 0.1 || w !== netLast.w;
+  if ((moved && netAt > 0.1) || netAt > 3) {
+    netAt = 0; const mv = Math.hypot(p.x - netLast.x, p.z - netLast.z) > 0.05 ? 1 : 0;
+    netLast = { x: p.x, z: p.z, f: facing, mv, w }; net.send({ t: 'move', x: +p.x.toFixed(2), z: +p.z.toFixed(2), f: +facing.toFixed(2), mv, w });
+  }
+}
+function openOnline() {
+  if (isPaused()) return;
+  const rows = [{ head: true, text: net && net.connected ? '🟢 Conectado — ' + (remotes.size + 1) + ' jogador(es) online' : '🔴 Sem conexão com o servidor. Tentando reconectar…' }];
+  rows.push({ text: '🧍 ' + meName() + ' (você)\n' + (inHome ? 'Em casa' : inCity ? 'Na cidade' : 'Nas florestas') });
+  remotes.forEach(r => rows.push({ text: '🧍 ' + r.name + '\n' + (r.w === 'city' ? 'Na cidade de Aurora' : 'Em outra área') }));
+  if (!remotes.size) rows.push({ text: 'Ninguém mais por aqui agora. Chame um amigo para abrir o link! Na cidade 🏰 vocês aparecem juntos.' });
+  rows.push({ text: '👋 Fechar', btn: 'FECHAR', fn: closePanel });
+  openPanel('🌐 ONLINE', rows);
+}
+function sendChat() {
+  const inp = $('chatinp'), t = inp.value.trim(); if (!t) return; inp.value = '';
+  chatLine(meName(), t, true); if (net) net.send({ t: 'chat', text: t });
+}
+$('netbtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); openOnline(); });
+$('chatbtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); const b = $('chatbar'), on = b.style.display !== 'flex'; b.style.display = on ? 'flex' : 'none'; if (on) $('chatinp').focus(); });
+$('chatsend').addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); sendChat(); });
+$('chatinp').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') sendChat(); if (e.key === 'Escape') { $('chatbar').style.display = 'none'; $('chatinp').blur(); } });
+$('chatinp').addEventListener('keyup', (e) => e.stopPropagation());
+
 // ===================== Loop =====================
 const tmpScale = new THREE.Vector3();
 
@@ -1474,6 +1546,7 @@ function frame() {
   requestAnimationFrame(frame);
   const nowT = performance.now(), dt = Math.min((nowT - lastT) / 1000, 0.05); lastT = nowT;
   if (!isPaused()) update(dt);
+  updateNet(dt);
   const p = player.position;
   zoom += (zoomT - zoom) * Math.min(1, dt * 8);
   camera.position.lerp(new THREE.Vector3(p.x, 0, p.z).add(_co.copy(CAM_OFFSET).multiplyScalar(zoom)), Math.min(1, dt * 6));
@@ -1490,6 +1563,7 @@ $('loading').style.display = 'none';
 city = buildCity(); scene.add(city.group); refreshPlots();
 applyAct();
 setHero();
+startNet();
 const qs = new URLSearchParams(location.search);
 if (qs.get('pet') && PETS.some(p => p.id === qs.get('pet'))) state.activePet = qs.get('pet');
 if (qs.get('mount')) { mounted = true; $('mount').textContent = '⬇ DESMONTAR'; }
