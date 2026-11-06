@@ -26,9 +26,9 @@ var worker_default = {
     return new Response("jogo-anime-online ok", { headers: { "access-control-allow-origin": "*" } });
   }
 };
-var Room = class {
+var City = class {
   static {
-    __name(this, "Room");
+    __name(this, "City");
   }
   constructor(state) {
     this.state = state;
@@ -112,7 +112,7 @@ var Room = class {
       me.z = num(m.z, 400);
       me.f = num(m.f, 7);
       me.mv = m.mv ? 1 : 0;
-      me.w = m.w === "city" ? "city" : /^home:p\d{1,3}$/.test(String(m.w)) ? m.w : "other";
+      me.w = m.w === "city" ? "city" : /^(home:p\d{1,3}|field:(\d|inf))$/.test(String(m.w)) ? m.w : "other";
       ws.serializeAttachment(me);
       this.broadcast({ t: "move", id: me.id, x: me.x, z: me.z, f: me.f, mv: me.mv, w: me.w }, ws);
     } else if (m.t === "buy") {
@@ -337,7 +337,7 @@ if (typeof middleware_insertion_facade_default === "object") {
 }
 var middleware_loader_entry_default = WRAPPED_ENTRY;
 export {
-  Room,
+  City,
   __INTERNAL_WRANGLER_MIDDLEWARE__,
   middleware_loader_entry_default as default
 };

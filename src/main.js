@@ -1041,6 +1041,7 @@ function drawMap(cvs, full) {
   } else {
     const k = (h - 8) / 32, X = (x) => h + (x - p.x) * k, Z = (z) => h + (z - p.z) * k;
     c.strokeStyle = 'rgba(255,255,255,.12)'; c.lineWidth = 1; for (let i = 1; i < 4; i++) { c.beginPath(); c.arc(h, h, h * i / 4, 0, 7); c.stroke(); }
+    remotes.forEach(r => { if (r.w !== curW()) return; c.fillStyle = '#4fc3f7'; c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.beginPath(); c.arc(X(r.mesh.position.x), Z(r.mesh.position.z), full ? 8 : 5, 0, 7); c.fill(); c.stroke(); });
     enemies.forEach(e => { c.fillStyle = e.boss ? '#ff1744' : '#ff7043'; c.beginPath(); c.arc(X(e.mesh.position.x), Z(e.mesh.position.z), e.boss ? 7 : 3.5, 0, 7); c.fill(); });
   }
   c.restore();
@@ -1408,15 +1409,17 @@ function startNet() {
   net = createNet({ url: q && q.startsWith('ws') ? q : NET_URL, getMe: () => ({ name: meName(), look: state.custom || null, pid: state.pid }), onEvent: netEvent, onStatus: (ok) => { if (!ok) { remotes.forEach((r, id) => dropRemote(id)); netId = null; } refreshNet(); } });
   refreshNet();
 }
+const curW = () => inHome ? 'home:' + inHome.id : inCity ? 'city' : 'field:' + (state.endless ? 'inf' : state.act);
+const whereTxt = (w) => w === 'city' ? 'Na cidade de Aurora' : w.startsWith('home:') ? 'Dentro de uma casa' : w === 'field:inf' ? 'Na Aventura Infinita' : w.startsWith('field:') ? 'Na floresta do Ato ' + (+w.slice(6) + 1) + (w === curW() ? ' (com você!)' : '') : 'Em outra área';
 function updateNet(dt) {
-  const w = inHome ? 'home:' + inHome.id : inCity ? 'city' : 'other';
-  remoteGroup.visible = w !== 'other';
+  const w = curW();
+  remoteGroup.visible = true;
   remotes.forEach(r => {
     const k = Math.min(1, dt * 9), m = r.mesh;
     const dx = r.x - m.position.x, dz = r.z - m.position.z, far = Math.hypot(dx, dz) > 8;
     m.position.x = far ? r.x : m.position.x + dx * k; m.position.z = far ? r.z : m.position.z + dz * k;
     m.rotation.y = angleLerp(m.rotation.y, r.f, k);
-    m.visible = r.w === w && w !== 'other';
+    m.visible = r.w === w;
     if (m.visible) animateHero(m, dt, { moving: !!r.mv });
   });
   if (!net || !net.connected) return;
@@ -1431,7 +1434,7 @@ function openOnline() {
   if (isPaused()) return;
   const rows = [{ head: true, text: net && net.connected ? '🟢 Conectado — ' + (remotes.size + 1) + ' jogador(es) online' : '🔴 Sem conexão com o servidor. Tentando reconectar…' }];
   rows.push({ text: '🧍 ' + meName() + ' (você)\n' + (inHome ? 'Em casa' : inCity ? 'Na cidade' : 'Nas florestas') });
-  remotes.forEach(r => rows.push({ text: '🧍 ' + r.name + '\n' + (r.w === 'city' ? 'Na cidade de Aurora' : r.w.startsWith('home:') ? 'Dentro de uma casa' : 'Em outra área') }));
+  remotes.forEach(r => rows.push({ text: '🧍 ' + r.name + '\n' + (whereTxt(r.w)) }));
   if (!remotes.size) rows.push({ text: 'Ninguém mais por aqui agora. Chame um amigo para abrir o link! Na cidade 🏰 vocês aparecem juntos.' });
   rows.push({ text: '👋 Fechar', btn: 'FECHAR', fn: closePanel });
   openPanel('🌐 ONLINE', rows);
