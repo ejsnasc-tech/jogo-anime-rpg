@@ -652,8 +652,8 @@ function hitPlayer(e) {
   hp -= dmg;
   if (hp <= 0) {
     hp = maxHp; state.gold = Math.floor(state.gold * 0.9);
-    clearEnemies(); ftAt(player.position, 'DERROTADO!', '#ff6b6b', 2.5);
-    if (state.stage === 5 && !state.endless) spawnBoss();
+    clearEnemies(); ftAt(player.position, 'DERROTADO!', '#ff6b6b', 2.5); invuln = T + 3;
+    timers.push({ at: T + 1.1, fn: () => { if (!inCity) { setCityMode(true); toast('2620 Voc00EA foi derrotado e levado de volta 00E0 cidade {1F3F0} (perdeu 10% do ouro)'); } } });
     refreshHud(); save(state);
   }
 }
@@ -1730,6 +1730,9 @@ function runSelfTest() {
     }
     for (const md of ['upgrade', 'buy', 'sell']) { openGear('t', SLOT_ORDER, md, null); closePanel(); } openProfile(); closePanel(); openInv('eq'); renderInv(); invSel = state.items[0].uid; renderInv(); bagFilter = 'helm'; renderInv(); invMode = 'bag'; renderInv(); invMode = 'eq'; bagFilter = 'all'; const spare = newItem('helm', 0, 0); state.items.push(spare); invSel = spare.uid; renderInv(); closeInv(); invSel = null; openMap(); closePanel(); openCityMap(); closePanel(); renderEquipBox(); toggleInv("eq"); toggleInv("eq"); handleTap(215, 450); walkTo(city.npcs[0]); for (let i = 0; i < 200 && walkGoal; i++) update(0.05); if (!panelOpen) throw new Error('NPC nao abriu menu ao chegar'); closePanel();
     if (!(calcMaxHp() > hp0 && atkPower() > at0)) throw new Error('equipamento nao aumentou status');
+    // morte na floresta leva de volta a cidade
+    setCityMode(false); clearEnemies(); hp = 1; maxHp = Math.max(maxHp, 10); hitPlayer({ dmg: 1e6 }); for (let i = 0; i < 40; i++) update(0.05); if (!inCity) throw new Error('morte nao levou a cidade'); setCityMode(false); if (inCity) throw new Error('nao voltou');
+    state.gold = 1e6;
     // casas: comprar, entrar, mobiliar, sair
     { const pl = PLOTS[0], pa = PLOTS.find(x => x.kind === 'apt'); state.gold = 1e6; state.homes = {};
       openPlotMenu(pl); closePanel(); openPlotMenu(pa); closePanel();
