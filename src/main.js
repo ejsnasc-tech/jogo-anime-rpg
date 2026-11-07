@@ -9,6 +9,7 @@ import { itemArt, ghostArt } from './itemart.js';
 import { buildCity, CITY_R, CITY_SPAWN, PLOTS } from './city.js';
 import { createNet, nameTag, NET_URL } from './net.js';
 import { QUESTS, ACH, LOGIN_DAYS, ensureMeta, loginState, claimLogin, loginReward, questReward, offlineGain } from './meta.js';
+import { initSocial } from './social.js';
 import { openAuth, api, getSess, setSess } from './auth.js';
 import { ROOMS, FURN, furnByKey, makeFurniture, footprint, buildRoom } from './home.js';
 
@@ -442,7 +443,7 @@ function refreshHud() {
   { const n = questsClaimable(); $('questbtn').textContent = '📜 MISSÕES' + (n ? ' ❗' + n : ''); }
   $('hgems').textContent = '💎' + state.gems; $('hgold').textContent = '🪙' + state.gold; $('hcash').textContent = '💵' + state.cash;
   const a = curAct();
-  $('stage').textContent = inHome ? '\u{1F3E0} ' + (homeVisit ? 'Visitando a casa de ' + homeVisit.name : inHome.name + ' \u2014 ' + ROOMS[inHome.kind].label) : inCity ? '🏰 Cidade de Aurora — fale com os moradores' : state.endless ? '♾ Aventura Infinita • abates ' + state.stageKills
+  $('stage').textContent = wb ? '🐉 CHEFE MUNDIAL — derrotem juntos!' : inHome ? '\u{1F3E0} ' + (homeVisit ? 'Visitando a casa de ' + homeVisit.name : inHome.name + ' \u2014 ' + ROOMS[inHome.kind].label) : inCity ? '🏰 Cidade de Aurora — fale com os moradores' : state.endless ? '♾ Aventura Infinita • abates ' + state.stageKills
     : 'Ato ' + (state.act + 1) + ' (Nv.' + zoneLv() + ') • ' + a.name + ' — ' + (state.stage === 5 ? 'CHEFE' : 'Estágio ' + state.stage + '/5  (' + state.stageKills + '/' + quota() + ')');
 }
 
@@ -518,7 +519,7 @@ function updateWorld(dt) {
   if (inCity || inHome) return;
   // eventos
   if (ev && T > ev.until) { ev.left = 0; ev = null; nextEvT = T + 200; toast('⌛ O evento terminou'); }
-  if (!ev && T > nextEvT && !(state.stage === 5 && !state.endless) && enemies.length < 10 && !isPaused()) startEvent();
+  if (!ev && !wb && T > nextEvT && !(state.stage === 5 && !state.endless) && enemies.length < 10 && !isPaused()) startEvent();
   // baús
   const p = player.position, now = Date.now(), m = ensureMeta(state);
   chestMeshes.forEach(c => {
@@ -615,6 +616,32 @@ function openQuests() {
   rows.push({ head: true, text: '🏆 CONQUISTAS E TÍTULOS  (' + Object.keys(m.ach).length + '/' + ACH.length + ')' });
   ACH.forEach(a => { const got = !!m.ach[a.id]; rows.push({ text: (got ? '✔ ' : '🔒 ') + a.title + '\n' + a.desc + '  •  +' + a.gems + '💎', btn: got ? (m.title === a.title ? 'EM USO' : 'USAR') : '', enabled: got && m.title !== a.title, fn: () => { m.title = a.title; save(state); refreshHud(); openQuests(); } }); });
   openPanel('📜 MISSÕES', rows);
+}
+
+const social = initSocial({ state, sess, toast, openPanel, closePanel, save, refreshHud, itemLine, sellPrice, isEquipped, giveItem, newItem, SLOT_ORDER, mainCls, track });
+
+// ---- Chefe mundial: todos os jogadores ferem o mesmo chefe (a vida fica no servidor) ----
+let wb = null;
+function enterWBoss(v) {
+  closePanel(); setCityMode(false); clearEnemies();
+  wb = { cycle: v.cycle, pending: 0, t: 0, busy: false, nextAdd: T + 8 };
+  const e = spawnEnemy(true, { name: v.name, color: v.color }); e.hp = e.maxHp = 1e9; e.wb = true; e.dmg = (8 + state.level * 1.3) * 2.1; e.mesh.scale.multiplyScalar(1.35); e.radius = 1.9;
+  $('bossname').textContent = v.icon + ' ' + v.name + '  ' + Math.round(v.hp).toLocaleString('pt-BR'); $('bossfill').style.width = Math.max(0, v.hp / v.maxhp * 100) + '%';
+  toast('🐉 Chefe Mundial! Cada golpe seu fere o chefe de TODOS os jogadores.'); refreshHud();
+}
+function endWB() { if (!wb) return; const d = wb.pending; wb = null; if (d > 0) social.hit(d); if (!inCity) { clearEnemies(); setCityMode(true); } refreshHud(); }
+function updateWB(dt) {
+  if (!wb) return;
+  wb.t += dt;
+  if (T > wb.nextAdd) { wb.nextAdd = T + 12; if (enemies.length < 7) { spawnEnemy(false, null, 'archer'); spawnEnemy(false, null, 'runner'); } }
+  if (wb.t >= 2.5 && !wb.busy) {
+    wb.t = 0; const d = wb.pending; wb.pending = 0; wb.busy = true;
+    social.hit(d).then(r => {
+      if (wb) wb.busy = false; if (!r || !wb) return;
+      $('bossfill').style.width = Math.max(0, r.hp / r.maxhp * 100) + '%'; $('bossname').textContent = r.icon + ' ' + r.name + '  ' + Math.round(r.hp).toLocaleString('pt-BR');
+      if (r.killed || !r.active) { toast(r.killed ? '🏆 A comunidade derrotou o Chefe Mundial! Colete o prêmio com a Arauta.' : '⌛ O tempo do chefe acabou. Colete o prêmio com a Arauta.'); endWB(); }
+    });
+  }
 }
 
 const _v = new THREE.Vector3();
@@ -867,7 +894,7 @@ function enemyShoot(e, p) {
 function spawnBoss() { const b = curAct().boss; spawnEnemy(true, { name: state.endless ? 'Eco do Apagador' : b.name, color: b.color }); }
 
 function autoSpawn() {
-  if (inCity) return;
+  if (inCity || wb) return;
   const bossStage = state.stage === 5 && !state.endless;
   if (bossStage) { if (enemies.length < 8) spawnEnemy(false); return; }
   const cap = state.endless ? 25 : Math.min(25, quota() - state.stageKills + 2);
@@ -880,7 +907,8 @@ function damageEnemy(e, dmg, crit) {
   if (!crit && cc > 0 && Math.random() < cc) { dmg = Math.round(dmg * 1.8); crit = true; }
   e.hp -= dmg; ftAt(e.mesh.position, (crit ? '💥' : '') + dmg, crit ? '#ff9f1c' : '#ffd166', 1.6 * (e.boss ? 2 : 1));
   e.flash = 0.08;
-  if (e === bossRef) $('bossfill').style.width = Math.max(0, e.hp / e.maxHp * 100) + '%';
+  if (e.wb && wb) wb.pending += dmg;
+  if (e === bossRef && !e.wb) $('bossfill').style.width = Math.max(0, e.hp / e.maxHp * 100) + '%';
   if (e.hp > 0) return;
   e.dead = true;
   if (e.mesh.userData.glb) { playOnce(e.mesh, 'death'); dying.push({ mesh: e.mesh, until: T + 1.1 }); } else scene.remove(e.mesh);
@@ -901,6 +929,8 @@ function onKill(e) {
   if (e.boss) {
     if (state.endless) { track('boss'); bossRef = null; $('bossbar').style.display = 'none'; state.gems += 5; state.gold += 200 * state.level; toast('🏆 Chefe derrotado! +5💎'); }
     else bossDefeated();
+  } else if (wb) {
+    /* adversários do chefe mundial não avançam estágios */
   } else {
     state.stageKills++;
     if (state.endless) { if (state.stageKills % 30 === 0) spawnBoss(); }
@@ -1234,6 +1264,7 @@ function runSkills(dt) {
 // ===================== Cidade, loja e mapa =====================
 function setCityMode(on) {
   if (inHome) cleanupHome();
+  if (on && wb) endWB();
   if (on && !inCity) track('city');
   inCity = on; fieldGroup.visible = !on; ground.visible = on; terrain.visible = !on; if (city) city.group.visible = on;
   clearEnemies(); nearNpc = null; walkGoal = null; $('talk').style.display = 'none';
@@ -1305,6 +1336,16 @@ function openNpcMenu(n) {
     rows.push({ text: '💰 Vender itens\nO que você coletou dos monstros', btn: 'ABRIR', fn: () => openGear('💰 Vender itens', SLOT_ORDER, 'sell', back) });
   }
   if (n.role === 'deco') rows.push({ text: '🪑 Comprar móveis\nOs móveis vão para o seu baú. Depois, dentro da sua casa, toque em DECORAR para colocar.', btn: 'ABRIR', fn: () => openFurnShop(n) });
+  if (n.role === 'market') {
+    rows.push({ text: '🏪 Mercado de jogadores\nCompre e venda equipamentos com outros jogadores', btn: 'ABRIR', fn: () => social.openMarket('buy', back) });
+    rows.push({ text: '🤝 Troca direta\nTroque itens e ouro com um amigo (os dois confirmam)', btn: 'ABRIR', fn: () => social.openTrade(back) });
+  }
+  if (n.role === 'herald') {
+    rows.push({ text: '🐉 Chefe Mundial\nTodos os jogadores lutam juntos contra o mesmo chefe', btn: 'ABRIR', fn: () => social.openWBoss(back, enterWBoss) });
+    rows.push({ text: '🏆 Ranking\nMaiores níveis, abates e chefes', btn: 'ABRIR', fn: () => social.openRank(back) });
+    rows.push({ text: '🛡 Guilda\nCrie ou entre numa guilda e converse', btn: 'ABRIR', fn: () => social.openGuild(back) });
+    rows.push({ text: '📜 Missões e conquistas\nDiárias, semanais e login', btn: 'ABRIR', fn: () => openQuests() });
+  }
   if (n.role === 'summoner') rows.push({ text: '🔮 Invocar heróis e criaturas\nGaste 💎 para chamar aliados', btn: 'ABRIR', fn: () => openCrew() });
   if (n.role === 'map') {
     rows.push({ text: '🗺️ Mapa das florestas\nEscolha para onde viajar', btn: 'ABRIR', fn: () => openMap() });
@@ -1730,8 +1771,8 @@ function startNet() {
   net = createNet({ url: q && q.startsWith('ws') ? q : NET_URL, getMe: () => ({ name: meName(), look: state.custom || null, pid: state.pid }), onEvent: netEvent, onStatus: (ok) => { if (!ok) { remotes.forEach((r, id) => dropRemote(id)); netId = null; } refreshNet(); } });
   refreshNet();
 }
-const curW = () => inHome ? 'home:' + inHome.id : inCity ? 'city' : 'field:' + (state.endless ? 'inf' : state.act);
-const whereTxt = (w) => w === 'city' ? 'Na cidade de Aurora' : w.startsWith('home:') ? 'Dentro de uma casa' : w === 'field:inf' ? 'Na Aventura Infinita' : w.startsWith('field:') ? 'Na floresta do Ato ' + (+w.slice(6) + 1) + (w === curW() ? ' (com você!)' : '') : 'Em outra área';
+const curW = () => inHome ? 'home:' + inHome.id : inCity ? 'city' : wb ? 'field:wb' : 'field:' + (state.endless ? 'inf' : state.act);
+const whereTxt = (w) => w === 'city' ? 'Na cidade de Aurora' : w === 'field:wb' ? 'Lutando contra o Chefe Mundial' : w.startsWith('home:') ? 'Dentro de uma casa' : w === 'field:inf' ? 'Na Aventura Infinita' : w.startsWith('field:') ? 'Na floresta do Ato ' + (+w.slice(6) + 1) + (w === curW() ? ' (com você!)' : '') : 'Em outra área';
 function updateNet(dt) {
   const w = curW();
   remoteGroup.visible = true;
@@ -1858,6 +1899,7 @@ function update(dt) {
 
   updateAllies(dt);
   updateWorld(dt);
+  updateWB(dt);
 
   // mascote
   const pp = pet.position, pu = pet.userData;
@@ -1953,7 +1995,7 @@ if (qs.has('levelup')) state.skillPts = 1;
 if (qs.has('city')) setCityMode(true);
 if (qs.has('night')) dayT = +qs.get('night') || 0;
 if (qs.has('quests')) setTimeout(() => openQuests(), 1500);
-if (qs.has('dbg')) window.__g = { player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; } };
+if (qs.has('dbg')) window.__g = { social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; } };
 if (qs.get('pos')) { const iv = setInterval(() => { if (!gameStarted) return; clearInterval(iv); setTimeout(() => { const [px, pz] = qs.get('pos').split(',').map(Number); if (inCity) setCityMode(false); player.position.set(px || 0, 0, pz || 0); playerGy = walkY(px || 0, pz || 0); }, 600); }, 300); }
 if (qs.has('zoom')) { setZoom(+qs.get('zoom')); zoom = zoomT; }
 if (qs.has('eq')) { setTimeout(() => openInv('eq'), 300); }
@@ -2009,6 +2051,7 @@ let gameStarted = false;
 function startGame() {
   gameStarted = true;
   if (!testing) {
+    social.startPolls();
     const og = offlineGain(state);
     if (og) { state.gold += og.gold; state.lastSeen = Date.now(); save(state); refreshHud(); setTimeout(() => toast('💤 Enquanto você estava fora (' + (og.mins >= 60 ? Math.floor(og.mins / 60) + 'h' + (og.mins % 60 ? ' ' + og.mins % 60 + 'min' : '') : og.mins + ' min') + '), seus aliados juntaram 🪙' + og.gold), 1500); }
     if (!loginState(state).got) setTimeout(() => toast('🎁 Recompensa de login disponível! Abra 📜 MISSÕES'), og ? 5000 : 2000);
@@ -2138,6 +2181,10 @@ function runSelfTest() {
     weather = 'rain'; weatherLeft = 99; updateWorld(0.1); if (!rainPts) throw new Error('chuva'); weather = 'clear';
     const ch0 = chestMeshes[0]; if (!ch0) throw new Error('sem bau'); player.position.set(ch0.x, 0, ch0.z); state.meta.chests = {}; updateWorld(0.1); if (!state.meta.chests[ch0.i]) throw new Error('bau nao abriu');
     doEmote(0);
+    enterWBoss({ cycle: 1, name: 'Teste', icon: '🐉', color: 0xff3300, hp: 1000, maxhp: 2000 }); if (!wb || !bossRef || !bossRef.wb) throw new Error('arena do chefe mundial');
+    for (let i = 0; i < 30; i++) { player.position.set(bossRef.mesh.position.x + 1, 0, bossRef.mesh.position.z); update(0.1); damageEnemy(bossRef, 500); }
+    if (!(wb.pending > 1000)) throw new Error('dano do chefe mundial nao acumulou'); if (curW() !== 'field:wb') throw new Error('presenca wb');
+    endWB(); if (wb || !inCity) throw new Error('saida do chefe mundial'); setCityMode(false);
     out.push('missoes/conquistas/login/eventos/clima/baus/emotes: ok (conquistas=' + Object.keys(state.meta.ach).length + ')');
     for (let i = 0; i < 120; i++) update(0.05);
     out.push('SELFTEST OK');

@@ -31,6 +31,8 @@ export const NPC_DEFS = [
   { role: 'map', icon: '🗺️', color: '#ffd54f', title: 'Shiro, Guia dos Mapas', pos: arc(90, 15), premade: 2, talk: 'Cada floresta tem seus perigos e seus tesouros. Eu conheço todas. Para onde vamos, viajante?' },
   { role: 'merchant', icon: '💰', color: '#81c784', title: 'Ilyra, Mercadora', pos: arc(58, 15), premade: 3, talk: 'Amuletos raros e bons preços! E compro tudo o que você coletou nas florestas.' },
   { role: 'deco', icon: '\u{1FA91}', color: '#ffb74d', title: 'Lia, a Decoradora', pos: arc(188, 15), premade: 5, talk: 'Casa bonita \u00E9 casa feliz! Compre os m\u00F3veis aqui e depois coloque onde quiser dentro da sua casa.' },
+  { role: 'market', icon: '🏪', color: '#4db6ac', title: 'Bento, o Negociante', pos: arc(352, 15), premade: 1, talk: 'Aqui os aventureiros negociam entre si! Compre equipamentos de outros jogadores ou ponha os seus à venda.' },
+  { role: 'herald', icon: '📯', color: '#e57373', title: 'Vênia, a Arauta', pos: arc(322, 15), premade: 6, talk: 'Ouçam, ouçam! Rankings, o Chefe Mundial, guildas e as missões do dia. Tudo começa comigo!' },
   { role: 'summoner', icon: '🔮', color: '#ba68c8', title: 'Orin, o Invocador', pos: arc(25, 15), premade: 4, talk: 'Os fios do destino trazem heróis e criaturas até nós. Quer chamar um?' },
 ];
 
