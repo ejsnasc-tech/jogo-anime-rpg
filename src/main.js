@@ -5,6 +5,7 @@ import { makeHero, makeSkeleton, animateHero, playOnce, preloadModels } from './
 import { openCreator, CLASS_LIST } from './creator.js';
 import { SKILLS, SKILL_MAX, skillById, rollChoices } from './skills.js';
 import { initCraft } from './craft.js';
+import { initShop } from './shop.js';
 import { itemGemSum, SLOTS, SLOT_ORDER, EQUIP_KEYS, KINDS, WEAPON_KIND, OFF_KIND, RAR, MATS, FOREST_LV, MAX_PLUS, newItem, itemValue, itemStat, itemIcon, itemFmt, statFmt, itemName, itemLine, sellPrice, buyPrice, upgradeCost, rollDrop, migrateItems } from './items.js';
 import { itemArt, ghostArt } from './itemart.js';
 import { buildCity, CITY_R, CITY_SPAWN, PLOTS } from './city.js';
@@ -353,9 +354,9 @@ function makeDragon() {
 
 // seat = altura do assento montado; speed = bônus de velocidade montado
 const PETS = [
-  { id: 'fox',    name: 'Kitsune, Raposa de Gelo',    make: makeFox,    scale: 1,    mountScale: 1.7, seat: 1.6, speed: 1.3, dmg: 0.6, rate: 1.5, color: 0x7fdcff, weight: 50 },
-  { id: 'rhino',  name: 'Rhino Lilás, Trovão Roxo',   make: makeRhino,  scale: 0.8,  mountScale: 1.4, seat: 2.1, speed: 1.6, dmg: 0.8, rate: 1.8, color: 0xc9a0ff, weight: 30 },
-  { id: 'dragon', name: 'Glaciar, Dragão de Cristal', make: makeDragon, scale: 0.55, mountScale: 1.1, seat: 2.2, speed: 1.9, dmg: 1.3, rate: 2.2, color: 0x6fe3ff, weight: 20 },
+  { id: 'fox',    perk: { gold: 0.10, txt: '+10% de ouro' }, name: 'Kitsune, Raposa de Gelo',    make: makeFox,    scale: 1,    mountScale: 1.7, seat: 1.6, speed: 1.3, dmg: 0.6, rate: 1.5, color: 0x7fdcff, weight: 50 },
+  { id: 'rhino',  perk: { crit: 0.05, txt: '+5% de crítico' }, name: 'Rhino Lilás, Trovão Roxo',   make: makeRhino,  scale: 0.8,  mountScale: 1.4, seat: 2.1, speed: 1.6, dmg: 0.8, rate: 1.8, color: 0xc9a0ff, weight: 30 },
+  { id: 'dragon', perk: { regen: 0.012, txt: 'Regenera 1,2% da vida por segundo' }, name: 'Glaciar, Dragão de Cristal', make: makeDragon, scale: 0.55, mountScale: 1.1, seat: 2.2, speed: 1.9, dmg: 1.3, rate: 2.2, color: 0x6fe3ff, weight: 20 },
 ];
 
 const bulletGeo = new THREE.SphereGeometry(0.2, 10, 10);
@@ -365,6 +366,7 @@ let T = 0;                                   // tempo de jogo em segundos (pausa
 let activeIdx = 0, hero = HEROES.find(h => h.id === state.team[0]);
 let player = null, facing = 0;
 const sk = (id) => state.skills[id] || 0;
+const petPerk = (k) => (petDef && petDef.perk && petDef.perk[k]) || 0;
 const equippedAt = (key) => state.items.find(i => i.uid === state.equip[key]);
 const isEquipped = (it) => EQUIP_KEYS.some(k => state.equip[k] === it.uid);
 const statSum = (stat) => EQUIP_KEYS.reduce((a, k) => { const it = equippedAt(k); return a + (it ? (itemStat(it) === stat ? itemValue(it) : 0) + itemGemSum(it, stat) : 0); }, 0);
@@ -407,19 +409,40 @@ function atkPower() {
   let m = 1 + state.upgrades.atk * 0.25 + (state.stars[hero.id] || 0) * 0.1;
   m *= 1 + (state.level - 1) * 0.05;
   m *= realmMult();
-  m *= 1 + sk('might') * 0.12;
+  m *= 1 + sk('might') * 0.12 + homeBonus().atk;
+  if (Date.now() < (state.rest || 0)) m *= 1.15;
+  if (sk('bulwark') && hp < maxHp * 0.5) m *= 1 + sk('bulwark') * 0.1;
   m *= 1 + statSum('atk');
   if (T < bearUntil) m *= 2;
-  if (hero.cls === 'sorcerer') m *= 1 + overload / 100 * 0.6;
+  if (hero.cls === 'sorcerer') m *= 1 + overload / 100 * 0.6 * (1 + sk('overload') * 0.25);
   return Math.max(1, Math.round(hero.atk * m));
 }
 const petDmg = () => Math.max(1, Math.round(atkPower() * petDef.dmg * (1 + 0.1 * (state.petStars[petDef.id] || 0))));
 
+// ---- equipamento visível: a cor da roupa segue o tier da armadura, o elmo aparece ao equipar e uma aura mostra a raridade ----
+const TIER_COL = [0x3fa7c4, 0x8f96a3, 0x9a78ff, 0xb48a5a, 0x4fa85a, 0x3a2f66];
+let lookSig = '';
+const lookSignature = () => { const c = equippedAt('chest'), h = equippedAt('helm'); return (c ? c.tier : '-') + '|' + (h ? 1 : 0); };
+function lookFor(h) {
+  if (h.id !== 'player') return h;
+  const c = equippedAt('chest'), hm = equippedAt('helm');
+  return Object.assign({}, h, { outfit: c ? TIER_COL[c.tier] : h.outfit, hat: hm ? true : h.hat });
+}
+function refreshLook() { if (player && hero.id === 'player' && lookSignature() !== lookSig) setHero(); }
+let eqAura = null;
+function updateEqAura() {
+  let r = 0; EQUIP_KEYS.forEach(k => { const it = equippedAt(k); if (it && it.rar > r) r = it.rar; });
+  const cc = shop.auraColor();
+  if ((r < 2 && !cc) || inHome) { if (eqAura) eqAura.visible = false; return; }
+  if (!eqAura) { eqAura = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.15, 40), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.7, side: THREE.DoubleSide })); eqAura.rotation.x = -Math.PI / 2; scene.add(eqAura); }
+  eqAura.visible = true; eqAura.material.color.set(cc || (r === 3 ? 0xffc83d : 0xc77dff)); eqAura.position.set(player.position.x, (inCity ? 0 : player.position.y - (mounted ? 0 : 0)) + 0.1, player.position.z);
+  eqAura.scale.setScalar(1 + Math.sin(T * 3) * 0.08);
+}
 function setHero() {
   hero = HEROES.find(h => h.id === state.team[activeIdx]) || HEROES[0];
   const pos = player ? player.position.clone() : new THREE.Vector3(0, 0, 0);
   if (player) scene.remove(player);
-  player = makeHero(hero); player.position.copy(pos); scene.add(player);
+  player = makeHero(lookFor(hero)); player.position.copy(pos); scene.add(player); lookSig = lookSignature();
   overload = 0; bearUntil = 0;
   refreshHud(); refreshTeam(); updateSkillLabel(true);
 }
@@ -592,7 +615,7 @@ function toast(msg) {
 
 // ===================== Metajogo: missões, login diário, conquistas =====================
 function track(key, n) {
-  n = n || 1; const m = ensureMeta(state); m.cnt[key] = (m.cnt[key] || 0) + n;
+  n = n || 1; const m = ensureMeta(state); m.cnt[key] = (m.cnt[key] || 0) + n; shop.passXp(key, n);
   [m.dq, m.wq].forEach((list, wi) => list.forEach(q => {
     if (q.key !== key || q.claimed) return; const was = q.have >= q.need; q.have = Math.min(q.need, q.have + n);
     if (!was && q.have >= q.need) toast('📜 ' + (wi ? 'Missão semanal' : 'Missão') + ' completa: ' + q.label + ' — abra MISSÕES!');
@@ -623,6 +646,33 @@ function openQuests() {
 const social = initSocial({ state, sess, toast, openPanel, closePanel, save, refreshHud, itemLine, sellPrice, isEquipped, giveItem, newItem, SLOT_ORDER, mainCls, track });
 
 const craft = initCraft({ state, toast, openPanel, save, refreshHud, itemLine, isEquipped, giveItem, newItem, SLOT_ORDER, slotLabel, slotIcon, mainCls, track, recalcHp });
+
+const shop = initShop({ state, toast, openPanel, save, refreshHud, giveItem, newItem, SLOT_ORDER, mainCls, craft });
+
+// ---- Mercador andarilho: aparece de vez em quando na floresta por 2,5 minutos ----
+let wander = null, nextWander = 200 + Math.random() * 200;
+function spawnWander() {
+  const a = Math.random() * 6.283, x = THREE.MathUtils.clamp(player.position.x + Math.cos(a) * 12, -WORLD + 6, WORLD - 6), z = THREE.MathUtils.clamp(player.position.z + Math.sin(a) * 12, -WORLD + 6, WORLD - 6);
+  const mesh = makeHero(buildPlayerHero(Object.assign({}, PREMADE[3], { name: 'Mercador Andarilho' }))); mesh.position.set(x, walkY(x, z), z); scene.add(mesh);
+  const tag = nameTag('🧙 Mercador Andarilho'); tag.position.set(x, walkY(x, z) + 3.4, z); scene.add(tag);
+  const tier = Math.min(5, state.act), offers = [1, 1, 2].map(rar => { const it = newItem(SLOT_ORDER[Math.floor(Math.random() * SLOT_ORDER.length)], tier, rar, mainCls()); return { it, price: Math.round(buyPrice(tier, rar) * 0.75), sold: false }; });
+  wander = { mesh, tag, life: 150, cool: 0, offers }; toast('🧙 Um Mercador Andarilho apareceu perto de você! Ele fica 2 minutos e meio.');
+}
+function dropWander() { if (!wander) return; scene.remove(wander.mesh); scene.remove(wander.tag); wander = null; nextWander = T + 240 + Math.random() * 240; }
+function openWanderShop() {
+  const rows = [{ head: true, text: '🧙 Mercador Andarilho\n“Preços especiais, só hoje!”   🪙' + state.gold }];
+  wander.offers.forEach(o => rows.push({ text: itemLine(o.it) + (o.sold ? '\n(vendido)' : ''), btn: o.sold ? '✔' : '🪙' + o.price, enabled: !o.sold && state.gold >= o.price, fn: () => { state.gold -= o.price; o.sold = true; giveItem(o.it); save(state); refreshHud(); openWanderShop(); } }));
+  rows.push({ text: '💎 2 gemas aleatórias (nível 1)', btn: '🪙400', enabled: state.gold >= 400, fn: () => { state.gold -= 400; craft.giveGem(null, 1); craft.giveGem(null, 1); save(state); refreshHud(); openWanderShop(); } });
+  openPanel('🧙 MERCADOR', rows);
+}
+function updateWander(dt) {
+  if (inCity || inHome || wb || dg) { if (wander) dropWander(); return; }
+  if (!wander) { if (T > nextWander && !isPaused() && enemies.length < 6) spawnWander(); return; }
+  wander.life -= dt; animateHero(wander.mesh, dt, {});
+  const d = dist2(wander.mesh.position, player.position); wander.mesh.rotation.y = Math.atan2(player.position.x - wander.mesh.position.x, player.position.z - wander.mesh.position.z);
+  if (wander.life <= 0) { dropWander(); toast('🧙 O mercador foi embora'); }
+  else if (d < 3.2 && !isPaused() && T > wander.cool) { wander.cool = T + 8; openWanderShop(); }
+}
 
 // ---- Masmorra: 5 andares, chefe no último (3 entradas por dia) ----
 let dg = null;
@@ -788,7 +838,7 @@ function openCrew(msg) {
   rows.push({ text: 'Invocar criatura\nRepetida = +10% dano', btn: '💎40', enabled: state.gems >= 40, fn: summonPet });
   PETS.forEach(p => {
     const owned = state.pets.includes(p.id);
-    const text = p.name + '\nDano ' + Math.round(p.dmg * 100) + '%  •  Velocidade montado x' + p.speed + (owned ? '  •  ★' + (state.petStars[p.id] || 0) : '');
+    const text = p.name + '\nDano ' + Math.round(p.dmg * 100) + '%  •  Velocidade montado x' + p.speed + (owned ? '  •  ★' + (state.petStars[p.id] || 0) : '') + '\nBônus: ' + p.perk.txt + '  •  Montado: atravessa a água sem lentidão';
     if (!owned) rows.push({ text, btn: 'BLOQUEADO', enabled: false });
     else rows.push({ text, btn: state.activePet === p.id ? 'ATIVO' : 'USAR', enabled: state.activePet !== p.id, fn: () => { state.activePet = p.id; save(state); setPet(); openCrew(); } });
   });
@@ -821,6 +871,8 @@ function openIndex() {
   rows.push({ text: 'Inimigos deste reino: ' + REALMS[er].icon + ' ' + REALMS[er].name + '\nVantagem: heróis de ' + Object.keys(REALMS).filter(k => REALMS[k].strong === er).map(k => REALMS[k].name).join(', ') + ' (+25% dano)' });
   rows.push({ head: true, text: '⚔️ CLASSES' });
   Object.values(CLASSES).forEach(c => rows.push({ text: c.icon + ' ' + c.name + ' — ' + c.role + '\n' + c.desc + '\nULT: ' + c.ult }));
+  rows.push({ head: true, text: '👹 MONSTROS E FRAQUEZAS' });
+  rows.push({ text: 'Classes FÍSICAS (Guerreiro, Paladino, Assassino, Arqueiro) e MÁGICAS (Mago, Feiticeiro, Druida) causam dano diferente em cada monstro.\n💀 Esqueleto e Corredor: normais\n🛡 Guerreiro: resiste um pouco a físico\n🪨 Bruto: resiste MUITO a físico (-30%), fraco a mágico (+30%)\n🏹 Arqueiro: aguenta um pouco mais de físico\n🔮 Mago: fraco a físico (+30%), resiste a mágico (-30%)\n★ Elite: 4× vida e mais loot. Aparece mais à noite e nas masmorras.' });
   rows.push({ head: true, text: '🧑‍🤝‍🧑 HERÓIS' });
   HEROES.forEach(h => rows.push({ text: (state.owned.includes(h.id) ? '✔  ' : '✖  ') + h.name + ' [' + RARITY[h.rar].name + ']\n' + (state.owned.includes(h.id) ? h.bio : '???') }));
   rows.push({ head: true, text: '🐾 CRIATURAS' });
@@ -900,11 +952,11 @@ function clearEnemies() { if (ev) { ev = null; nextEvT = T + 90; } eshots.forEac
 // Tipos de inimigo. ranged: atira de longe e mantém distância. Cada um tem vida/dano/velocidade próprios.
 const ETYPES = {
   minion: { name: 'Esqueleto', model: 'Skeleton_Minion', loot: 'Skeleton_Minion', hp: 1, dmg: 1, spd: 1, size: 1.6, r: 0.7 },
-  warrior: { name: 'Esqueleto Guerreiro', model: 'Skeleton_Warrior', loot: 'Skeleton_Warrior', hp: 1.5, dmg: 1.15, spd: 0.95, size: 1.9, r: 0.8 },
+  warrior: { name: 'Esqueleto Guerreiro', model: 'Skeleton_Warrior', loot: 'Skeleton_Warrior', hp: 1.5, dmg: 1.15, spd: 0.95, size: 1.9, r: 0.8, res: { p: 0.85, m: 1.15 } },
   runner: { name: 'Corredor', model: 'Skeleton_Minion', loot: 'runner', hp: 0.6, dmg: 0.85, spd: 1.75, size: 1.5, r: 0.65, tint: 0xffd0a0, run: 'Running_A' },
-  brute: { name: 'Bruto', model: 'Skeleton_Warrior', loot: 'brute', hp: 3.2, dmg: 1.6, spd: 0.7, size: 2.7, r: 1.1, tint: 0xff9a8a },
-  archer: { name: 'Arqueiro', model: 'Skeleton_Rogue', loot: 'Skeleton_Rogue', hp: 0.75, dmg: 0.9, spd: 0.9, size: 1.7, r: 0.7, ranged: { range: 11, keep: 7, cd: 2.2, speed: 11, color: 0xffe28a, arrow: true }, atk: '2H_Ranged_Shoot' },
-  mage: { name: 'Mago', model: 'Skeleton_Mage', loot: 'Skeleton_Mage', hp: 0.8, dmg: 1.25, spd: 0.8, size: 1.7, r: 0.7, ranged: { range: 13, keep: 9, cd: 3.0, speed: 7.5, color: 0xc17bff, size: 1.9, splash: 1.8 }, atk: 'Spellcast_Shoot' },
+  brute: { name: 'Bruto', model: 'Skeleton_Warrior', loot: 'brute', hp: 3.2, dmg: 1.6, spd: 0.7, size: 2.7, r: 1.1, tint: 0xff9a8a, res: { p: 0.7, m: 1.3 } },
+  archer: { name: 'Arqueiro', model: 'Skeleton_Rogue', loot: 'Skeleton_Rogue', hp: 0.75, dmg: 0.9, spd: 0.9, size: 1.7, r: 0.7, res: { p: 1.1, m: 0.9 }, ranged: { range: 11, keep: 7, cd: 2.2, speed: 11, color: 0xffe28a, arrow: true }, atk: '2H_Ranged_Shoot' },
+  mage: { name: 'Mago', model: 'Skeleton_Mage', loot: 'Skeleton_Mage', hp: 0.8, dmg: 1.25, spd: 0.8, size: 1.7, r: 0.7, res: { p: 1.3, m: 0.7 }, ranged: { range: 13, keep: 9, cd: 3.0, speed: 7.5, color: 0xc17bff, size: 1.9, splash: 1.8 }, atk: 'Spellcast_Shoot' },
 };
 // quanto mais avançado o ato / estágio, mais variedade e mais atiradores
 function pickEType() {
@@ -932,7 +984,7 @@ function spawnEnemy(boss, info, forceType) {
   const base = (18 + lv * 7) * (1 + state.act * 0.3) * 1.6 * catchup;
   const hpv = boss ? base * 14 * (state.endless ? 1.5 : 1) * 1.3 : base * T0.hp;
   const dmgBase = ((6 + lv * 0.8) * (1 + state.act * 0.12)) * 1.35 * catchD;
-  const e = { mesh, hp: hpv, maxHp: hpv, speed: boss ? 1.5 : (1.9 + Math.random() * 1.0) * T0.spd, boss: !!boss, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? 1.4 : T0.r, t: Math.random() * 10, dmg: dmgBase * (boss ? 1.6 : T0.dmg), stun: 0, slow: 0, flash: 0, ranged: boss ? null : T0.ranged || null, shotAt: T + 1 + Math.random() * 2 };
+  const e = { mesh, hp: hpv, maxHp: hpv, speed: boss ? 1.5 : (1.9 + Math.random() * 1.0) * T0.spd, boss: !!boss, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? 1.4 : T0.r, t: Math.random() * 10, dmg: dmgBase * (boss ? 1.6 : T0.dmg), stun: 0, slow: 0, flash: 0, ranged: boss ? null : T0.ranged || null, res: boss ? null : T0.res || null, shotAt: T + 1 + Math.random() * 2 };
   if (dg) { e.hp = e.maxHp = e.hp * 1.35; e.dmg *= 1.3; }
   if (!boss && !forceType && Math.random() < 0.04 + state.act * 0.01 + (night > 0.55 ? 0.03 : 0) + (dg ? 0.12 : 0)) {
     e.elite = true; e.hp = e.maxHp = e.hp * 4; e.dmg *= 1.4; e.radius *= 1.3; mesh.scale.multiplyScalar(1.35);
@@ -972,8 +1024,9 @@ function autoSpawn() {
 
 function damageEnemy(e, dmg, crit) {
   if (e.dead) return;
-  const cc = Math.min(0.8, sk('crit') * 0.08 + statSum('crit'));
-  if (!crit && cc > 0 && Math.random() < cc) { dmg = Math.round(dmg * 1.8); crit = true; }
+  if (e.res) { const k = ['mage', 'sorcerer', 'druid'].includes(hero.cls) ? e.res.m : e.res.p; if (k !== 1) { dmg = Math.max(1, Math.round(dmg * k)); if (Math.random() < 0.25) ftAt(e.mesh.position, k > 1 ? 'FRACO!' : 'RESISTE', k > 1 ? '#7CFC00' : '#9aa5b1', 2.3); } }
+  const cc = Math.min(0.8, sk('crit') * 0.08 + statSum('crit') + petPerk('crit'));
+  if (!crit && cc > 0 && Math.random() < cc) { dmg = Math.round(dmg * (1.8 + sk('deadly') * 0.2)); crit = true; }
   e.hp -= dmg; ftAt(e.mesh.position, (crit ? '💥' : '') + dmg, crit ? '#ff9f1c' : '#ffd166', 1.6 * (e.boss ? 2 : 1));
   e.flash = 0.08;
   if (e.wb && wb) wb.pending += dmg;
@@ -990,7 +1043,7 @@ function onKill(e) {
   if (e.elite) { if (Math.random() < 0.3) craft.giveGem(null, Math.random() < 0.1 ? 2 : 1); }
   if (e.elite) { track('elite'); dropLoot(e); dropLoot(e); state.gold += 40 + state.level * 8; state.gems += Math.random() < 0.4 ? 2 : 1; ftAt(e.mesh.position, '★ +elite', '#ffd166', 2.4); }
   if (e.ev && ev === e.ev) { ev.left--; if (ev.left <= 0) finishEvent(); else toast('⚔ ' + ev.name + ': faltam ' + ev.left); }
-  state.kills++; state.gold += Math.round((5 + state.level + state.act * 2) * (1 + sk('greed') * 0.2));
+  state.kills++; state.gold += Math.round((5 + state.level + state.act * 2) * (1 + sk('greed') * 0.2 + petPerk('gold') + homeBonus().gold));
   if (Math.random() < 0.05 + sk('greed') * 0.01) state.gems++;
   if (sk('vamp')) heal(maxHp * 0.01 * sk('vamp'));
   if (Math.random() < 0.1) state.cash += 10;
@@ -1016,9 +1069,9 @@ function recalcHp() { const r = hp / maxHp; maxHp = calcMaxHp(); hp = Math.min(m
 function keyFor(it) { return it.slot; }
 function equipItem(it, key) {
   EQUIP_KEYS.forEach(k => { if (state.equip[k] === it.uid) delete state.equip[k]; });
-  state.equip[key || keyFor(it)] = it.uid; recalcHp(); save(state);
+  state.equip[key || keyFor(it)] = it.uid; recalcHp(); save(state); refreshLook();
 }
-function unequipItem(it) { EQUIP_KEYS.forEach(k => { if (state.equip[k] === it.uid) delete state.equip[k]; }); recalcHp(); save(state); }
+function unequipItem(it) { EQUIP_KEYS.forEach(k => { if (state.equip[k] === it.uid) delete state.equip[k]; }); recalcHp(); save(state); refreshLook(); }
 function giveItem(it) {
   track('drop');
   if (state.items.length >= 60) { const g = sellPrice(it); state.gold += g; toast('Mochila cheia: ' + itemName(it) + ' vendido por 🪙' + g); return; }
@@ -1067,6 +1120,7 @@ function hitPlayer(e) {
   shake = 0.25; playOnce(player, 'hit');
   if (shield > 0) { const ab = Math.min(shield, dmg); shield -= ab; dmg -= ab; }
   hp -= dmg;
+  if (sk('thorns') && e.mesh && !e.wb) damageEnemy(e, Math.max(1, Math.round(atkPower() * 0.35 * sk('thorns'))));
   if (hp <= 0) {
     hp = maxHp; state.gold = Math.floor(state.gold * 0.9);
     clearEnemies(); ftAt(player.position, 'DERROTADO!', '#ff6b6b', 2.5); invuln = T + 3;
@@ -1118,7 +1172,7 @@ function doAttack(target) {
   const p = player.position, cls = hero.cls, dmg = atkPower(), tp = target.mesh.position, bear = T < bearUntil;
   if (bear) meleeArc(target, 3.6, Math.PI * 0.8, dmg, 1.5);
   else if (cls === 'warrior') meleeArc(target, hero.range + 0.6, Math.PI * 0.67, dmg, 1.3);
-  else if (cls === 'paladin') { meleeArc(target, hero.range + 0.6, Math.PI * 0.67, dmg, 1.0); heal(1.5 + state.level * 0.15); }
+  else if (cls === 'paladin') { meleeArc(target, hero.range + 0.6, Math.PI * 0.67, dmg, 1.0); heal(1.5 + state.level * 0.15 + maxHp * 0.003 * sk('holy')); }
   else if (cls === 'assassin') {
     if (dist2(tp, p) > 1.8) {
       const dx = p.x - tp.x, dz = p.z - tp.z, d = Math.hypot(dx, dz) || 1;
@@ -1154,7 +1208,7 @@ function heal(v) {
 function useSkill() {
   if (isPaused() || T < (skillReady[hero.id] || 0)) return;
   const cls = hero.cls, def = CLASSES[cls], p = player.position, dmg = atkPower();
-  skillReady[hero.id] = T + def.ultCd; playOnce(player, 'ult', 1.0);
+  skillReady[hero.id] = T + def.ultCd * (1 - sk('arcane') * 0.08); playOnce(player, 'ult', 1.0);
   const fwd = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
   if (cls === 'warrior') {
     ringFx(p, hero.color, 7, 0.5); shake = 0.35;
@@ -1264,7 +1318,7 @@ function skillTap(id) {
 }
 
 function openSkillPicker() {
-  const choices = rollChoices(state.skills);
+  const choices = rollChoices(state.skills, 3, mainCls());
   if (!choices.length) { state.skillPts = 0; state.gold += 100 * state.level; toast('Todas as skills no máximo! +🪙'); return; }
   picking = true;
   const rows = [{ text: 'Nível ' + state.level + '! Escolha uma evolução (' + state.skillPts + ' pendente' + (state.skillPts > 1 ? 's' : '') + ')', head: true }];
@@ -1420,6 +1474,9 @@ function openNpcMenu(n) {
     rows.push({ text: '🏆 Ranking\nMaiores níveis, abates e chefes', btn: 'ABRIR', fn: () => social.openRank(back) });
     rows.push({ text: '🛡 Guilda\nCrie ou entre numa guilda e converse', btn: 'ABRIR', fn: () => social.openGuild(back) });
     rows.push({ text: '📜 Missões e conquistas\nDiárias, semanais e login', btn: 'ABRIR', fn: () => openQuests() });
+    rows.push({ text: '🎟 Passe da Temporada\n30 níveis de prêmios todo mês', btn: 'ABRIR', fn: () => shop.openPass(back) });
+    rows.push({ text: '🛍 Loja de aparências\nAuras e títulos (só cosméticos)', btn: 'ABRIR', fn: () => shop.openCosmetics(back) });
+    rows.push({ text: '💎 Comprar gemas\nPacotes (pagamento real em breve)', btn: 'ABRIR', fn: () => shop.openGemPacks(back) });
   }
   if (n.role === 'summoner') rows.push({ text: '🔮 Invocar heróis e criaturas\nGaste 💎 para chamar aliados', btn: 'ABRIR', fn: () => openCrew() });
   if (n.role === 'map') {
@@ -1434,7 +1491,7 @@ function openNpc(n) { openNpcMenu(n); }
 function openFurnShop(n, keep) {
   const st = keep ? $('card').scrollTop : 0, again = () => openFurnShop(n, true);
   const rows = [{ text: '◀ Voltar ao menu', btn: 'VOLTAR', fn: () => openNpcMenu(n) }, { head: true, text: '🪙' + state.gold + '   Móveis no baú: ' + Object.values(state.stock).reduce((a, b) => a + b, 0) }];
-  FURN.forEach(f => rows.push({ text: f.icon + ' ' + f.name + '\nNo baú: ' + (state.stock[f.k] || 0), btn: '🪙' + f.price, enabled: state.gold >= f.price, fn: () => { state.gold -= f.price; track('furn'); state.stock[f.k] = (state.stock[f.k] || 0) + 1; save(state); refreshHud(); again(); } }));
+  FURN.forEach(f => rows.push({ text: f.icon + ' ' + f.name + '\nNo baú: ' + (state.stock[f.k] || 0), btn: f.prem ? '💎' + f.prem : '🪙' + f.price, enabled: f.prem ? state.gems >= f.prem : state.gold >= f.price, fn: () => { if (f.prem) state.gems -= f.prem; else state.gold -= f.price; track('furn'); state.stock[f.k] = (state.stock[f.k] || 0) + 1; save(state); refreshHud(); again(); } }));
   openPanel('🪑 Comprar móveis', rows);
   if (keep) $('card').scrollTop = st;
 }
@@ -1502,6 +1559,25 @@ function openCityMap() {
 const refreshPlots = () => { if (city) city.setOwned(state.homes, owners, myOid); };
 function syncCam() { pet.position.copy(player.position); camera.position.copy(player.position).add(_co.copy(CAM_OFFSET).multiplyScalar(zoom)); }
 
+const RENT = 180, WEEK = 7 * 864e5;
+function homeBonus() { let h = 0, a = 0; Object.keys(state.homes).forEach(id => { const p = PLOTS.find(x => x.id === id); if (p) { if (p.kind === 'house') h++; else a++; } }); return { atk: Math.min(5, h) * 0.03, gold: Math.min(5, a) * 0.02 }; }
+function loseHome(id, refund) {
+  const h = state.homes[id]; if (!h) return; (h.furn || []).forEach(f => { state.stock[f.k] = (state.stock[f.k] || 0) + 1; });
+  delete state.homes[id]; if (net) net.send({ t: 'sell', plot: id }); if (refund) state.gold += refund; save(state); refreshHud(); refreshPlots();
+}
+function sellHome(p) { loseHome(p.id, Math.round(p.price * 0.6)); closePanel(); toast('💰 ' + p.name + ' vendida por 🪙' + Math.round(p.price * 0.6)); }
+function checkRent(quiet) {
+  const now = Date.now(); let changed = false;
+  Object.keys(state.homes).forEach(id => {
+    const p = PLOTS.find(x => x.id === id); if (!p || p.kind !== 'apt') return;
+    const h = state.homes[id]; if (!h.paid) { h.paid = now + WEEK; changed = true; return; }
+    let n = 0; while (now > h.paid && state.gold >= RENT && n < 4) { state.gold -= RENT; h.paid += WEEK; n++; changed = true; }
+    if (n && !quiet) toast('🏢 Aluguel de ' + p.name + ' pago: 🪙' + RENT * n);
+    if (now > h.paid + 3 * 864e5) { loseHome(id, 0); toast('🏢 Você perdeu ' + p.name + ' por aluguel atrasado. Os móveis voltaram ao baú.'); }
+    else if (now > h.paid && !quiet) toast('⚠ Aluguel de ' + p.name + ' atrasado! Pague no prédio ou perderá o apartamento.');
+  });
+  if (changed) { save(state); refreshHud(); }
+}
 function openPlotMenu(p) {
   if (isPaused()) return;
   walkGoal = null;
@@ -1512,8 +1588,13 @@ function openPlotMenu(p) {
   else if (other) rows.push({ text: '👀 Visitar a casa de ' + o.name + '\nVeja os móveis dele', btn: 'VISITAR', enabled: !!(net && net.connected), fn: () => { closePanel(); net.send({ t: 'visit', plot: p.id }); } });
   else rows.push({
     text: (house ? '🛒 Comprar ' : '🔑 Alugar ') + p.name + '\nSala de ' + R.w + '×' + R.d + ' m para mobiliar', btn: '🪙' + p.price, enabled: state.gold >= p.price,
-    fn: () => { state.gold -= p.price; state.homes[p.id] = { furn: [] }; track('house'); save(state); refreshHud(); if (net) net.send({ t: 'buy', plot: p.id }); refreshPlots(); closePanel(); toast(house ? '🏠 Casa comprada!' : '🏢 Apartamento alugado!'); again(); },
+    fn: () => { state.gold -= p.price; state.homes[p.id] = p.kind === 'apt' ? { furn: [], paid: Date.now() + WEEK } : { furn: [] }; track('house'); save(state); refreshHud(); if (net) net.send({ t: 'buy', plot: p.id }); refreshPlots(); closePanel(); toast(house ? '🏠 Casa comprada!' : '🏢 Apartamento alugado!'); again(); },
   });
+  if (own) {
+    if (!house) { const days = Math.max(0, Math.ceil(((own.paid || Date.now()) - Date.now()) / 864e5)); rows.push({ text: '💳 Aluguel semanal: 🪙' + RENT + '\nPróximo vencimento em ' + days + ' dia(s). Atrasou mais de 3 dias, perde o apartamento. O sistema desconta sozinho se você tiver ouro.', btn: 'PAGAR 🪙' + RENT, enabled: state.gold >= RENT && (own.paid || 0) < Date.now() + 3 * WEEK, fn: () => { state.gold -= RENT; own.paid = Math.max(own.paid || 0, Date.now()) + WEEK; save(state); refreshHud(); toast('🏢 Aluguel pago'); again(); } }); }
+    rows.push({ text: '💰 Vender ' + p.name + '\nVocê recebe 🪙' + Math.round(p.price * 0.6) + ' e os móveis voltam para o seu baú.', btn: 'VENDER', fn: () => { if (confirm('Vender ' + p.name + '?')) sellHome(p); } });
+  }
+  rows.push({ head: true, text: '🎁 Bônus de imóveis: cada CASA dá +3% de dano (máx. 5), cada APARTAMENTO dá +2% de ouro (máx. 5). Dormir numa cama da sua casa dá +15% de dano por 10 min.' });
   rows.push({ text: '👋 Voltar', btn: 'FECHAR', fn: closePanel });
   openPanel((house ? '🏠 ' : '🏢 ') + p.name, rows);
 }
@@ -1542,7 +1623,8 @@ function cleanupHome() {
 }
 function leaveHome() {
   if (!inHome) return;
-  const p = inHome; cleanupHome(); setCityMode(true);
+  const p = inHome, ownH = !homeVisit && state.homes[p.id]; cleanupHome(); setCityMode(true);
+  if (ownH && (ownH.furn || []).some(f => f.k === 'bed')) { state.rest = Date.now() + 10 * 60e3; toast('😴 Descansado! +15% de dano por 10 minutos'); save(state); }
   player.position.set(p.door[0], 0, p.door[1]); facing = p.ry; syncCam(); refreshPlots();
 }
 
@@ -1567,7 +1649,7 @@ function updateMark() {
 }
 function buyFurn(f) {
   if (!inHome || homeVisit) return;
-  if ((state.stock[f.k] || 0) > 0) state.stock[f.k]--; else if (state.gold >= f.price) { state.gold -= f.price; track('furn'); } else return;
+  if ((state.stock[f.k] || 0) > 0) state.stock[f.k]--; else if (!f.prem && state.gold >= f.price) { state.gold -= f.price; track('furn'); } else return;
   const m = addFurn({ k: f.k, x: 0, z: -1, r: 0 }); decor.sel = m; homeSave(); refreshHud(); updateMark(); renderDecor();
 }
 function rotFurn() { const m = decor.sel; if (!m || m.userData.k === 'painting') return; m.userData.r = (m.userData.r + 1) % 4; m.rotation.y = m.userData.r * Math.PI / 2; placeFurn(m, m.position.x, m.position.z); homeSave(); updateMark(); }
@@ -1579,7 +1661,7 @@ function delFurn() {
 function renderDecor() {
   const shop = $('decshop'), keep = shop.scrollLeft; shop.innerHTML = '';
   FURN.forEach(f => {
-    const have = state.stock[f.k] || 0, b = el('button', 'dcard', null, shop); el('div', 'dic', f.icon, b); el('div', 'dnm', f.name, b); el('div', 'dpr', have ? '📦 x' + have + ' grátis' : '🪙' + f.price, b);
+    const have = state.stock[f.k] || 0; if (f.prem && !have) return; const b = el('button', 'dcard', null, shop); el('div', 'dic', f.icon, b); el('div', 'dnm', f.name, b); el('div', 'dpr', have ? '📦 x' + have + ' grátis' : '🪙' + f.price, b);
     b.disabled = !have && state.gold < f.price; b.onclick = () => buyFurn(f);
   });
   shop.scrollLeft = keep;
@@ -1905,7 +1987,7 @@ function update(dt) {
   }
   const m = Math.hypot(dx, dz); if (m > 1) { dx /= m; dz /= m; }
   const p = player.position, bear = T < bearUntil;
-  const gyNow = inCity ? 0 : walkY(p.x, p.z), wet = gyNow < -0.35;
+  const gyNow = inCity ? 0 : walkY(p.x, p.z), wet = gyNow < -0.35 && !mounted;
   const spd = (wet ? 0.62 : 1) * PLAYER_SPEED * (1 + sk('swift') * 0.06) * (1 + Math.min(0.5, statSum('spd'))) * CLASSES[hero.cls].spd * (mounted ? petDef.speed : 1) * (bear ? 0.9 : 1);
   p.x = THREE.MathUtils.clamp(p.x + dx * spd * dt, -WORLD, WORLD);
   p.z = THREE.MathUtils.clamp(p.z + dz * spd * dt, -WORLD, WORLD);
@@ -1920,7 +2002,7 @@ function update(dt) {
   }
 
   // alvo
-  let target = null, best = hero.range;
+  let target = null, best = hero.range * (1 + sk('eagle') * 0.08);
   enemies.forEach(e => { const d = dist2(e.mesh.position, p); if (d < best) { best = d; target = e; } });
   const moving = m > 0.05;
   if (moving) facing = angleLerp(facing, Math.atan2(dx, dz), Math.min(1, dt * 14));
@@ -1933,6 +2015,7 @@ function update(dt) {
   if (wet && moving && T > splashAt) { splashAt = T + 0.38; ringFx({ x: p.x, z: p.z }, 0xd6f2ff, 1.8, 0.7, WATER_Y + 0.03); }
   p.y = playerGy + (mounted ? petDef.seat - (player.userData.glb ? 0.9 : 0.55) : 0) + (player.userData.bob || 0);
   if (waterTex && !inCity) { waterTex.offset.x += dt * 0.03; waterTex.offset.y += dt * 0.011; }
+  updateEqAura();
   tmpScale.setScalar(bear ? 1.6 : 1); player.scale.lerp(tmpScale, Math.min(1, dt * 12));
 
   if (inCity && city && !inHome) {
@@ -1946,6 +2029,7 @@ function update(dt) {
   if (hero.cls === 'sorcerer') overload = Math.max(0, overload - 6 * dt);
   if (shield > 0 && T > shieldUntil) shield = 0;
   if (sk('regen') && hp < maxHp) hp = Math.min(maxHp, hp + sk('regen') * 1.2 * dt);
+  if (petPerk('regen') && hp < maxHp) hp = Math.min(maxHp, hp + maxHp * petPerk('regen') * dt);
   runSkills(dt);
   if (state.skillPts > 0 && !testing && !isPaused()) openSkillPicker();
 
@@ -1977,6 +2061,7 @@ function update(dt) {
   updateWorld(dt);
   updateWB(dt);
   updateFishing(dt);
+  updateWander(dt);
 
   // mascote
   const pp = pet.position, pu = pet.userData;
@@ -1997,7 +2082,7 @@ function update(dt) {
 
   // projéteis inimigos
   for (let i = eshots.length - 1; i >= 0; i--) {
-    const b = eshots[i];
+    const b = eshots[i]; if (!b) continue;   // (clearEnemies pode esvaziar a lista se o tiro matar o jogador)
     b.mesh.position.addScaledVector(b.dir, b.speed * dt); b.life -= dt;
     const hit = Math.hypot(b.mesh.position.x - p.x, b.mesh.position.z - p.z) < 0.8;
     if (hit) { hitPlayer({ dmg: b.dmg }); if (b.splash) ringFx(b.mesh.position, b.color, b.splash, 0.35); }
@@ -2128,7 +2213,7 @@ let gameStarted = false;
 function startGame() {
   gameStarted = true;
   if (!testing) {
-    social.startPolls();
+    social.startPolls(); setTimeout(() => checkRent(), 3000); setInterval(() => checkRent(true), 300000);
     const og = offlineGain(state);
     if (og) { state.gold += og.gold; state.lastSeen = Date.now(); save(state); refreshHud(); setTimeout(() => toast('💤 Enquanto você estava fora (' + (og.mins >= 60 ? Math.floor(og.mins / 60) + 'h' + (og.mins % 60 ? ' ' + og.mins % 60 + 'min' : '') : og.mins + ' min') + '), seus aliados juntaram 🪙' + og.gold), 1500); }
     if (!loginState(state).got) setTimeout(() => toast('🎁 Recompensa de login disponível! Abra 📜 MISSÕES'), og ? 5000 : 2000);
@@ -2219,7 +2304,7 @@ function runSelfTest() {
       openPlotMenu(pl); closePanel(); openPlotMenu(pa); closePanel();
       for (const q of [pl, pa]) {
         state.homes[q.id] = { furn: [] }; refreshPlots(); enterHome(q); toggleDecor(true);
-        for (const f of FURN) buyFurn(f); decor.sel = homeRoom.items[0]; rotFurn(); placeFurn(decor.sel, 99, 99); homeSave(); renderDecor();
+        FURN.forEach(f => { if (f.prem) state.stock[f.k] = 1; }); for (const f of FURN) buyFurn(f); decor.sel = homeRoom.items[0]; rotFurn(); placeFurn(decor.sel, 99, 99); homeSave(); renderDecor();
         if (homeRoom.items.length !== FURN.length) throw new Error('moveis');
         const n = homeRoom.items.length, k0 = decor.sel.userData.k, s0 = state.stock[k0] || 0; delFurn(); if (homeRoom.items.length !== n - 1 || (state.stock[k0] || 0) !== s0 + 1) throw new Error('guardar movel');
         toggleDecor(false); for (let i = 0; i < 20; i++) update(0.05);
@@ -2269,6 +2354,13 @@ function runSelfTest() {
     fishing = { st: 'bite', t: 1 }; const f0 = state.meta.cnt.fish || 0; catchFish(); if ((state.meta.cnt.fish || 0) !== f0 + 1) throw new Error('pesca');
     craft.giveGem('topaz', 1); craft.giveGem('topaz', 1); craft.giveGem('topaz', 1); craft.openCraft(null); craft.openGems(null); craft.openSocket(null, gi); craft.openForge(null, 'weapon');
     out.push('ofício/gemas/masmorra/pesca: ok');
+    // passe, loja, imoveis, mercador
+    state.gems = 5000; state.gold = 1e6; shop.passXp('boss', 40); if (!(state.pass.xp >= 1200)) throw new Error('passe xp'); shop.openPass(null); shop.openCosmetics(null); shop.openGemPacks(null);
+    FURN.filter(f => f.prem).forEach(f => { const m = makeFurniture(f.k); if (!m.children.length) throw new Error('movel premium ' + f.k); });
+    const AP = PLOTS.filter(x => x.kind === 'apt'); state.gold = 0; state.homes[AP[0].id] = { furn: [{ k: 'bed', x: 0, z: 0, r: 0 }], paid: Date.now() - 5 * 864e5 }; checkRent(true); if (state.homes[AP[0].id]) throw new Error('aluguel atrasado nao perdeu'); state.gold = 1e6; 
+    state.homes[AP[1].id] = { furn: [], paid: Date.now() - 1000 }; const gg0 = state.gold; checkRent(true); if (!(state.gold < gg0)) throw new Error('aluguel nao debitou'); delete state.homes[AP[1].id];
+    if (!(homeBonus().atk >= 0)) throw new Error('bonus casa'); spawnWander(); if (!wander) throw new Error('mercador'); openWanderShop(); dropWander();
+    out.push('passe/loja/imoveis/mercador: ok');
     out.push('missoes/conquistas/login/eventos/clima/baus/emotes: ok (conquistas=' + Object.keys(state.meta.ach).length + ')');
     for (let i = 0; i < 120; i++) update(0.05);
     out.push('SELFTEST OK');

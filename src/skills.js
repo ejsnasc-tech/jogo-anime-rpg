@@ -18,16 +18,26 @@ export const SKILLS = [
   { id: 'swift', kind: 'passive', icon: '👟', name: 'Pés Alados', desc: (l) => `+${l * 6}% de velocidade de movimento` },
   { id: 'crit', kind: 'passive', icon: '🎯', name: 'Olho Letal', desc: (l) => `${l * 8}% de chance de golpe crítico (x1.8)` },
   { id: 'vamp', kind: 'passive', icon: '🩸', name: 'Sede de Sangue', desc: (l) => `Cura ${l}% da vida máxima a cada abate` },
+  // ---- Exclusivas de classe (só aparecem para a sua classe) ----
+  { id: 'bulwark', kind: 'passive', cls: 'warrior', icon: '🛡', name: 'Fortaleza', desc: (l) => `+${l * 10}% de dano quando sua vida está abaixo de 50%` },
+  { id: 'holy', kind: 'passive', cls: 'paladin', icon: '✨', name: 'Luz Sagrada', desc: (l) => `Cada golpe cura ${(l * 0.3).toFixed(1)}% da vida máxima` },
+  { id: 'deadly', kind: 'passive', cls: 'assassin', icon: '🗡️', name: 'Golpe Mortal', desc: (l) => `Críticos causam +${l * 20}% de dano extra` },
+  { id: 'eagle', kind: 'passive', cls: 'archer', icon: '🦅', name: 'Olho de Águia', desc: (l) => `+${l * 8}% de alcance de ataque` },
+  { id: 'arcane', kind: 'passive', cls: 'mage', icon: '🔮', name: 'Mente Arcana', desc: (l) => `-${l * 8}% de recarga do ULT` },
+  { id: 'overload', kind: 'passive', cls: 'sorcerer', icon: '⚡', name: 'Sobrecarga', desc: (l) => `Sobrecarga rende +${l * 25}% de dano a mais` },
+  { id: 'thorns', kind: 'passive', cls: 'druid', icon: '🌹', name: 'Espinhos Vivos', desc: (l) => `Quem te acerta recebe ${l * 35}% do seu dano de volta` },
   { id: 'greed', kind: 'passive', icon: '💰', name: 'Ganância', desc: (l) => `+${l * 20}% de ouro e mais chance de 💎` },
 ];
 
 export const skillById = (id) => SKILLS.find(s => s.id === id);
 
 // Sorteia até 3 skills que ainda não estão no máximo. Pelo menos 1 ativa quando houver.
-export function rollChoices(owned, n = 3) {
-  const pool = SKILLS.filter(s => (owned[s.id] || 0) < SKILL_MAX);
+export function rollChoices(owned, n = 3, cls) {
+  const pool = SKILLS.filter(s => (owned[s.id] || 0) < SKILL_MAX && (!s.cls || s.cls === cls));
   const picks = [];
   const pull = (list) => { const i = Math.floor(Math.random() * list.length); const [x] = list.splice(i, 1); return x; };
+  const mine = pool.filter(s => s.cls);
+  if (mine.length && Math.random() < 0.55) { const a = pull(mine); pool.splice(pool.indexOf(a), 1); picks.push(a); }
   const act = pool.filter(s => s.kind === 'active');
   if (act.length && Math.random() < 0.6) { const a = pull(act); pool.splice(pool.indexOf(a), 1); picks.push(a); }
   while (picks.length < n && pool.length) picks.push(pull(pool));

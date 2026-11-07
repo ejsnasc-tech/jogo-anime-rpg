@@ -50,6 +50,24 @@ export const FURN = [
     [[-0.5, 1.5, 0.1, 0xff8a30], [0.4, 1.3, -0.1, 0xffd54f], [0.1, 1.7, 0.1, 0xff5a7a]].forEach(([x, y, z, c]) => part(g, new THREE.SphereGeometry(0.14, 8, 6), M(c), x, y, z)); } },
   { k: 'painting', icon: '\u{1F5BC}️', name: 'Quadro', price: 150, w: 1.8, d: 0.3, build(g) {
     part(g, B(1.7, 1.2, 0.1), M(0x5a3b1e), 0, 2.2, 0); part(g, B(1.5, 1, 0.12), M(0x3a8fd9), 0, 2.2, 0.02); part(g, new THREE.CircleGeometry(0.28, 14), new THREE.MeshBasicMaterial({ color: 0xffd54f }), 0.3, 2.35, 0.09); part(g, B(1.5, 0.35, 0.13), M(0x2f9e44), 0, 1.92, 0.025); } },
+  // ---- premium (compradas com gemas na Lia) ----
+  { k: 'throne', icon: '👑', name: 'Trono Dourado', price: 0, prem: 60, w: 1.9, d: 1.7, build(g) {
+    const gold = M(0xd4af37, { metalness: 0.6, roughness: 0.35 });
+    part(g, B(1.7, 0.4, 1.5), M(0x7b1e1e), 0, 0.2, 0); part(g, B(1.4, 0.6, 1.2), M(0xb71c1c), 0, 0.7, 0.05); part(g, B(1.7, 2.6, 0.3), gold, 0, 1.5, -0.65);
+    [-0.85, 0.85].forEach(x => part(g, B(0.25, 0.95, 1.3), gold, x, 0.85, 0)); part(g, new THREE.OctahedronGeometry(0.28), new THREE.MeshStandardMaterial({ color: 0x66e0ff, emissive: 0x2299cc, emissiveIntensity: 0.9 }), 0, 3, -0.65); } },
+  { k: 'fountain', icon: '⛲', name: 'Chafariz de Cristal', price: 0, prem: 90, w: 3, d: 3, build(g) {
+    part(g, new THREE.CylinderGeometry(1.4, 1.5, 0.5, 18), M(0xa9afb8), 0, 0.25, 0); part(g, new THREE.CylinderGeometry(1.2, 1.2, 0.1, 18), new THREE.MeshStandardMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.7 }), 0, 0.5, 0);
+    part(g, new THREE.CylinderGeometry(0.2, 0.3, 1.6, 8), M(0xa9afb8), 0, 1.1, 0); part(g, new THREE.SphereGeometry(0.4, 12, 8), new THREE.MeshStandardMaterial({ color: 0x8fe3ff, emissive: 0x2a7fb0, emissiveIntensity: 0.8 }), 0, 2.1, 0); } },
+  { k: 'dragonstatue', icon: '🐉', name: 'Estátua do Dragão', price: 0, prem: 120, w: 2.3, d: 1.9, build(g) {
+    const st = M(0x8d939c), gold = M(0xd4af37, { metalness: 0.5, roughness: 0.4 });
+    part(g, B(1.8, 0.5, 1.5), M(0x5a606b), 0, 0.25, 0); part(g, new THREE.SphereGeometry(0.7, 10, 8), st, 0, 1.2, 0).scale.set(1, 0.9, 1.4);
+    const neck = part(g, new THREE.CylinderGeometry(0.2, 0.3, 1.2, 8), st, 0, 1.9, 0.6); neck.rotation.x = 0.5; part(g, new THREE.SphereGeometry(0.32, 10, 8), st, 0, 2.5, 1.0).scale.set(1, 0.8, 1.3);
+    [-1, 1].forEach(x => { const w = part(g, B(1.3, 0.08, 1), gold, x * 0.95, 1.8, -0.2); w.rotation.z = -x * 0.5; });
+    [-0.14, 0.14].forEach(x => part(g, new THREE.SphereGeometry(0.07, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff4040 }), x, 2.55, 1.25)); } },
+  { k: 'chandelier', icon: '🕯️', name: 'Lustre Imperial', price: 0, prem: 50, w: 1.8, d: 1.8, build(g) {
+    const gold = M(0xd4af37, { metalness: 0.6, roughness: 0.3 }); part(g, new THREE.CylinderGeometry(0.03, 0.03, 1, 6), gold, 0, 3.1, 0);
+    part(g, new THREE.TorusGeometry(0.75, 0.06, 6, 20), gold, 0, 2.6, 0).rotation.x = Math.PI / 2;
+    for (let i = 0; i < 6; i++) { const a = i / 6 * 6.283; part(g, new THREE.SphereGeometry(0.1, 6, 6), new THREE.MeshStandardMaterial({ color: 0xffe9a0, emissive: 0xffc94d, emissiveIntensity: 1.2 }), Math.cos(a) * 0.75, 2.75, Math.sin(a) * 0.75); } } },
 ];
 export const furnByKey = (k) => FURN.find(f => f.k === k);
 
