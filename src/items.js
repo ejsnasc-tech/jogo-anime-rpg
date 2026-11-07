@@ -16,6 +16,19 @@ export const STATS = {
   spd: { fmt: (v) => '+' + (v * 100).toFixed(1) + '% de velocidade' },
 };
 
+// Gemas: encaixam nos equipamentos (raro = 1 encaixe, épico = 2, lendário = 3)
+export const GEMS = {
+  ruby: { icon: '🔴', name: 'Rubi', stat: 'atk', v: [0.03, 0.06, 0.10] },
+  emerald: { icon: '🟢', name: 'Esmeralda', stat: 'hp', v: [15, 35, 60] },
+  topaz: { icon: '🟡', name: 'Topázio', stat: 'crit', v: [0.015, 0.035, 0.06] },
+  sapphire: { icon: '🔵', name: 'Safira', stat: 'def', v: [0.015, 0.035, 0.06] },
+  amethyst: { icon: '🟣', name: 'Ametista', stat: 'spd', v: [0.015, 0.03, 0.05] },
+};
+export const GEM_KEYS = Object.keys(GEMS);
+export const gemFmt = (t, l) => GEMS[t].icon + ' ' + GEMS[t].name + ' Nv.' + l + ' (' + STATS[GEMS[t].stat].fmt(GEMS[t].v[l - 1]) + ')';
+export const itemGemSum = (it, stat) => (it.gems || []).reduce((a, g) => a + (GEMS[g.t] && GEMS[g.t].stat === stat ? GEMS[g.t].v[g.l - 1] : 0), 0);
+const gemTail = (it) => it.rar ? '  ' + (it.gems || []).map(x => GEMS[x.t] ? GEMS[x.t].icon + x.l : '').join('') + '◇'.repeat(Math.max(0, it.rar - (it.gems || []).length)) : '';
+
 // Espaços do boneco: 1 anel e 1 amuleto.
 export const SLOT_ORDER = ['helm', 'chest', 'legs', 'boots', 'weapon', 'offhand', 'amulet', 'ring'];
 export const EQUIP_KEYS = ['helm', 'chest', 'legs', 'boots', 'weapon', 'offhand', 'amulet', 'ring'];
@@ -61,7 +74,7 @@ export const itemValue = (it) => itemBase(it) * (1 + it.tier * 0.5) * RAR[it.rar
 export const statFmt = (stat, v) => STATS[stat].fmt(v);
 export const itemFmt = (it) => STATS[itemStat(it)].fmt(itemValue(it));
 export const itemName = (it) => ((it.kind && KINDS[it.kind] ? KINDS[it.kind].label : SLOTS[it.slot].noun) + ' de ' + MATERIAL[it.tier]) + (it.plus ? ' +' + it.plus : '');
-export const itemLine = (it) => itemIcon(it) + ' ' + itemName(it) + ' [' + RAR[it.rar].name + ']  ' + itemFmt(it);
+export const itemLine = (it) => itemIcon(it) + ' ' + itemName(it) + ' [' + RAR[it.rar].name + ']  ' + itemFmt(it) + gemTail(it);
 export const sellPrice = (it) => Math.round(12 * (1 + it.tier * 1.4) * (1 + it.rar * 1.6) * (1 + it.plus * 0.5));
 export const buyPrice = (tier, rar) => Math.round(100 * (1 + tier * 1.5) * (1 + rar * 2.5));
 export const upgradeCost = (it) => ({ gold: Math.round(40 * (it.plus + 1) * (1 + it.tier * 0.8)), mat: (it.plus + 1) * 2 });

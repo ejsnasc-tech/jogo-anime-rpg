@@ -4,7 +4,8 @@ import { std, metal, glow, shadowAll } from './models.js';
 import { makeHero, makeSkeleton, animateHero, playOnce, preloadModels } from './actors.js';
 import { openCreator, CLASS_LIST } from './creator.js';
 import { SKILLS, SKILL_MAX, skillById, rollChoices } from './skills.js';
-import { SLOTS, SLOT_ORDER, EQUIP_KEYS, KINDS, WEAPON_KIND, OFF_KIND, RAR, MATS, FOREST_LV, MAX_PLUS, newItem, itemValue, itemStat, itemIcon, itemFmt, statFmt, itemName, itemLine, sellPrice, buyPrice, upgradeCost, rollDrop, migrateItems } from './items.js';
+import { initCraft } from './craft.js';
+import { itemGemSum, SLOTS, SLOT_ORDER, EQUIP_KEYS, KINDS, WEAPON_KIND, OFF_KIND, RAR, MATS, FOREST_LV, MAX_PLUS, newItem, itemValue, itemStat, itemIcon, itemFmt, statFmt, itemName, itemLine, sellPrice, buyPrice, upgradeCost, rollDrop, migrateItems } from './items.js';
 import { itemArt, ghostArt } from './itemart.js';
 import { buildCity, CITY_R, CITY_SPAWN, PLOTS } from './city.js';
 import { createNet, nameTag, NET_URL } from './net.js';
@@ -27,7 +28,7 @@ const $ = (id) => document.getElementById(id);
 // ===================== Save =====================
 const defaults = () => ({
   gold: 0, gems: 80, cash: 0, level: 1, kills: 0,
-  owned: ['kaito'], team: ['kaito'], upgrades: { atk: 0, hp: 0 }, stars: {},
+  gembag: {}, owned: ['kaito'], team: ['kaito'], upgrades: { atk: 0, hp: 0 }, stars: {},
   pets: ['fox'], activePet: 'fox', petStars: {},
   skills: {}, xp: 0, skillPts: 0, items: [], equip: {}, mats: {}, homes: {}, stock: {}, maxAct: 0, storyDone: false,
   act: 0, stage: 1, stageKills: 0, endless: false, seen: {}, account: null, custom: null, lastSeen: Date.now(),
@@ -61,7 +62,7 @@ ensureMeta(state);
 async function cloudPush(force) {
   if (!sess || !sess.cid || !state.custom || cloudBusy || !(cloudDirty || force)) return;
   cloudBusy = true; cloudDirty = false;
-  try { await api('char/put', { token: sess.token, id: sess.cid, name: state.custom.name, cls: state.custom.cls, level: state.level, save: JSON.stringify(state) }); }
+  try { await api('char/put', { token: sess.token, id: sess.cid, name: state.custom.name, cls: state.custom.cls, level: state.level, kills: state.kills, bosses: (state.meta && state.meta.cnt.boss) || 0, save: JSON.stringify(state) }); }
   catch (e) { cloudDirty = true; if (e.status === 401) { setSess(null); location.reload(); } }
   finally { cloudBusy = false; }
 }
@@ -366,7 +367,7 @@ let player = null, facing = 0;
 const sk = (id) => state.skills[id] || 0;
 const equippedAt = (key) => state.items.find(i => i.uid === state.equip[key]);
 const isEquipped = (it) => EQUIP_KEYS.some(k => state.equip[k] === it.uid);
-const statSum = (stat) => EQUIP_KEYS.reduce((a, k) => { const it = equippedAt(k); return a + (it && itemStat(it) === stat ? itemValue(it) : 0); }, 0);
+const statSum = (stat) => EQUIP_KEYS.reduce((a, k) => { const it = equippedAt(k); return a + (it ? (itemStat(it) === stat ? itemValue(it) : 0) + itemGemSum(it, stat) : 0); }, 0);
 const mainCls = () => (state.custom && state.custom.cls) || 'warrior';
 const slotType = (key) => key;
 const slotLabel = (t) => t === 'weapon' ? KINDS[WEAPON_KIND[mainCls()] || 'sword'].label : t === 'offhand' ? KINDS[OFF_KIND[mainCls()] || 'shield'].label : SLOTS[t].name;
@@ -392,7 +393,7 @@ const dist2 = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const angDiff = (a, b) => Math.abs(((a - b + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI);
 function angleLerp(a, b, t) { const d = ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI; return a + d * t; }
 const curAct = () => ACTS[state.act];
-const zoneLv = () => state.endless ? 36 + Math.floor(state.stageKills / 25) : FOREST_LV[state.act] + state.stage - 1;
+const zoneLv = () => dg ? dg.lv + (dg.floor - 1) * 2 : state.endless ? 36 + Math.floor(state.stageKills / 25) : FOREST_LV[state.act] + state.stage - 1;
 const xpNeed = () => 6 + Math.round(state.level * 2.5);
 const quota = () => 8 + state.stage * 3 + state.act * 2;
 
@@ -443,7 +444,7 @@ function refreshHud() {
   { const n = questsClaimable(); $('questbtn').textContent = '📜 MISSÕES' + (n ? ' ❗' + n : ''); }
   $('hgems').textContent = '💎' + state.gems; $('hgold').textContent = '🪙' + state.gold; $('hcash').textContent = '💵' + state.cash;
   const a = curAct();
-  $('stage').textContent = wb ? '🐉 CHEFE MUNDIAL — derrotem juntos!' : inHome ? '\u{1F3E0} ' + (homeVisit ? 'Visitando a casa de ' + homeVisit.name : inHome.name + ' \u2014 ' + ROOMS[inHome.kind].label) : inCity ? '🏰 Cidade de Aurora — fale com os moradores' : state.endless ? '♾ Aventura Infinita • abates ' + state.stageKills
+  $('stage').textContent = dg ? '🏰 MASMORRA — andar ' + dg.floor + '/5' + (dg.floor < 5 ? '  (' + dg.kills + '/' + dg.need + ')' : ' — CHEFE') : wb ? '🐉 CHEFE MUNDIAL — derrotem juntos!' : inHome ? '\u{1F3E0} ' + (homeVisit ? 'Visitando a casa de ' + homeVisit.name : inHome.name + ' \u2014 ' + ROOMS[inHome.kind].label) : inCity ? '🏰 Cidade de Aurora — fale com os moradores' : state.endless ? '♾ Aventura Infinita • abates ' + state.stageKills
     : 'Ato ' + (state.act + 1) + ' (Nv.' + zoneLv() + ') • ' + a.name + ' — ' + (state.stage === 5 ? 'CHEFE' : 'Estágio ' + state.stage + '/5  (' + state.stageKills + '/' + quota() + ')');
 }
 
@@ -516,10 +517,10 @@ function updateWorld(dt) {
       pa.needsUpdate = true;
     } else if (rainPts) rainPts.visible = false;
   }
-  if (inCity || inHome) return;
+  if (inCity || inHome || wb || dg) return;
   // eventos
   if (ev && T > ev.until) { ev.left = 0; ev = null; nextEvT = T + 200; toast('⌛ O evento terminou'); }
-  if (!ev && !wb && T > nextEvT && !(state.stage === 5 && !state.endless) && enemies.length < 10 && !isPaused()) startEvent();
+  if (!ev && !wb && !dg && T > nextEvT && !(state.stage === 5 && !state.endless) && enemies.length < 10 && !isPaused()) startEvent();
   // baús
   const p = player.position, now = Date.now(), m = ensureMeta(state);
   chestMeshes.forEach(c => {
@@ -534,6 +535,7 @@ function openChest(c) {
   state.gold += gold; state.gems += gems; state.mats[tier] = (state.mats[tier] || 0) + 3; ringFx(player.position, 0xffd54f, 4, 0.7);
   toast('🎁 Baú aberto! +🪙' + gold + ' +💎' + gems + ' +' + MATS[tier].icon + '3');
   if (Math.random() < 0.35) giveItem(newItem(SLOT_ORDER[Math.floor(Math.random() * SLOT_ORDER.length)], tier, Math.random() < 0.2 ? 2 : 1, mainCls()));
+  if (Math.random() < 0.4) craft.giveGem(null, 1);
   track('chest'); save(state); refreshHud();
 }
 
@@ -619,6 +621,71 @@ function openQuests() {
 }
 
 const social = initSocial({ state, sess, toast, openPanel, closePanel, save, refreshHud, itemLine, sellPrice, isEquipped, giveItem, newItem, SLOT_ORDER, mainCls, track });
+
+const craft = initCraft({ state, toast, openPanel, save, refreshHud, itemLine, isEquipped, giveItem, newItem, SLOT_ORDER, slotLabel, slotIcon, mainCls, track, recalcHp });
+
+// ---- Masmorra: 5 andares, chefe no último (3 entradas por dia) ----
+let dg = null;
+function dgLeft() { const m = ensureMeta(state); if (m.dgDay !== m.day) { m.dgDay = m.day; m.dgUsed = 0; } return 3 - (m.dgUsed || 0); }
+function openDungeon(back) {
+  const left = dgLeft(), lv = FOREST_LV[Math.min(5, state.maxAct)] + 6;
+  openPanel('🏰 MASMORRA', [
+    { text: '◀ Voltar', btn: 'VOLTAR', fn: back },
+    { head: true, text: '🏰 Masmorra Sombria\n5 andares com monstros nível ~' + lv + '+ (mais fortes que a floresta), elites frequentes e um chefe no último andar.\nSe você cair, perde a tentativa.' },
+    { text: 'Entradas hoje: ' + left + '/3 (renovam à meia-noite)\nRecompensa: ouro, 💎, equipamento ÉPICO ou melhor, gemas e materiais.', btn: 'ENTRAR', enabled: left > 0, fn: enterDungeon },
+  ]);
+}
+function enterDungeon() {
+  if (dgLeft() <= 0) return; ensureMeta(state).dgUsed = (ensureMeta(state).dgUsed || 0) + 1;
+  closePanel(); setCityMode(false); clearEnemies();
+  dg = { lv: FOREST_LV[Math.min(5, state.maxAct)] + 6, floor: 1, kills: 0, need: 16 };
+  save(state); toast('🏰 Andar 1: derrote ' + dg.need + ' monstros'); refreshHud();
+}
+function dgKill() {
+  dg.kills++;
+  if (dg.floor < 5 && dg.kills >= dg.need) {
+    dg.floor++; dg.kills = 0; dg.need = 12 + dg.floor * 4; clearEnemies(); state.gold += dg.lv * 12;
+    if (dg.floor === 5) { toast('⚠ Andar 5: o chefe da masmorra!'); spawnEnemy(true, { name: 'Senhor da Masmorra', color: 0x8a2be2 }); }
+    else toast('✅ Andar ' + (dg.floor - 1) + ' concluído! Andar ' + dg.floor + ': derrote ' + dg.need);
+  }
+  refreshHud();
+}
+function dgBossDone() {
+  const d = dg; dg = null; clearEnemies(); track('dungeon'); track('boss');
+  const gold = d.lv * 160, tier = Math.min(5, state.maxAct); state.gold += gold; state.gems += 25; state.cash += 80; state.mats[tier] = (state.mats[tier] || 0) + 8;
+  giveItem(newItem(SLOT_ORDER[Math.floor(Math.random() * SLOT_ORDER.length)], tier, Math.random() < 0.2 ? 3 : 2, mainCls()));
+  craft.giveGem(null, 2); craft.giveGem(null, Math.random() < 0.2 ? 3 : 1);
+  toast('🏆 Masmorra concluída! +🪙' + gold + ' +💎25 + equipamento e gemas'); save(state); refreshHud();
+  timers.push({ at: T + 3, fn: () => { if (!inCity) setCityMode(true); } });
+}
+
+// ---- Pesca: perto da água, toque em PESCAR e depois em PUXAR quando o peixe morder ----
+let fishing = null;
+function catchFish() {
+  const r = Math.random(), lv = state.level; let msg;
+  if (r < 0.58) { const g = 20 + lv * 3; state.gold += g; msg = '🐟 Peixinho: +🪙' + g; }
+  else if (r < 0.86) { const g = 60 + lv * 6, tier = Math.min(5, state.act); state.gold += g; state.mats[tier] = (state.mats[tier] || 0) + 1; msg = '🐠 Peixe grande: +🪙' + g + ' +' + MATS[tier].icon + '1'; }
+  else if (r < 0.96) { const g = 160 + lv * 12; state.gold += g; msg = '🦈 Peixe raro: +🪙' + g; if (Math.random() < 0.3) craft.giveGem(null, 1); }
+  else { const gm = 6 + Math.floor(Math.random() * 6); state.gems += gm; msg = '🦪 PÉROLA! +💎' + gm; }
+  toast('🎣 ' + msg); track('fish'); save(state); refreshHud();
+}
+function updateFishing(dt) {
+  const b = $('fish'), p = player.position;
+  const near = !inCity && !inHome && !wb && !dg && riverDepth(p.x, p.z) > 0.12 && !isPaused() && !enemies.some(e => dist2(e.mesh.position, p) < 11);
+  if (!near && !fishing) { b.style.display = 'none'; return; }
+  b.style.display = 'block';
+  if (fishing && (!near || Math.hypot(joy.dx, joy.dy) > 0.3)) { fishing = null; toast('🎣 Pesca cancelada'); }
+  if (!fishing) { b.textContent = '🎣 PESCAR'; return; }
+  fishing.t -= dt;
+  if (fishing.st === 'wait') { b.textContent = '🎣 aguardando…'; if (fishing.t <= 0) { fishing.st = 'bite'; fishing.t = 1.3; ringFx({ x: p.x, z: p.z + 1.5 }, 0xd6f2ff, 2, 0.5, WATER_Y + 0.05); toast('❗ Fisgou! Toque em PUXAR!'); } }
+  else { b.textContent = '❗ PUXAR!'; if (fishing.t <= 0) { fishing = null; toast('🐟 O peixe escapou…'); } }
+}
+$('fish').addEventListener('pointerdown', (e) => {
+  e.stopPropagation(); if (isPaused()) return;
+  if (!fishing) { fishing = { st: 'wait', t: 2 + Math.random() * 4 }; toast('🎣 Lançou a linha…'); }
+  else if (fishing.st === 'bite') { fishing = null; catchFish(); }
+  else { fishing = null; toast('🎣 Você puxou cedo demais'); }
+});
 
 // ---- Chefe mundial: todos os jogadores ferem o mesmo chefe (a vida fica no servidor) ----
 let wb = null;
@@ -866,7 +933,8 @@ function spawnEnemy(boss, info, forceType) {
   const hpv = boss ? base * 14 * (state.endless ? 1.5 : 1) * 1.3 : base * T0.hp;
   const dmgBase = ((6 + lv * 0.8) * (1 + state.act * 0.12)) * 1.35 * catchD;
   const e = { mesh, hp: hpv, maxHp: hpv, speed: boss ? 1.5 : (1.9 + Math.random() * 1.0) * T0.spd, boss: !!boss, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? 1.4 : T0.r, t: Math.random() * 10, dmg: dmgBase * (boss ? 1.6 : T0.dmg), stun: 0, slow: 0, flash: 0, ranged: boss ? null : T0.ranged || null, shotAt: T + 1 + Math.random() * 2 };
-  if (!boss && !forceType && Math.random() < 0.04 + state.act * 0.01 + (night > 0.55 ? 0.03 : 0)) {
+  if (dg) { e.hp = e.maxHp = e.hp * 1.35; e.dmg *= 1.3; }
+  if (!boss && !forceType && Math.random() < 0.04 + state.act * 0.01 + (night > 0.55 ? 0.03 : 0) + (dg ? 0.12 : 0)) {
     e.elite = true; e.hp = e.maxHp = e.hp * 4; e.dmg *= 1.4; e.radius *= 1.3; mesh.scale.multiplyScalar(1.35);
     mesh.traverse(o => { if (o.isMesh && o.material) { if (o.material.emissive) o.material.emissive.setHex(0x664400); if (o.material.color) o.material.color.setHex(0xffd36b); } });
     ftAt(mesh.position, '★ ELITE', '#ffd166', 3);
@@ -895,6 +963,7 @@ function spawnBoss() { const b = curAct().boss; spawnEnemy(true, { name: state.e
 
 function autoSpawn() {
   if (inCity || wb) return;
+  if (dg) { if (dg.floor === 5) { if (enemies.length < 7) spawnEnemy(false); } else if (enemies.length < Math.min(14, dg.need - dg.kills + 2)) spawnEnemy(false); return; }
   const bossStage = state.stage === 5 && !state.endless;
   if (bossStage) { if (enemies.length < 8) spawnEnemy(false); return; }
   const cap = state.endless ? 25 : Math.min(25, quota() - state.stageKills + 2);
@@ -918,6 +987,7 @@ function damageEnemy(e, dmg, crit) {
 
 function onKill(e) {
   dropLoot(e); track('kill');
+  if (e.elite) { if (Math.random() < 0.3) craft.giveGem(null, Math.random() < 0.1 ? 2 : 1); }
   if (e.elite) { track('elite'); dropLoot(e); dropLoot(e); state.gold += 40 + state.level * 8; state.gems += Math.random() < 0.4 ? 2 : 1; ftAt(e.mesh.position, '★ +elite', '#ffd166', 2.4); }
   if (e.ev && ev === e.ev) { ev.left--; if (ev.left <= 0) finishEvent(); else toast('⚔ ' + ev.name + ': faltam ' + ev.left); }
   state.kills++; state.gold += Math.round((5 + state.level + state.act * 2) * (1 + sk('greed') * 0.2));
@@ -926,9 +996,12 @@ function onKill(e) {
   if (Math.random() < 0.1) state.cash += 10;
   state.xp++;
   if (state.xp >= xpNeed()) { state.xp = 0; state.level++; state.skillPts++; ftAt(player.position, 'LEVEL UP!', '#7CFC00', 2.8); }
-  if (e.boss) {
+  if (e.boss && dg) dgBossDone();
+  else if (e.boss) {
     if (state.endless) { track('boss'); bossRef = null; $('bossbar').style.display = 'none'; state.gems += 5; state.gold += 200 * state.level; toast('🏆 Chefe derrotado! +5💎'); }
     else bossDefeated();
+  } else if (dg) {
+    dgKill();
   } else if (wb) {
     /* adversários do chefe mundial não avançam estágios */
   } else {
@@ -1265,6 +1338,7 @@ function runSkills(dt) {
 function setCityMode(on) {
   if (inHome) cleanupHome();
   if (on && wb) endWB();
+  if (on && dg) { dg = null; toast('🏰 Você saiu da masmorra'); }
   if (on && !inCity) track('city');
   inCity = on; fieldGroup.visible = !on; ground.visible = on; terrain.visible = !on; if (city) city.group.visible = on;
   clearEnemies(); nearNpc = null; walkGoal = null; $('talk').style.display = 'none';
@@ -1336,6 +1410,7 @@ function openNpcMenu(n) {
     rows.push({ text: '💰 Vender itens\nO que você coletou dos monstros', btn: 'ABRIR', fn: () => openGear('💰 Vender itens', SLOT_ORDER, 'sell', back) });
   }
   if (n.role === 'deco') rows.push({ text: '🪑 Comprar móveis\nOs móveis vão para o seu baú. Depois, dentro da sua casa, toque em DECORAR para colocar.', btn: 'ABRIR', fn: () => openFurnShop(n) });
+  if (n.role === 'craft') rows.push({ text: '⚒ Ofício\nForjar equipamentos, lapidar e encaixar gemas', btn: 'ABRIR', fn: () => craft.openCraft(back) });
   if (n.role === 'market') {
     rows.push({ text: '🏪 Mercado de jogadores\nCompre e venda equipamentos com outros jogadores', btn: 'ABRIR', fn: () => social.openMarket('buy', back) });
     rows.push({ text: '🤝 Troca direta\nTroque itens e ouro com um amigo (os dois confirmam)', btn: 'ABRIR', fn: () => social.openTrade(back) });
@@ -1350,6 +1425,7 @@ function openNpcMenu(n) {
   if (n.role === 'map') {
     rows.push({ text: '🗺️ Mapa das florestas\nEscolha para onde viajar', btn: 'ABRIR', fn: () => openMap() });
     rows.push({ text: '🏰 Mapa da cidade\nVeja onde está cada morador', btn: 'ABRIR', fn: () => openCityMap() });
+    rows.push({ text: '🕳 Masmorra Sombria\n5 andares com chefe • 3 entradas por dia', btn: 'ABRIR', fn: () => openDungeon(back) });
   }
   rows.push({ text: '👋 Até logo', btn: 'FECHAR', fn: closePanel });
   openPanel(n.icon + ' ' + n.title.split(',')[0], rows);
@@ -1771,8 +1847,8 @@ function startNet() {
   net = createNet({ url: q && q.startsWith('ws') ? q : NET_URL, getMe: () => ({ name: meName(), look: state.custom || null, pid: state.pid }), onEvent: netEvent, onStatus: (ok) => { if (!ok) { remotes.forEach((r, id) => dropRemote(id)); netId = null; } refreshNet(); } });
   refreshNet();
 }
-const curW = () => inHome ? 'home:' + inHome.id : inCity ? 'city' : wb ? 'field:wb' : 'field:' + (state.endless ? 'inf' : state.act);
-const whereTxt = (w) => w === 'city' ? 'Na cidade de Aurora' : w === 'field:wb' ? 'Lutando contra o Chefe Mundial' : w.startsWith('home:') ? 'Dentro de uma casa' : w === 'field:inf' ? 'Na Aventura Infinita' : w.startsWith('field:') ? 'Na floresta do Ato ' + (+w.slice(6) + 1) + (w === curW() ? ' (com você!)' : '') : 'Em outra área';
+const curW = () => inHome ? 'home:' + inHome.id : inCity ? 'city' : dg ? 'field:dg' : wb ? 'field:wb' : 'field:' + (state.endless ? 'inf' : state.act);
+const whereTxt = (w) => w === 'city' ? 'Na cidade de Aurora' : w === 'field:wb' ? 'Lutando contra o Chefe Mundial' : w === 'field:dg' ? 'Em uma masmorra' : w.startsWith('home:') ? 'Dentro de uma casa' : w === 'field:inf' ? 'Na Aventura Infinita' : w.startsWith('field:') ? 'Na floresta do Ato ' + (+w.slice(6) + 1) + (w === curW() ? ' (com você!)' : '') : 'Em outra área';
 function updateNet(dt) {
   const w = curW();
   remoteGroup.visible = true;
@@ -1900,6 +1976,7 @@ function update(dt) {
   updateAllies(dt);
   updateWorld(dt);
   updateWB(dt);
+  updateFishing(dt);
 
   // mascote
   const pp = pet.position, pu = pet.userData;
@@ -2185,6 +2262,13 @@ function runSelfTest() {
     for (let i = 0; i < 30; i++) { player.position.set(bossRef.mesh.position.x + 1, 0, bossRef.mesh.position.z); update(0.1); damageEnemy(bossRef, 500); }
     if (!(wb.pending > 1000)) throw new Error('dano do chefe mundial nao acumulou'); if (curW() !== 'field:wb') throw new Error('presenca wb');
     endWB(); if (wb || !inCity) throw new Error('saida do chefe mundial'); setCityMode(false);
+    const gi = newItem('weapon', 1, 2, 'warrior'); state.items.push(gi); gi.gems = [{ t: 'ruby', l: 3 }]; equipItem(gi); if (statSum('atk') < 0.1) throw new Error('gema nao somou');
+    state.maxAct = 5; ensureMeta(state).dgUsed = 0; enterDungeon(); if (!dg) throw new Error('masmorra');
+    { let g = 0; hp = 1e9; maxHp = 1e9; while (dg && g++ < 800) { enemies.slice().forEach(e => damageEnemy(e, 1e9)); autoSpawn(); autoSpawn(); } if (dg) throw new Error('masmorra nao terminou: andar ' + dg.floor); }
+    if (!(state.meta.cnt.dungeon >= 1)) throw new Error('masmorra nao contou'); for (let i = 0; i < 80; i++) update(0.05); setCityMode(false);
+    fishing = { st: 'bite', t: 1 }; const f0 = state.meta.cnt.fish || 0; catchFish(); if ((state.meta.cnt.fish || 0) !== f0 + 1) throw new Error('pesca');
+    craft.giveGem('topaz', 1); craft.giveGem('topaz', 1); craft.giveGem('topaz', 1); craft.openCraft(null); craft.openGems(null); craft.openSocket(null, gi); craft.openForge(null, 'weapon');
+    out.push('ofício/gemas/masmorra/pesca: ok');
     out.push('missoes/conquistas/login/eventos/clima/baus/emotes: ok (conquistas=' + Object.keys(state.meta.ach).length + ')');
     for (let i = 0; i < 120; i++) update(0.05);
     out.push('SELFTEST OK');
