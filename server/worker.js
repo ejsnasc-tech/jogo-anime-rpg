@@ -32,7 +32,7 @@ export default {
   },
 };
 
-export class Zone {
+export class Arena {
   constructor(state) {
     this.state = state; this.plots = {};
     state.blockConcurrencyWhile(async () => { this.plots = (await state.storage.get('plots')) || {}; });
@@ -41,7 +41,15 @@ export class Zone {
   pub() { const o = {}; for (const id in this.plots) o[id] = { oid: this.plots[id].oid, name: this.plots[id].name }; return o; }
 
   players() { return this.state.getWebSockets().map(ws => ws.deserializeAttachment()).filter(p => p && p.name); }
-  pubP(p) { return { id: p.id, name: p.name, look: p.look, x: p.x, z: p.z, f: p.f, w: p.w, mv: p.mv }; }
+  pubP(p) { return { id: p.id, name: p.name, look: p.look, x: p.x, z: p.z, f: p.f, w: p.w, mv: p.mv, rm: p.rm || '' }; }
+  // sala de monstros compartilhados: mesma floresta + mesmo estagio. O anfitriao (quem entrou primeiro) simula os monstros.
+  members(rm, except) { return this.state.getWebSockets().filter(ws => ws !== except).map(ws => ({ ws, a: ws.deserializeAttachment() })).filter(x => x.a && x.a.name && x.a.rm === rm); }
+  announce(rm, except) {
+    if (!rm) return;
+    const ms = this.members(rm, except); if (!ms.length) return;
+    ms.sort((a, b) => (a.a.rt || 0) - (b.a.rt || 0) || (a.a.id < b.a.id ? -1 : 1));
+    ms.forEach(x => this.send(x.ws, { t: 'host', rm, host: ms[0].a.id, n: ms.length }));
+  }
   send(ws, o) { try { ws.send(JSON.stringify(o)); } catch (e) {} }
   broadcast(o, except) { const m = JSON.stringify(o); this.state.getWebSockets().forEach(ws => { if (ws !== except) { try { ws.send(m); } catch (e) {} } }); }
 
@@ -56,7 +64,7 @@ export class Zone {
   }
 
   async webSocketMessage(ws, raw) {
-    if (typeof raw !== 'string' || raw.length > 4000) return;
+    if (typeof raw !== 'string' || raw.length > 9000) return;
     let m; try { m = JSON.parse(raw); } catch (e) { return; }
     const me = ws.deserializeAttachment() || {};
     if (m.t === 'join') {
@@ -69,8 +77,15 @@ export class Zone {
     } else if (!me.name) { return; }
     else if (m.t === 'move') {
       me.x = num(m.x, 400); me.z = num(m.z, 400); me.f = num(m.f, 7); me.mv = m.mv ? 1 : 0; me.w = m.w === 'city' ? 'city' : /^(home:p\d{1,3}|field:(\d|inf|wb|dg))$/.test(String(m.w)) ? m.w : 'other';
+      const rm = me.w.startsWith('field:') && /^f(inf|\ds\d)$/.test(String(m.rm)) ? String(m.rm) : '', old = me.rm || '';
+      if (rm !== old) { me.rm = rm; me.rt = Date.now(); }
       ws.serializeAttachment(me);
-      this.broadcast({ t: 'move', id: me.id, x: me.x, z: me.z, f: me.f, mv: me.mv, w: me.w }, ws);
+      this.broadcast({ t: 'move', id: me.id, x: me.x, z: me.z, f: me.f, mv: me.mv, w: me.w, rm }, ws);
+      if (rm !== old) { this.announce(old); this.announce(rm); }
+    } else if (m.t === 'rl') {
+      if (!me.rm || !['es', 'ehit', 'ek', 'hurt', 'esh'].includes(m.k)) return;
+      const out = JSON.stringify({ t: 'rl', k: m.k, from: me.id, d: m.d });
+      this.members(me.rm, ws).forEach(x => { if (!m.to || x.a.id === m.to) { try { x.ws.send(out); } catch (e) {} } });
     } else if (m.t === 'buy') {
       const id = String(m.plot || '');
       if (!PLOT_RE.test(id) || !me.oid) return;
@@ -94,7 +109,7 @@ export class Zone {
     }
   }
 
-  async webSocketClose(ws) { const me = ws.deserializeAttachment(); try { ws.close(); } catch (e) {} if (me && me.name) this.broadcast({ t: 'leave', id: me.id }, ws); }
+  async webSocketClose(ws) { const me = ws.deserializeAttachment(); try { ws.close(); } catch (e) {} if (me && me.name) { this.broadcast({ t: 'leave', id: me.id }, ws); if (me.rm) this.announce(me.rm, ws); } }
   async webSocketError(ws) { return this.webSocketClose(ws); }
 }
 

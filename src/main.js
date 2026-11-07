@@ -377,6 +377,9 @@ const slotIcon = (t) => t === 'weapon' ? KINDS[WEAPON_KIND[mainCls()] || 'sword'
 const calcMaxHp = () => 100 + state.upgrades.hp * 20 + sk('vigor') * 25 + Math.round(statSum('hp'));
 let maxHp = calcMaxHp(), hp = maxHp, shield = 0, shieldUntil = 0;
 const enemies = [], dying = [], bullets = [], effects = [], zones = [], timers = [], eshots = [];
+// sala compartilhada de monstros (mesma floresta + mesmo estagio): o anfitriao simula, os demais veem e ajudam
+let rmCur = null, rmHost = null, rmN = 1, nidSeq = 0, snapAt = 0;
+const isHost = () => !rmCur || !rmHost || rmHost === netId;
 let lastShot = 0, invuln = 0, switchReady = 0, bearUntil = 0, overload = 0, shake = 0, walkT = 0, spawnTimer = 0;
 const skillReady = {};
 let ev = null, nextEvT = 150 + Math.random() * 100, dayT = 0.3, night = 0, weather = 'clear', weatherLeft = 200, rainPts = null, isNight = false;
@@ -397,7 +400,7 @@ function angleLerp(a, b, t) { const d = ((b - a + Math.PI) % (Math.PI * 2) + Mat
 const curAct = () => ACTS[state.act];
 const zoneLv = () => dg ? dg.lv + (dg.floor - 1) * 2 : state.endless ? 36 + Math.floor(state.stageKills / 25) : FOREST_LV[state.act] + state.stage - 1;
 const xpNeed = () => 6 + Math.round(state.level * 2.5);
-const quota = () => 8 + state.stage * 3 + state.act * 2;
+const quota = () => (8 + state.stage * 3 + state.act * 2) * rmN;
 
 function realmMult() {
   const er = curAct().realm, hr = hero.realm;
@@ -467,8 +470,8 @@ function refreshHud() {
   { const n = questsClaimable(); $('questbtn').textContent = '📜 MISSÕES' + (n ? ' ❗' + n : ''); }
   $('hgems').textContent = '💎' + state.gems; $('hgold').textContent = '🪙' + state.gold; $('hcash').textContent = '💵' + state.cash;
   const a = curAct();
-  $('stage').textContent = dg ? '🏰 MASMORRA — andar ' + dg.floor + '/5' + (dg.floor < 5 ? '  (' + dg.kills + '/' + dg.need + ')' : ' — CHEFE') : wb ? '🐉 CHEFE MUNDIAL — derrotem juntos!' : inHome ? '\u{1F3E0} ' + (homeVisit ? 'Visitando a casa de ' + homeVisit.name : inHome.name + ' \u2014 ' + ROOMS[inHome.kind].label) : inCity ? '🏰 Cidade de Aurora — fale com os moradores' : state.endless ? '♾ Aventura Infinita • abates ' + state.stageKills
-    : 'Ato ' + (state.act + 1) + ' (Nv.' + zoneLv() + ') • ' + a.name + ' — ' + (state.stage === 5 ? 'CHEFE' : 'Estágio ' + state.stage + '/5  (' + state.stageKills + '/' + quota() + ')');
+  $('stage').textContent = dg ? '🏰 MASMORRA — andar ' + dg.floor + '/5' + (dg.floor < 5 ? '  (' + dg.kills + '/' + dg.need + ')' : ' — CHEFE') : wb ? '🐉 CHEFE MUNDIAL — derrotem juntos!' : inHome ? '\u{1F3E0} ' + (homeVisit ? 'Visitando a casa de ' + homeVisit.name : inHome.name + ' \u2014 ' + ROOMS[inHome.kind].label) : inCity ? '🏰 Cidade de Aurora — fale com os moradores' : state.endless ? '♾ Aventura Infinita • abates ' + state.stageKills + (rmN > 1 ? '  👥 ' + rmN + ' jogadores (monstros ×' + rmN + ')' : '')
+    : 'Ato ' + (state.act + 1) + ' (Nv.' + zoneLv() + ') • ' + a.name + ' — ' + (state.stage === 5 ? 'CHEFE' : 'Estágio ' + state.stage + '/5  (' + Math.min(state.stageKills, quota()) + '/' + quota() + ')') + (rmN > 1 ? '  👥 ' + rmN + ' jogadores (monstros ×' + rmN + ')' : '');
 }
 
 function refreshTeam() {
@@ -543,7 +546,7 @@ function updateWorld(dt) {
   if (inCity || inHome || wb || dg) return;
   // eventos
   if (ev && T > ev.until) { ev.left = 0; ev = null; nextEvT = T + 200; toast('⌛ O evento terminou'); }
-  if (!ev && !wb && !dg && T > nextEvT && !(state.stage === 5 && !state.endless) && enemies.length < 10 && !isPaused()) startEvent();
+  if (!ev && !wb && !dg && isHost() && T > nextEvT && !(state.stage === 5 && !state.endless) && enemies.length < 10 && !isPaused()) startEvent();
   // baús
   const p = player.position, now = Date.now(), m = ensureMeta(state);
   chestMeshes.forEach(c => {
@@ -949,6 +952,83 @@ function explode(pos, radius, dmg, color, exclude) {
 // ===================== Inimigos / combate =====================
 function clearEnemies() { if (ev) { ev = null; nextEvT = T + 90; } eshots.forEach(s => { scene.remove(s.mesh); s.mesh.material.dispose(); }); eshots.length = 0; enemies.forEach(e => scene.remove(e.mesh)); enemies.length = 0; dying.forEach(d => scene.remove(d.mesh)); dying.length = 0; bossRef = null; $('bossbar').style.display = 'none'; }
 
+// ---- monstros compartilhados (sala = floresta + estagio) ----
+function roomAnchor() {
+  const c = [player.position];
+  if (rmCur) remotes.forEach(r => { if (r.rm === rmCur) c.push({ x: r.x, z: r.z }); });
+  return c[Math.floor(Math.random() * c.length)];
+}
+function pickTarget(pos) {
+  const p = player.position; let best = { x: p.x, z: p.z, id: null }, bd = dist2(pos, p);
+  if (rmCur && rmN > 1) remotes.forEach(r => { if (r.rm !== rmCur) return; const d = Math.hypot(r.x - pos.x, r.z - pos.z); if (d < bd) { bd = d; best = { x: r.x, z: r.z, id: r.id }; } });
+  return best;
+}
+const rl = (k, d, to) => { if (rmCur && net) net.send({ t: 'rl', k, d, to }); };
+function hurtRemote(e, id) {
+  e.hitR = e.hitR || {}; if (T < (e.hitR[id] || 0)) return;
+  e.hitR[id] = T + 0.8; rl('hurt', { d: Math.round(e.dmg) }, id);
+}
+function spawnProxy(r) {
+  const boss = !!(r[6] & 2), elite = !!(r[6] & 1), tk = boss ? 'warrior' : r[1], T0 = ETYPES[tk]; if (!T0) return null;
+  const realm = REALMS[curAct().realm], info = curAct().boss;
+  const tintBase = boss ? info.color : (T0.tint != null ? T0.tint : realm.enemy);
+  const tint = new THREE.Color(tintBase).lerp(new THREE.Color(0xffffff), boss ? 0.2 : (T0.tint != null ? 0.1 : 0.5)).getHex();
+  const mesh = makeSkeleton(T0.model, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run }) || makeEnemy(boss ? info.color : realm.enemy, boss);
+  mesh.position.set(r[2], 0, r[3]); scene.add(mesh);
+  const e = { nid: r[0], remote: true, mesh, hp: Math.max(1, r[4]), maxHp: r[5], speed: 0, boss, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? 1.4 : T0.r, t: Math.random() * 10, dmg: 0, stun: 0, slow: 0, flash: 0, ranged: null, res: boss ? null : T0.res || null, tx: r[2], tz: r[3], elite };
+  if (elite) {
+    e.radius *= 1.3; mesh.scale.multiplyScalar(1.35);
+    mesh.traverse(o => { if (o.isMesh && o.material) { if (o.material.emissive) o.material.emissive.setHex(0x664400); if (o.material.color) o.material.color.setHex(0xffd36b); } });
+  }
+  enemies.push(e);
+  if (boss) { bossRef = e; $('bossname').textContent = '👑 ' + (state.endless ? 'Eco do Apagador' : info.name); $('bossfill').style.width = '100%'; $('bossbar').style.display = 'block'; }
+  return e;
+}
+function applySnap(d) {
+  const seen = new Set();
+  (d.e || []).forEach(r => {
+    seen.add(r[0]);
+    let e = enemies.find(x => x.remote && x.nid === r[0]);
+    if (!e) e = spawnProxy(r); if (!e) return;
+    e.tx = r[2]; e.tz = r[3]; e.hp = Math.max(1, r[4]); e.maxHp = r[5];
+    if (e === bossRef) $('bossfill').style.width = Math.max(0, e.hp / e.maxHp * 100) + '%';
+  });
+  for (let i = enemies.length - 1; i >= 0; i--) { const e = enemies[i]; if (e.remote && !seen.has(e.nid)) { scene.remove(e.mesh); if (e === bossRef) { bossRef = null; $('bossbar').style.display = 'none'; } enemies.splice(i, 1); } }
+  if (d.sk > state.stageKills) { state.stageKills = d.sk; refreshHud(); if (!state.endless && state.stage < 5 && state.stageKills >= quota()) stageClear(); }
+}
+function applyKill(d) {
+  let e = enemies.find(x => x.remote && x.nid === d.n);
+  if (e) {
+    e.dead = true; const i = enemies.indexOf(e); if (i >= 0) enemies.splice(i, 1);
+    if (e.mesh.userData.glb) { playOnce(e.mesh, 'death'); dying.push({ mesh: e.mesh, until: T + 1.1 }); } else scene.remove(e.mesh);
+  } else { const T0 = ETYPES[d.k] || ETYPES.minion; e = { kind: d.b ? 'Skeleton_Warrior' : T0.loot, boss: !!d.b, elite: !!d.el, type: d.b ? 'boss' : d.k, mesh: { position: new THREE.Vector3(d.x, 0, d.z) } }; }
+  onKill(e);
+}
+function visShot(d) {
+  const m = new THREE.Mesh(bulletGeo, new THREE.MeshBasicMaterial({ color: d[5] }));
+  m.position.set(d[0], 1.2, d[1]); m.scale.setScalar(d[6] || 1.2);
+  const dir = new THREE.Vector3(d[2], 0, d[3]);
+  if (d[7]) { m.scale.set(0.35, 0.35, 2.2); m.rotation.y = Math.atan2(dir.x, dir.z); }
+  scene.add(m); eshots.push({ mesh: m, dir, speed: d[4], life: 2.2, dmg: 0, splash: 0, color: d[5], vis: true });
+}
+function onRelay(m) {
+  if (!rmCur) return; const d = m.d || {};
+  if (m.k === 'es' && !isHost() && m.from === rmHost) applySnap(d);
+  else if (m.k === 'ek' && !isHost() && m.from === rmHost) applyKill(d);
+  else if (m.k === 'ehit' && isHost()) { const e = enemies.find(x => !x.remote && x.nid === d.n); if (e) damageEnemy(e, Math.min(1e7, +d.d || 0), false, true); }
+  else if (m.k === 'hurt' && m.from === rmHost) hitPlayer({ dmg: Math.min(1e6, +d.d || 0) });
+  else if (m.k === 'esh' && !isHost() && m.from === rmHost) visShot(d);
+}
+const rmTxt = (rm) => { const mm = /^f(\d)s(\d)$/.exec(rm || ''); return rm === 'finf' ? '♾ Aventura Infinita' : mm ? '🌲 Ato ' + (+mm[1] + 1) + ' — ' + (+mm[2] === 5 ? 'CHEFE' : 'Estágio ' + mm[2] + '/5') : 'Na floresta'; };
+function joinRoom(rm) {
+  const mm = /^f(\d)s(\d)$/.exec(rm);
+  if (inHome || dg || wb) { toast('Saia daqui primeiro (casa, masmorra ou chefe mundial)'); return; }
+  if (rm === 'finf') { if (!state.storyDone) { toast('🔒 Aventura Infinita ainda não liberada'); return; } state.endless = true; }
+  else if (mm) { const a = +mm[1], s = +mm[2]; if (a > state.maxAct) { toast('🔒 Você ainda não chegou nesse ato'); return; } state.endless = false; state.act = a; state.stage = s; applyAct(); }
+  else return;
+  closePanel(); state.stageKills = 0; clearEnemies(); if (inCity) setCityMode(false); save(state); refreshHud(); toast('➡ Você foi ajudar: ' + rmTxt(rm));
+}
+
 // Tipos de inimigo. ranged: atira de longe e mantém distância. Cada um tem vida/dano/velocidade próprios.
 const ETYPES = {
   minion: { name: 'Esqueleto', model: 'Skeleton_Minion', loot: 'Skeleton_Minion', hp: 1, dmg: 1, spd: 1, size: 1.6, r: 0.7 },
@@ -969,8 +1049,8 @@ function pickEType() {
 }
 
 function spawnEnemy(boss, info, forceType) {
-  const a = Math.random() * Math.PI * 2, d = boss ? 16 : 20;
-  const x = THREE.MathUtils.clamp(player.position.x + Math.cos(a) * d, -WORLD, WORLD), z = THREE.MathUtils.clamp(player.position.z + Math.sin(a) * d, -WORLD, WORLD);
+  const a = Math.random() * Math.PI * 2, d = boss ? 16 : 20, anc = roomAnchor();
+  const x = THREE.MathUtils.clamp(anc.x + Math.cos(a) * d, -WORLD, WORLD), z = THREE.MathUtils.clamp(anc.z + Math.sin(a) * d, -WORLD, WORLD);
   const realm = REALMS[curAct().realm];
   const tk = boss ? 'warrior' : (forceType || pickEType()), T0 = ETYPES[tk];
   const tintBase = boss ? info.color : (T0.tint != null ? T0.tint : realm.enemy);
@@ -980,11 +1060,11 @@ function spawnEnemy(boss, info, forceType) {
   mesh.position.set(x, 0, z); scene.add(mesh);
   const lv = zoneLv();
   // o mundo acompanha o jogador: passar do nível da zona deixa os bichos mais fortes
-  const over = Math.max(0, state.level - lv), catchup = 1 + over * 0.07, catchD = 1 + over * 0.035;
-  const base = (18 + lv * 7) * (1 + state.act * 0.3) * 1.6 * catchup;
-  const hpv = boss ? base * 14 * (state.endless ? 1.5 : 1) * 1.3 : base * T0.hp;
-  const dmgBase = ((6 + lv * 0.8) * (1 + state.act * 0.12)) * 1.35 * catchD;
-  const e = { mesh, hp: hpv, maxHp: hpv, speed: boss ? 1.5 : (1.9 + Math.random() * 1.0) * T0.spd, boss: !!boss, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? 1.4 : T0.r, t: Math.random() * 10, dmg: dmgBase * (boss ? 1.6 : T0.dmg), stun: 0, slow: 0, flash: 0, ranged: boss ? null : T0.ranged || null, res: boss ? null : T0.res || null, shotAt: T + 1 + Math.random() * 2 };
+  const over = Math.max(0, state.level - lv), catchup = 1 + over * 0.1, catchD = 1 + over * 0.05;
+  const base = (18 + lv * 7) * (1 + state.act * 0.3) * 2.4 * catchup;
+  const hpv = boss ? base * 14 * (state.endless ? 1.5 : 1) * 1.3 * rmN : base * T0.hp;
+  const dmgBase = ((6 + lv * 0.8) * (1 + state.act * 0.12)) * 1.6 * catchD;
+  const e = { nid: ++nidSeq, mesh, hp: hpv, maxHp: hpv, speed: boss ? 1.5 : (1.9 + Math.random() * 1.0) * T0.spd, boss: !!boss, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? 1.4 : T0.r, t: Math.random() * 10, dmg: dmgBase * (boss ? 1.6 : T0.dmg), stun: 0, slow: 0, flash: 0, ranged: boss ? null : T0.ranged || null, res: boss ? null : T0.res || null, shotAt: T + 1 + Math.random() * 2 };
   if (dg) { e.hp = e.maxHp = e.hp * 1.35; e.dmg *= 1.3; }
   if (!boss && !forceType && Math.random() < 0.04 + state.act * 0.01 + (night > 0.55 ? 0.03 : 0) + (dg ? 0.12 : 0)) {
     e.elite = true; e.hp = e.maxHp = e.hp * 4; e.dmg *= 1.4; e.radius *= 1.3; mesh.scale.multiplyScalar(1.35);
@@ -1009,32 +1089,40 @@ function enemyShoot(e, p) {
   scene.add(m);
   eshots.push({ mesh: m, dir, speed: r.speed, life: 2.2, dmg: e.dmg, splash: r.splash || 0, color: r.color });
   if (e.mesh.userData.glb) playOnce(e.mesh, 'atk', 0.6);
+  if (rmCur && rmN > 1 && isHost()) rl('esh', [+from.x.toFixed(1), +from.z.toFixed(1), +dir.x.toFixed(2), +dir.z.toFixed(2), r.speed, r.color, r.size || 1.2, r.arrow ? 1 : 0]);
 }
 
-function spawnBoss() { const b = curAct().boss; spawnEnemy(true, { name: state.endless ? 'Eco do Apagador' : b.name, color: b.color }); }
+function spawnBoss() {
+  if (!isHost()) return; const b = curAct().boss; spawnEnemy(true, { name: state.endless ? 'Eco do Apagador' : b.name, color: b.color }); }
 
 function autoSpawn() {
   if (inCity || wb) return;
+  if (!isHost()) return;
+  for (let i = 0; i < rmN; i++) autoSpawn1();
+}
+function autoSpawn1() {
   if (dg) { if (dg.floor === 5) { if (enemies.length < 7) spawnEnemy(false); } else if (enemies.length < Math.min(14, dg.need - dg.kills + 2)) spawnEnemy(false); return; }
   const bossStage = state.stage === 5 && !state.endless;
-  if (bossStage) { if (enemies.length < 8) spawnEnemy(false); return; }
-  const cap = state.endless ? 25 : Math.min(25, quota() - state.stageKills + 2);
+  if (bossStage) { if (enemies.length < 8 * rmN) spawnEnemy(false); return; }
+  const cap = Math.min(60, state.endless ? 25 * rmN : Math.min(25 * rmN, quota() - state.stageKills + 2));
   if (enemies.length < cap) spawnEnemy(false);
 }
 
-function damageEnemy(e, dmg, crit) {
+function damageEnemy(e, dmg, crit, fromNet) {
   if (e.dead) return;
-  if (e.res) { const k = ['mage', 'sorcerer', 'druid'].includes(hero.cls) ? e.res.m : e.res.p; if (k !== 1) { dmg = Math.max(1, Math.round(dmg * k)); if (Math.random() < 0.25) ftAt(e.mesh.position, k > 1 ? 'FRACO!' : 'RESISTE', k > 1 ? '#7CFC00' : '#9aa5b1', 2.3); } }
+  if (e.res && !fromNet) { const k = ['mage', 'sorcerer', 'druid'].includes(hero.cls) ? e.res.m : e.res.p; if (k !== 1) { dmg = Math.max(1, Math.round(dmg * k)); if (Math.random() < 0.25) ftAt(e.mesh.position, k > 1 ? 'FRACO!' : 'RESISTE', k > 1 ? '#7CFC00' : '#9aa5b1', 2.3); } }
   const cc = Math.min(0.8, sk('crit') * 0.08 + statSum('crit') + petPerk('crit'));
-  if (!crit && cc > 0 && Math.random() < cc) { dmg = Math.round(dmg * (1.8 + sk('deadly') * 0.2)); crit = true; }
+  if (!fromNet && !crit && cc > 0 && Math.random() < cc) { dmg = Math.round(dmg * (1.8 + sk('deadly') * 0.2)); crit = true; }
   e.hp -= dmg; ftAt(e.mesh.position, (crit ? '💥' : '') + dmg, crit ? '#ff9f1c' : '#ffd166', 1.6 * (e.boss ? 2 : 1));
   e.flash = 0.08;
+  if (e.remote) { rl('ehit', { n: e.nid, d: dmg }, rmHost); if (e.hp <= 0) e.hp = 1; if (e === bossRef) $('bossfill').style.width = Math.max(0, e.hp / e.maxHp * 100) + '%'; return; }
   if (e.wb && wb) wb.pending += dmg;
   if (e === bossRef && !e.wb) $('bossfill').style.width = Math.max(0, e.hp / e.maxHp * 100) + '%';
   if (e.hp > 0) return;
   e.dead = true;
   if (e.mesh.userData.glb) { playOnce(e.mesh, 'death'); dying.push({ mesh: e.mesh, until: T + 1.1 }); } else scene.remove(e.mesh);
   const i = enemies.indexOf(e); if (i >= 0) enemies.splice(i, 1);
+  if (rmCur && rmN > 1 && isHost()) rl('ek', { n: e.nid, k: e.type, b: e.boss ? 1 : 0, el: e.elite ? 1 : 0, x: +e.mesh.position.x.toFixed(1), z: +e.mesh.position.z.toFixed(1) });
   onKill(e);
 }
 
@@ -1891,7 +1979,7 @@ function addRemote(p) {
   let mesh; try { mesh = makeHero(buildPlayerHero(Object.assign({}, PREMADE[0], p.look || {}, { name: p.name }))); } catch (e) { mesh = makeHero(buildPlayerHero(PREMADE[0])); }
   const tag = nameTag(p.name || '?'); tag.position.set(0, 3.1, 0); mesh.add(tag);
   mesh.position.set(p.x || 0, 0, p.z || 0); remoteGroup.add(mesh);
-  remotes.set(p.id, { id: p.id, name: p.name, mesh, x: p.x || 0, z: p.z || 0, f: p.f || 0, mv: 0, w: p.w || 'other' });
+  remotes.set(p.id, { id: p.id, name: p.name, mesh, x: p.x || 0, z: p.z || 0, f: p.f || 0, mv: 0, w: p.w || 'other', rm: p.rm || '' });
   refreshNet();
 }
 function dropRemote(id) { const r = remotes.get(id); if (!r) return; remoteGroup.remove(r.mesh); remotes.delete(id); refreshNet(); }
@@ -1920,7 +2008,9 @@ function netEvent(m) {
   else if (m.t === 'join') addRemote(m.p);
   else if (m.t === 'leave') dropRemote(m.id);
   else if (m.t === 'furn') { if (homeVisit && homeRoom && inHome.id === m.plot) { homeRoom.items.forEach(x => homeRoom.group.remove(x)); homeRoom.items.length = 0; (m.furn || []).forEach(f => addFurn(f)); } }
-  else if (m.t === 'move') { const r = remotes.get(m.id); if (r) { r.x = m.x; r.z = m.z; r.f = m.f; r.mv = m.mv; r.w = m.w; } }
+  else if (m.t === 'move') { const r = remotes.get(m.id); if (r) { r.x = m.x; r.z = m.z; r.f = m.f; r.mv = m.mv; r.w = m.w; r.rm = m.rm || ''; } }
+  else if (m.t === 'host') { if (m.rm === rmCur) { const was = isHost(); rmHost = m.host; rmN = m.n || 1; if (was !== isHost()) { clearEnemies(); if (isHost() && !state.endless && state.stage === 5) spawnBoss(); } refreshHud(); } }
+  else if (m.t === 'rl') onRelay(m);
   else if (m.t === 'chat') { if (String(m.text).startsWith('§e')) { const r = remotes.get(m.id), em = EMOTES[+String(m.text).slice(2)]; if (r && em && r.mesh.visible) ftAt(r.mesh.position, em, '#fff', 3.2); } else chatLine(m.name, m.text, false); }
 }
 function startNet() {
@@ -1933,6 +2023,8 @@ const curW = () => inHome ? 'home:' + inHome.id : inCity ? 'city' : dg ? 'field:
 const whereTxt = (w) => w === 'city' ? 'Na cidade de Aurora' : w === 'field:wb' ? 'Lutando contra o Chefe Mundial' : w === 'field:dg' ? 'Em uma masmorra' : w.startsWith('home:') ? 'Dentro de uma casa' : w === 'field:inf' ? 'Na Aventura Infinita' : w.startsWith('field:') ? 'Na floresta do Ato ' + (+w.slice(6) + 1) + (w === curW() ? ' (com você!)' : '') : 'Em outra área';
 function updateNet(dt) {
   const w = curW();
+  const rkey = (!net || !net.connected || inCity || inHome || dg || wb) ? null : 'f' + (state.endless ? 'inf' : state.act + 's' + state.stage);
+  if (rkey !== rmCur) { rmCur = rkey; rmHost = null; rmN = 1; if (enemies.some(e => e.remote)) clearEnemies(); refreshHud(); }
   remoteGroup.visible = true;
   remotes.forEach(r => {
     const k = Math.min(1, dt * 9), m = r.mesh;
@@ -1944,18 +2036,25 @@ function updateNet(dt) {
     if (m.visible) animateHero(m, dt, { moving: !!r.mv });
   });
   if (!net || !net.connected) return;
+  if (rmCur && rmN > 1 && isHost()) {
+    snapAt += dt;
+    if (snapAt > 0.15) { snapAt = 0; rl('es', { sk: state.stageKills, e: enemies.filter(x => !x.remote).slice(0, 70).map(x => [x.nid, x.type, +x.mesh.position.x.toFixed(1), +x.mesh.position.z.toFixed(1), Math.max(1, Math.round(x.hp)), Math.round(x.maxHp), (x.elite ? 1 : 0) | (x.boss ? 2 : 0)]) }); }
+  }
   netAt += dt;
-  const p = player.position, moved = Math.hypot(p.x - netLast.x, p.z - netLast.z) > 0.05 || Math.abs(facing - netLast.f) > 0.1 || w !== netLast.w;
+  const p = player.position, moved = Math.hypot(p.x - netLast.x, p.z - netLast.z) > 0.05 || Math.abs(facing - netLast.f) > 0.1 || w !== netLast.w || (rmCur || '') !== (netLast.rm || '');
   if ((moved && netAt > 0.1) || netAt > 3) {
     netAt = 0; const mv = Math.hypot(p.x - netLast.x, p.z - netLast.z) > 0.05 ? 1 : 0;
-    netLast = { x: p.x, z: p.z, f: facing, mv, w }; net.send({ t: 'move', x: +p.x.toFixed(2), z: +p.z.toFixed(2), f: +facing.toFixed(2), mv, w });
+    netLast = { x: p.x, z: p.z, f: facing, mv, w, rm: rmCur || '' }; net.send({ t: 'move', x: +p.x.toFixed(2), z: +p.z.toFixed(2), f: +facing.toFixed(2), mv, w, rm: rmCur || '' });
   }
 }
 function openOnline() {
   if (isPaused()) return;
   const rows = [{ head: true, text: net && net.connected ? '🟢 Conectado — ' + (remotes.size + 1) + ' jogador(es) online' : '🔴 Sem conexão com o servidor. Tentando reconectar…' }];
   rows.push({ text: '🧍 ' + meName() + ' (você)\n' + (inHome ? 'Em casa' : inCity ? 'Na cidade' : 'Nas florestas') });
-  remotes.forEach(r => rows.push({ text: '🧍 ' + r.name + '\n' + (whereTxt(r.w)) }));
+  remotes.forEach(r => {
+    const inField = r.rm && r.w.startsWith('field:');
+    rows.push({ text: '🧍 ' + r.name + '\n' + (inField ? rmTxt(r.rm) + (r.rm === rmCur ? ' (com você! monstros ×' + rmN + ')' : '') : whereTxt(r.w)), btn: inField && r.rm !== rmCur ? '➡ AJUDAR' : undefined, fn: inField && r.rm !== rmCur ? () => joinRoom(r.rm) : undefined });
+  });
   if (!remotes.size) rows.push({ text: 'Ninguém mais por aqui agora. Chame um amigo para abrir o link! Na cidade 🏰 vocês aparecem juntos.' });
   rows.push({ text: '👋 Fechar', btn: 'FECHAR', fn: closePanel });
   openPanel('🌐 ONLINE', rows);
@@ -2035,14 +2134,23 @@ function update(dt) {
 
   // inimigos
   enemies.forEach(e => {
+    if (e.remote) {   // monstro compartilhado: so acompanha o anfitriao
+      const ep = e.mesh.position, ddx = e.tx - ep.x, ddz = e.tz - ep.z, k = Math.min(1, dt * 10), mvd = Math.hypot(ddx, ddz);
+      if (mvd > 12) { ep.x = e.tx; ep.z = e.tz; } else { ep.x += ddx * k; ep.z += ddz * k; }
+      const gR = walkY(ep.x, ep.z); e.t += dt * 6; ep.y = e.mesh.userData.glb ? gR : gR + Math.abs(Math.sin(e.t)) * 0.25;
+      e.mesh.rotation.y = mvd > 0.05 ? Math.atan2(ddx, ddz) : Math.atan2(p.x - ep.x, p.z - ep.z);
+      if (e.mesh.userData.glb) animateHero(e.mesh, dt, { moving: mvd > 0.15, spd: 1 });
+      if (e.flash > 0) { e.flash -= dt; const on = e.flash > 0; e.mesh.traverse(o => { if (o.isMesh && o.material.emissive) o.material.emissive.setHex(on ? 0xffffff : (e.elite ? 0x664400 : 0x000000)); }); }
+      return;
+    }
     e.stun = Math.max(0, e.stun - dt); e.slow = Math.max(0, e.slow - dt);
     const gE = walkY(e.mesh.position.x, e.mesh.position.z), sm = (e.stun > 0 ? 0 : (e.slow > 0 ? 0.4 : 1)) * (gE < -0.35 ? 0.7 : 1);
-    const ep = e.mesh.position, vx = p.x - ep.x, vz = p.z - ep.z, d = Math.hypot(vx, vz) || 1;
+    const ep = e.mesh.position, tg = pickTarget(ep), vx = tg.x - ep.x, vz = tg.z - ep.z, d = Math.hypot(vx, vz) || 1;
     let mv = 1;
     if (e.ranged) {
       // atiradores: aproximam até o alcance, recuam se você chega perto, e atiram
       if (d > e.ranged.range) mv = 1; else if (d < e.ranged.keep) mv = -0.8; else mv = 0;
-      if (sm > 0 && d < e.ranged.range + 2 && T > e.shotAt) { e.shotAt = T + e.ranged.cd * (0.85 + Math.random() * 0.3); enemyShoot(e, p); }
+      if (sm > 0 && d < e.ranged.range + 2 && T > e.shotAt) { e.shotAt = T + e.ranged.cd * (0.85 + Math.random() * 0.3); enemyShoot(e, tg); }
     }
     ep.x = THREE.MathUtils.clamp(ep.x + vx / d * e.speed * sm * mv * dt, -WORLD, WORLD); ep.z = THREE.MathUtils.clamp(ep.z + vz / d * e.speed * sm * mv * dt, -WORLD, WORLD);
     e.t += dt * 6;
@@ -2050,7 +2158,7 @@ function update(dt) {
     else ep.y = gE + Math.abs(Math.sin(e.t)) * 0.25;
     e.mesh.rotation.y = Math.atan2(vx, vz);
     if (e.flash > 0) { e.flash -= dt; const on = e.flash > 0; e.mesh.traverse(o => { if (o.isMesh && o.material.emissive) o.material.emissive.setHex(on ? 0xffffff : (e.elite ? 0x664400 : 0x000000)); }); }
-    if (!e.ranged && d < e.radius + 0.5) { hitPlayer(e); if (e.mesh.userData.glb && T > (e.atkAt || 0)) { e.atkAt = T + 1.0; playOnce(e.mesh, 'atk', 0.6); } }
+    if (!e.ranged && d < e.radius + 0.5) { if (tg.id) hurtRemote(e, tg.id); else hitPlayer(e); if (e.mesh.userData.glb && T > (e.atkAt || 0)) { e.atkAt = T + 1.0; playOnce(e.mesh, 'atk', 0.6); } }
   });
   for (let i = dying.length - 1; i >= 0; i--) { const dd = dying[i]; animateHero(dd.mesh, dt, {}); if (T >= dd.until) { scene.remove(dd.mesh); dying.splice(i, 1); } }
 
@@ -2084,9 +2192,11 @@ function update(dt) {
   for (let i = eshots.length - 1; i >= 0; i--) {
     const b = eshots[i]; if (!b) continue;   // (clearEnemies pode esvaziar a lista se o tiro matar o jogador)
     b.mesh.position.addScaledVector(b.dir, b.speed * dt); b.life -= dt;
-    const hit = Math.hypot(b.mesh.position.x - p.x, b.mesh.position.z - p.z) < 0.8;
+    const hit = !b.vis && Math.hypot(b.mesh.position.x - p.x, b.mesh.position.z - p.z) < 0.8;
     if (hit) { hitPlayer({ dmg: b.dmg }); if (b.splash) ringFx(b.mesh.position, b.color, b.splash, 0.35); }
-    if (hit || b.life <= 0) { scene.remove(b.mesh); b.mesh.material.dispose(); eshots.splice(i, 1); }
+    let hitR = false;
+    if (!b.vis && !hit && rmCur && rmN > 1) remotes.forEach(r => { if (!hitR && r.rm === rmCur && Math.hypot(b.mesh.position.x - r.x, b.mesh.position.z - r.z) < 0.9) { hitR = true; rl('hurt', { d: Math.round(b.dmg) }, r.id); if (b.splash) ringFx(b.mesh.position, b.color, b.splash, 0.35); } });
+    if (hit || hitR || b.life <= 0) { scene.remove(b.mesh); b.mesh.material.dispose(); eshots.splice(i, 1); }
   }
 
   // projéteis
@@ -2157,7 +2267,7 @@ if (qs.has('levelup')) state.skillPts = 1;
 if (qs.has('city')) setCityMode(true);
 if (qs.has('night')) dayT = +qs.get('night') || 0;
 if (qs.has('quests')) setTimeout(() => openQuests(), 1500);
-if (qs.has('dbg')) window.__g = { social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; } };
+if (qs.has('dbg')) window.__g = { social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
 if (qs.get('pos')) { const iv = setInterval(() => { if (!gameStarted) return; clearInterval(iv); setTimeout(() => { const [px, pz] = qs.get('pos').split(',').map(Number); if (inCity) setCityMode(false); player.position.set(px || 0, 0, pz || 0); playerGy = walkY(px || 0, pz || 0); }, 600); }, 300); }
 if (qs.has('zoom')) { setZoom(+qs.get('zoom')); zoom = zoomT; }
 if (qs.has('eq')) { setTimeout(() => openInv('eq'), 300); }
