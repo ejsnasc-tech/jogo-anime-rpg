@@ -63,6 +63,7 @@ export function openCreator(opts) {
   }
 
   // ---- estado ----
+  const lockCls = opts.lockClass || null;   // depois de criado, o personagem não troca de classe
   let account = opts.account || '';
   let c = opts.initial ? Object.assign({}, opts.initial) : randomLook('');
   let pre = 0;
@@ -110,13 +111,14 @@ export function openCreator(opts) {
   }
 
   let tab = 'class', tabBox = null;
-  const TABS = [['class', '⚔️ Classe'], ['skin', '🧑 Pele'], ['hair', '💇 Cabelo'], ['outfit', '👕 Cores'], ['origin', '🌍 Origem']];
+  const TABS = [['class', lockCls ? '🧙 Visual' : '⚔️ Classe'], ['skin', '🧑 Pele'], ['hair', '💇 Cabelo'], ['outfit', '👕 Cores'], ['origin', '🌍 Origem']];
 
   function refreshTab() {
     showHero(c);
     tabBox.innerHTML = '';
     if (tab === 'class') {
-      tabBox.appendChild(chips(CLASS_LIST.map(k => [k, CLASSES[k].icon + ' ' + CLASSES[k].name]), c.cls, (v) => { c.cls = v; }));
+      if (lockCls) tabBox.appendChild(el('div', 'desc', '🔒 A classe é escolhida uma vez só. Para jogar com outra classe, crie um personagem novo.'));
+      else tabBox.appendChild(chips(CLASS_LIST.map(k => [k, CLASSES[k].icon + ' ' + CLASSES[k].name]), c.cls, (v) => { c.cls = v; }));
       const models = CLASS_MODELS[c.cls];
       if (models.length > 1) { tabBox.appendChild(el('div', 'lbl', 'Aparência')); tabBox.appendChild(chips(models, c.model, (v) => { c.model = v; })); }
       tabBox.appendChild(el('div', 'lbl', 'Elmo / chapéu')); tabBox.appendChild(chips([[true, 'Com'], [false, 'Sem']], c.hat !== false, (v) => { c.hat = v; }));
@@ -142,8 +144,8 @@ export function openCreator(opts) {
     TABS.forEach(([k, lab]) => { const b = el('button', 'tab' + (k === tab ? ' sel' : ''), lab); b.onclick = () => { tab = k; viewCustom(); }; tabs.appendChild(b); });
     tabBox = el('div', 'tabbox');
     const foot = el('div', 'foot');
-    const back = el('button', 'sec', '◀ Voltar'); back.onclick = viewMode;
-    const rnd = el('button', 'sec', '🎲'); rnd.onclick = () => { c = Object.assign(randomLook(c.name), { name: c.name }); viewCustom(); };
+    const back = el('button', 'sec', lockCls ? '✖ Cancelar' : '◀ Voltar'); back.onclick = lockCls ? () => { close(); opts.onDone(null); } : viewMode;
+    const rnd = el('button', 'sec', '🎲'); rnd.onclick = () => { c = Object.assign(randomLook(c.name), { name: c.name }); if (lockCls) c.cls = lockCls; viewCustom(); };
     const ok = el('button', 'big', 'Confirmar'); ok.onclick = () => { if (!c.name) c.name = account; finish(c); };
     foot.append(back, rnd, ok);
     body.append(nm, tabs, tabBox, foot);
@@ -172,6 +174,6 @@ export function openCreator(opts) {
   const qp = new URLSearchParams(location.search), cview = qp.get('cview');   // atalhos de teste
   if (qp.get('ctab')) tab = qp.get('ctab');
   if (qp.get('cpre')) pre = Number(qp.get('cpre')) % PREMADE.length;
-  if (!account) viewAccount(); else if (cview === 'custom') viewCustom(); else if (cview === 'premade') viewPremade(); else viewMode();
+  if (lockCls) viewCustom(); else if (!account) viewAccount(); else if (cview === 'custom') viewCustom(); else if (cview === 'premade') viewPremade(); else viewMode();
   return { close };
 }

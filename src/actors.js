@@ -11,6 +11,7 @@ const FILES = {
   Knight: 'models/chars/Knight.glb', Barbarian: 'models/chars/Barbarian.glb', Mage: 'models/chars/Mage.glb',
   Rogue: 'models/chars/Rogue.glb', Rogue_Hooded: 'models/chars/Rogue_Hooded.glb',
   Skeleton_Minion: 'models/enemies/Skeleton_Minion.glb', Skeleton_Warrior: 'models/enemies/Skeleton_Warrior.glb',
+  Skeleton_Mage: 'models/enemies/Skeleton_Mage.glb', Skeleton_Rogue: 'models/enemies/Skeleton_Rogue.glb',
 };
 const loaded = {};
 const HERO_HEIGHT = 2.1;
@@ -128,13 +129,14 @@ export function makeHero(def) {
 }
 
 // ---- inimigos (esqueletos) ----
-export function makeSkeleton(kind, tint, boss) {
+export function makeSkeleton(kind, tint, boss, o) {
+  o = o || {};
   const L = loaded[kind]; if (!L) return null;
   const root = skClone(L.scene), g = new THREE.Group(); g.add(root);
-  root.scale.setScalar((boss ? 4.2 : kind === 'Skeleton_Warrior' ? 1.9 : 1.6) / L.height);
+  root.scale.setScalar((boss ? 4.2 : (o.size || (kind === 'Skeleton_Warrior' ? 1.9 : 1.6))) / L.height);
   const mat = L.mat.clone(); if (tint != null) mat.color.setHex(tint);
   root.traverse(o => { if (o.isMesh) { o.material = mat; o.castShadow = true; o.frustumCulled = false; } });
-  g.userData = newUserData(L.clips, { idle: 'Idle_Combat', run: 'Walking_A', atk: '1H_Melee_Attack_Chop', ult: 'Idle' }, { enemy: true });
+  g.userData = newUserData(L.clips, { idle: 'Idle_Combat', run: o.run || 'Walking_A', atk: o.atk || '1H_Melee_Attack_Chop', ult: 'Idle' }, { enemy: true });
   g.userData.mixer = new THREE.AnimationMixer(root);
   setLoco(g.userData, 'run', 1);
   if (g.userData.curAction) g.userData.curAction.time = Math.random() * 1.0;

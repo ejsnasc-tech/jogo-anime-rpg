@@ -76,13 +76,17 @@ export function migrateItems(s) {
 function rollRarity(boss) {
   const r = Math.random() * 100;
   if (boss) return r < 10 ? 3 : r < 50 ? 2 : 1;
-  return r < 1 ? 3 : r < 8 ? 2 : r < 30 ? 1 : 0;
+  return r < 2 ? 3 : r < 12 ? 2 : r < 38 ? 1 : 0;
 }
 
 // Cada tipo de inimigo tem sua tabela de drops: chance de equipamento e quantidade de material.
 export const LOOT = {
-  Skeleton_Minion: { name: 'Esqueleto', item: 0.07, mat: 0.30, matN: 1 },
-  Skeleton_Warrior: { name: 'Esqueleto Guerreiro', item: 0.16, mat: 0.55, matN: 2 },
+  Skeleton_Minion: { name: 'Esqueleto', item: 0.10, mat: 0.30, matN: 1 },
+  Skeleton_Warrior: { name: 'Esqueleto Guerreiro', item: 0.20, mat: 0.55, matN: 2 },
+  Skeleton_Rogue: { name: 'Arqueiro Esquelético', item: 0.18, mat: 0.45, matN: 2 },
+  Skeleton_Mage: { name: 'Mago Esquelético', item: 0.22, mat: 0.55, matN: 2 },
+  brute: { name: 'Bruto', item: 0.35, mat: 0.8, matN: 3 },
+  runner: { name: 'Corredor', item: 0.12, mat: 0.35, matN: 1 },
   boss: { name: 'Chefe', item: 1, mat: 1, matN: 6 },
 };
 
