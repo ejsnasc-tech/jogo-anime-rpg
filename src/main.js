@@ -8,6 +8,7 @@ import { SLOTS, SLOT_ORDER, EQUIP_KEYS, KINDS, WEAPON_KIND, OFF_KIND, RAR, MATS,
 import { itemArt, ghostArt } from './itemart.js';
 import { buildCity, CITY_R, CITY_SPAWN, PLOTS } from './city.js';
 import { createNet, nameTag, NET_URL } from './net.js';
+import { openAuth, api, getSess, setSess } from './auth.js';
 import { ROOMS, FURN, furnByKey, makeFurniture, footprint, buildRoom } from './home.js';
 
 const WORLD = 200;          // metade do tamanho do mapa
@@ -15,6 +16,10 @@ const PLAYER_SPEED = 7;
 const MAX_TEAM = 3;
 
 const testing = new URLSearchParams(location.search).has('selftest');
+const _q0 = new URLSearchParams(location.search);
+const LOCAL = testing || _q0.has('local') || _q0.get('net') === '0' || _q0.has('nocreator');   // modo de teste/offline: sem conta
+const sess = LOCAL ? null : getSess();
+const needAuth = !LOCAL && !(sess && sess.cid);
 const $ = (id) => document.getElementById(id);
 
 // ===================== Save =====================
@@ -33,6 +38,7 @@ function load() {
   let s = defaults();
   try { Object.assign(s, JSON.parse(localStorage.getItem('acrpg') || '{}')); } catch (e) { s = defaults(); }
   if (s.custom) upsertPlayer(s.custom);
+  if (sess && sess.cid) { s.pid = sess.pid; if (sess.name) s.account = sess.name; }
   if (s.maxAct < s.act) s.maxAct = s.act;
   migrateItems(s);
   if (!s.pid) s.pid = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)).replace(/-/g, '');
@@ -42,10 +48,25 @@ function load() {
   s.owned = s.owned.filter(id => ids.includes(id)); if (!s.owned.length) s.owned = ['kaito'];
   s.team = s.team.filter(id => s.owned.includes(id)).slice(0, MAX_TEAM); if (!s.team.length) s.team = [s.owned[0]];
   if (!s.pets.length) s.pets = ['fox'];
+  if (s.custom) { if (!s.owned.includes('player')) s.owned.push('player'); if (!s.owned.includes('kaito')) s.owned.push('kaito'); s.team = ['player'].concat(s.team.filter(id => id !== 'player' && s.owned.includes(id))).slice(0, MAX_TEAM); if (s.team.length < 2) s.team.push('kaito'); }
   return s;
 }
-const save = (s) => { if (testing) return; s.lastSeen = Date.now(); try { localStorage.setItem('acrpg', JSON.stringify(s)); } catch (e) {} };
+let cloudDirty = false, cloudBusy = false;
+const save = (s) => { if (testing) return; s.lastSeen = Date.now(); try { localStorage.setItem('acrpg', JSON.stringify(s)); } catch (e) {} cloudDirty = true; };
 const state = load();
+// save na nuvem (por personagem): a cada 12 s se houve mudança, e ao sair da página
+async function cloudPush(force) {
+  if (!sess || !sess.cid || !state.custom || cloudBusy || !(cloudDirty || force)) return;
+  cloudBusy = true; cloudDirty = false;
+  try { await api('char/put', { token: sess.token, id: sess.cid, name: state.custom.name, cls: state.custom.cls, level: state.level, save: JSON.stringify(state) }); }
+  catch (e) { cloudDirty = true; if (e.status === 401) { setSess(null); location.reload(); } }
+  finally { cloudBusy = false; }
+}
+if (sess && sess.cid) {
+  setInterval(() => cloudPush(), 12000);
+  addEventListener('pagehide', () => cloudPush(true));
+  document.addEventListener('visibilitychange', () => { if (document.hidden) cloudPush(true); });
+}
 
 // ===================== Cena 3D =====================
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -414,12 +435,52 @@ function refreshHud() {
 function refreshTeam() {
   const box = $('team'); box.innerHTML = '';
   state.team.forEach((id, i) => {
-    const h = HEROES.find(x => x.id === id), b = document.createElement('button');
-    b.className = 'tbtn' + (i === activeIdx ? ' on' : '');
+    const h = HEROES.find(x => x.id === id); if (!h) return; const b = document.createElement('div');
+    b.className = 'tbtn' + (i === activeIdx ? ' on' : ''); b.style.cursor = 'default'; b.style.pointerEvents = 'none';
+    if (i !== activeIdx) { b.style.width = b.style.height = '48px'; b.style.opacity = '0.85'; }
     b.style.borderColor = '#' + h.color.toString(16).padStart(6, '0');
-    b.innerHTML = CLASSES[h.cls].icon + '<small>' + h.name.split(' ')[0] + '</small>';
-    b.onpointerdown = (e) => { e.stopPropagation(); switchHero(i); };
+    b.innerHTML = CLASSES[h.cls].icon + '<small>' + (i === activeIdx ? 'VOCÊ' : h.name.split(' ')[0]) + '</small>';
     box.appendChild(b);
+  });
+  syncAllies();
+}
+
+// ---- aliados: os outros heróis da equipe lutam sozinhos ao seu lado (você controla só o seu personagem) ----
+const allies = [];
+function syncAllies() {
+  allies.forEach(a => scene.remove(a.mesh)); allies.length = 0;
+  if (!player) return;
+  state.team.forEach((id, i) => {
+    if (i === activeIdx) return;
+    const h = HEROES.find(x => x.id === id); if (!h) return;
+    const mesh = makeHero(h); mesh.position.copy(player.position).add(new THREE.Vector3(i % 2 ? 2 : -2, 0, 1.6)); scene.add(mesh);
+    allies.push({ h, mesh, next: 0, melee: ['warrior', 'paladin', 'assassin'].includes(h.cls) });
+  });
+}
+function updateAllies(dt) {
+  const p = player.position;
+  allies.forEach((a, i) => {
+    const m = a.mesh, mp = m.position; m.visible = !inHome;
+    let foe = null, bd = 12; if (!inCity) enemies.forEach(e => { const d = dist2(e.mesh.position, mp); if (d < bd) { bd = d; foe = e; } });
+    let gx = p.x + (i % 2 ? 2.2 : -2.2), gz = p.z + 1.8, hold = 0.9;
+    if (foe && a.melee) { gx = foe.mesh.position.x; gz = foe.mesh.position.z; hold = 1.5; }
+    else if (foe) hold = 5;
+    const vx = gx - mp.x, vz = gz - mp.z, d = Math.hypot(vx, vz);
+    if (d > 16 && !foe) { mp.x = gx; mp.z = gz; }
+    const moving = d > hold;
+    if (moving) { const sp = Math.min(d, 7.5 * dt); mp.x += vx / d * sp; mp.z += vz / d * sp; }
+    mp.y = inCity ? 0 : walkY(mp.x, mp.z);
+    if (foe) m.rotation.y = angleLerp(m.rotation.y, Math.atan2(foe.mesh.position.x - mp.x, foe.mesh.position.z - mp.z), Math.min(1, dt * 12));
+    else if (moving) m.rotation.y = angleLerp(m.rotation.y, Math.atan2(vx, vz), Math.min(1, dt * 10));
+    animateHero(m, dt, { moving });
+    const range = a.melee ? 2.6 : 9;
+    if (foe && bd < range && T > a.next) {
+      a.next = T + Math.max(0.5, a.h.rate / 1000);
+      const dmg = Math.max(1, Math.round(a.h.atk * (1 + (state.stars[a.h.id] || 0) * 0.1) * (1 + (state.level - 1) * 0.05) * 0.65));
+      playOnce(m, 'atk', 0.4);
+      if (a.melee) { swingFx(mp, Math.atan2(foe.mesh.position.x - mp.x, foe.mesh.position.z - mp.z), 2.4, Math.PI * 0.8, a.h.color); enemies.slice().forEach(e => { if (dist2(e.mesh.position, mp) < range + e.radius) damageEnemy(e, dmg); }); }
+      else fire(mp, foe.mesh.position, a.h.color, dmg, { size: 1.1 });
+    }
   });
 }
 
@@ -497,7 +558,7 @@ function toggleTeam(id) {
 }
 
 function openCrew(msg) {
-  const rows = [{ head: true, text: (msg ? msg + '\n' : '') + 'EQUIPE (máx. ' + MAX_TEAM + '): toque no retrato do herói, na tela, para trocar de herói.' }];
+  const rows = [{ head: true, text: (msg ? msg + '\n' : '') + 'SEU PERSONAGEM + até ' + (MAX_TEAM - 1) + ' ALIADOS. Os aliados lutam sozinhos ao seu lado; você só controla o seu personagem.' }];
   rows.push({ text: 'Invocar herói\nRaro 55% • Épico 35% • Lendário 10%\nRepetido = +10% ATK', btn: '💎30', enabled: state.gems >= 30, fn: summon });
   HEROES.forEach(h => {
     const c = CLASSES[h.cls], r = REALMS[h.realm], owned = state.owned.includes(h.id), inTeam = state.team.includes(h.id);
@@ -505,7 +566,8 @@ function openCrew(msg) {
     if (!owned) {
       if (h.cost > 0) rows.push({ text, btn: '🪙' + h.cost, enabled: state.gold >= h.cost, fn: () => { state.gold -= h.cost; state.owned.push(h.id); if (state.team.length < MAX_TEAM) state.team.push(h.id); save(state); refreshHud(); refreshTeam(); openCrew(); } });
       else rows.push({ text: text + '\n🔒 Conquiste na história ou invoque', btn: '🔒', enabled: false });
-    } else rows.push({ text, btn: inTeam ? (state.team.length > 1 ? 'REMOVER' : 'NA EQUIPE') : 'ADICIONAR', enabled: inTeam ? state.team.length > 1 : state.team.length < MAX_TEAM, fn: () => toggleTeam(h.id) });
+    } else if (h.id === 'player') rows.push({ text, btn: 'VOCÊ', enabled: false });
+    else rows.push({ text, btn: inTeam ? (state.team.length > 1 ? 'REMOVER' : 'NA EQUIPE') : 'ADICIONAR', enabled: inTeam ? state.team.length > 1 : state.team.length < MAX_TEAM, fn: () => toggleTeam(h.id) });
   });
   rows.push({ head: true, text: '— Criaturas (mascote + montaria) —' });
   rows.push({ text: 'Invocar criatura\nRepetida = +10% dano', btn: '💎40', enabled: state.gems >= 40, fn: summonPet });
@@ -523,9 +585,13 @@ function openProfile(keep) {
   const again = () => openProfile(true), cost = (k) => 100 * (state.upgrades[k] + 1);
   const rows = [{ head: true, text: '🪙' + state.gold + '  💎' + state.gems + '  💵' + state.cash + '  •  Abates: ' + state.kills + '\n' + MATS.map((m, i) => m.icon + (state.mats[i] || 0)).join('  ') }];
   rows.push({ text: '🎒 Mochila e equipamento\nUse os botões 🧍 EQUIP e 🎒 BAG no canto superior esquerdo.' });
-  rows.push({ text: 'Aparência do personagem\nMude nome, classe e visual', btn: 'EDITAR', fn: editCharacter });
-  rows.push({ text: '🔑 Código da conta (guarde!)\n' + state.pid + '\nÉ ele que prova que suas casas são suas. Use o mesmo código em outro aparelho ou navegador.', btn: 'COPIAR', fn: () => { try { navigator.clipboard.writeText(state.pid); toast('🔑 Código copiado'); } catch (e) { window.prompt('Copie seu código:', state.pid); } } });
-  rows.push({ text: 'Entrar com um código de conta\nRecupera suas casas neste aparelho', btn: 'USAR', fn: () => { const c = (window.prompt('Cole o código da conta:') || '').trim().replace(/[^a-zA-Z0-9]/g, ''); if (c.length >= 16) { state.pid = c; state.homes = {}; save(state); location.reload(); } else if (c) toast('Código inválido'); } });
+  rows.push({ text: 'Aparência do personagem\nMude nome e visual (a classe não muda)', btn: 'EDITAR', fn: editCharacter });
+  if (sess && sess.cid) {
+    const leave = async (full) => { toast('Salvando...'); await cloudPush(true); if (full) { try { await api('logout', { token: sess.token }); } catch (e) {} setSess(null); } else setSess(Object.assign({}, sess, { cid: null })); location.reload(); };
+    rows.push({ text: '👤 Conta: ' + sess.name + '\nSeus personagens ficam salvos na conta.', btn: 'TROCAR', fn: () => leave(false) });
+    rows.push({ text: 'Sair da conta\nVolta para a tela de entrada', btn: 'SAIR', fn: () => leave(true) });
+  } else rows.push({ text: '🔑 Código da conta (guarde!)\n' + state.pid + '\nÉ ele que prova que suas casas são suas. Use o mesmo código em outro aparelho ou navegador.', btn: 'COPIAR', fn: () => { try { navigator.clipboard.writeText(state.pid); toast('🔑 Código copiado'); } catch (e) { window.prompt('Copie seu código:', state.pid); } } });
+  if (!(sess && sess.cid)) rows.push({ text: 'Entrar com um código de conta\nRecupera suas casas neste aparelho', btn: 'USAR', fn: () => { const c = (window.prompt('Cole o código da conta:') || '').trim().replace(/[^a-zA-Z0-9]/g, ''); if (c.length >= 16) { state.pid = c; state.homes = {}; save(state); location.reload(); } else if (c) toast('Código inválido'); } });
   rows.push({ text: 'Treino de ataque +25%\nNível ' + state.upgrades.atk, btn: '🪙' + cost('atk'), enabled: state.gold >= cost('atk'), fn: () => { state.gold -= cost('atk'); state.upgrades.atk++; save(state); refreshHud(); again(); } });
   rows.push({ text: 'Treino de vitalidade +20 HP\nNível ' + state.upgrades.hp, btn: '🪙' + cost('hp'), enabled: state.gold >= cost('hp'), fn: () => { state.gold -= cost('hp'); state.upgrades.hp++; maxHp = calcMaxHp(); hp = maxHp; save(state); refreshHud(); again(); } });
   openPanel('👤 PERFIL', rows);
@@ -1528,7 +1594,7 @@ function netEvent(m) {
 }
 function startNet() {
   const q = new URLSearchParams(location.search).get('net');
-  if (testing || q === '0') { $('netbtn').style.display = $('chatbtn').style.display = 'none'; return; }
+  if (testing || q === '0' || needAuth) { $('netbtn').style.display = $('chatbtn').style.display = 'none'; return; }
   net = createNet({ url: q && q.startsWith('ws') ? q : NET_URL, getMe: () => ({ name: meName(), look: state.custom || null, pid: state.pid }), onEvent: netEvent, onStatus: (ok) => { if (!ok) { remotes.forEach((r, id) => dropRemote(id)); netId = null; } refreshNet(); } });
   refreshNet();
 }
@@ -1657,6 +1723,8 @@ function update(dt) {
 
   // ataque automático
   if (target && T - lastShot > hero.rate / 1000 * (1 - sk('haste') * 0.09)) { lastShot = T; doAttack(target); }
+
+  updateAllies(dt);
 
   // mascote
   const pp = pet.position, pu = pet.userData;
@@ -1811,9 +1879,18 @@ function startGame() {
 
 if (qs.has('nocreator') && !state.custom) { state.account = 'Teste'; applyCustom(Object.assign({}, PREMADE[Number(qs.get('nocreator')) || 0])); setHero(); }
 
+function legacySave() {
+  try { const raw = localStorage.getItem('acrpg'); if (!raw) return null; const o = JSON.parse(raw); if (!o.custom) return null; return { raw, name: o.custom.name || 'Herói', cls: o.custom.cls, level: o.level || 1, pid: /^[a-f0-9]{32}$/.test(o.pid || '') ? o.pid : '' }; } catch (e) { return null; }
+}
 if (!testing) {
   frame();
-  if (!state.account || !state.custom || qs.has('creator')) runCreator(); else startGame();
+  if (needAuth) {
+    openAuth({
+      legacy: legacySave,
+      offline: () => { location.href = location.pathname + '?local=1'; },
+      newChar: (acct) => new Promise(res => { creatorOpen = true; openCreator({ account: acct, initial: null, canCancel: true, onDone: (r) => { creatorOpen = false; res(r ? { custom: r.custom } : null); } }); }),
+    });
+  } else if (!state.account || !state.custom || qs.has('creator')) runCreator(); else startGame();
 } else {
   runSelfTest();
 }

@@ -7,6 +7,10 @@ compatibility_date = "2025-01-01"
 name = "ROOM"
 class_name = "City"
 
+[[durable_objects.bindings]]
+name = "ACCTS"
+class_name = "Accounts"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Room"]
@@ -14,3 +18,7 @@ new_sqlite_classes = ["Room"]
 [[migrations]]
 tag = "v2"
 renamed_classes = [{ from = "Room", to = "City" }]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["Accounts"]

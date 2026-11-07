@@ -96,6 +96,7 @@ export function openCreator(opts) {
     const r = el('button', 'card', ''); r.innerHTML = '<b>🎲 Surpreenda-me</b><span>Um herói aleatório (dá para ajustar depois).</span>';
     r.onclick = () => { c = randomLook(c.name || account); viewCustom(); };
     body.append(a, b, r);
+    if (opts.canCancel) { const cn = el('button', 'sec', '✖ Cancelar'); cn.onclick = () => { close(); opts.onDone(null); }; body.append(cn); }
     showHero(Object.assign({}, c));
   }
 
