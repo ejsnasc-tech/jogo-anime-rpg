@@ -8,6 +8,7 @@ import { SLOTS, SLOT_ORDER, EQUIP_KEYS, KINDS, WEAPON_KIND, OFF_KIND, RAR, MATS,
 import { itemArt, ghostArt } from './itemart.js';
 import { buildCity, CITY_R, CITY_SPAWN, PLOTS } from './city.js';
 import { createNet, nameTag, NET_URL } from './net.js';
+import { QUESTS, ACH, LOGIN_DAYS, ensureMeta, loginState, claimLogin, loginReward, questReward, offlineGain } from './meta.js';
 import { openAuth, api, getSess, setSess } from './auth.js';
 import { ROOMS, FURN, furnByKey, makeFurniture, footprint, buildRoom } from './home.js';
 
@@ -54,6 +55,7 @@ function load() {
 let cloudDirty = false, cloudBusy = false;
 const save = (s) => { if (testing) return; s.lastSeen = Date.now(); try { localStorage.setItem('acrpg', JSON.stringify(s)); } catch (e) {} cloudDirty = true; };
 const state = load();
+ensureMeta(state);
 // save na nuvem (por personagem): a cada 12 s se houve mudança, e ao sair da página
 async function cloudPush(force) {
   if (!sess || !sess.cid || !state.custom || cloudBusy || !(cloudDirty || force)) return;
@@ -82,7 +84,7 @@ const CAM_OFFSET = new THREE.Vector3(0, 8.2, 10);
 const _co = new THREE.Vector3(); let zoom = 1, zoomT = 1;
 const setZoom = (f) => { zoomT = Math.min(2.8, Math.max(0.55, f)); };
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x4a7a3a, 0.85));
+const hemi = new THREE.HemisphereLight(0xffffff, 0x4a7a3a, 0.85); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff2d6, 1.1);
 sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
 Object.assign(sun.shadow.camera, { left: -22, right: 22, top: 22, bottom: -22, near: 1, far: 60 });
@@ -183,6 +185,7 @@ const fieldGroup = new THREE.Group(); scene.add(fieldGroup);
 // Cenário: montanhas, nuvens, torres, rio, trilha e flores
 const farGroup = new THREE.Group(); scene.add(farGroup);
 let waterTex = null;
+const RUINS = [], chestMeshes = [];
 (function scenery() {
   const mat = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 1, flatShading: true }, o));
   for (let i = 0; i < 16; i++) {
@@ -249,7 +252,7 @@ let waterTex = null;
     for (let i = 0; i < SITES; i++) {
       let x = 0, z = 0;
       for (let t = 0; t < 30; t++) { const a = rnd() * 6.283, r = 45 + rnd() * 130; x = Math.cos(a) * r; z = Math.sin(a) * r; if (riverDepth(x, z) < 0.01 && Math.hypot(x - LAKE.x, z - LAKE.z) > LAKE.r + 8 && Math.abs(x - trailX(z)) > 6) break; }
-      const y0 = groundH(x, z);
+      const y0 = groundH(x, z); RUINS.push({ x: x - 2.8, z: z - 1.2, y: y0 });
       for (let k = 0; k < 6; k++) {
         const a = k / 6 * 6.283, sc = 0.35 + rnd() * 0.65;
         dm.position.set(x + Math.cos(a) * 5.5, y0 + 2 * sc, z + Math.sin(a) * 5.5); dm.rotation.set((rnd() - 0.5) * 0.25, rnd() * 3, (rnd() - 0.5) * 0.25); dm.scale.set(1, sc, 1); dm.updateMatrix(); pil.setMatrixAt(n++, dm.matrix);
@@ -258,6 +261,15 @@ let waterTex = null;
       const f = new THREE.Mesh(fireG, fireM); f.position.set(x + 2.6, y0 + 0.5, z + 1.4); fieldGroup.add(f);
     }
     [pil, slab].forEach(m => { m.castShadow = true; m.frustumCulled = false; fieldGroup.add(m); });
+    // baús do tesouro nas ruínas (reabrem a cada 5 min)
+    const wood = mat(0x7a4a1f, { flatShading: false }), gold = new THREE.MeshStandardMaterial({ color: 0xf2c230, metalness: 0.6, roughness: 0.35, emissive: 0x6a4a00 });
+    RUINS.forEach((r, i) => {
+      const g = new THREE.Group(), body = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.7, 0.9), wood), lid = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.4, 0.95), gold);
+      body.position.y = 0.35; lid.position.set(0, 0.9, 0); const band = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.75, 0.97), gold); band.position.y = 0.36;
+      const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.22), new THREE.MeshBasicMaterial({ color: 0xfff08a })); gem.position.y = 2.1;
+      g.add(body, lid, band, gem); g.position.set(r.x, r.y, r.z); g.rotation.y = i; g.traverse(o => { o.castShadow = true; }); fieldGroup.add(g);
+      chestMeshes.push({ g, lid, gem, i, x: r.x, z: r.z });
+    });
   }
   const dirt = mat(0xd9b77a, { flatShading: false }), dg = new THREE.CircleGeometry(1.5, 14);
   for (let z = 190; z > -190; z -= 1.6) {
@@ -363,6 +375,7 @@ let maxHp = calcMaxHp(), hp = maxHp, shield = 0, shieldUntil = 0;
 const enemies = [], dying = [], bullets = [], effects = [], zones = [], timers = [], eshots = [];
 let lastShot = 0, invuln = 0, switchReady = 0, bearUntil = 0, overload = 0, shake = 0, walkT = 0, spawnTimer = 0;
 const skillReady = {};
+let ev = null, nextEvT = 150 + Math.random() * 100, dayT = 0.3, night = 0, weather = 'clear', weatherLeft = 200, rainPts = null, isNight = false;
 let bossRef = null;
 let panelOpen = false, dialogOpen = false, creatorOpen = false;
 let inCity = false, city = null, nearNpc = null, walkGoal = null, invOpen = false, mmT = 0;
@@ -425,7 +438,8 @@ function switchHero(i) {
 
 // ===================== HUD =====================
 function refreshHud() {
-  $('hname').textContent = 'Nv.' + state.level + ' ' + hero.name.split(' ')[0];
+  $('hname').textContent = 'Nv.' + state.level + ' ' + hero.name.split(' ')[0] + (state.meta && state.meta.title ? ' «' + state.meta.title + '»' : '');
+  { const n = questsClaimable(); $('questbtn').textContent = '📜 MISSÕES' + (n ? ' ❗' + n : ''); }
   $('hgems').textContent = '💎' + state.gems; $('hgold').textContent = '🪙' + state.gold; $('hcash').textContent = '💵' + state.cash;
   const a = curAct();
   $('stage').textContent = inHome ? '\u{1F3E0} ' + (homeVisit ? 'Visitando a casa de ' + homeVisit.name : inHome.name + ' \u2014 ' + ROOMS[inHome.kind].label) : inCity ? '🏰 Cidade de Aurora — fale com os moradores' : state.endless ? '♾ Aventura Infinita • abates ' + state.stageKills
@@ -457,6 +471,83 @@ function syncAllies() {
     allies.push({ h, mesh, next: 0, melee: ['warrior', 'paladin', 'assassin'].includes(h.cls) });
   });
 }
+// ---- eventos aleatórios na floresta ----
+function startEvent() {
+  const k = Math.random(), n0 = enemies.length;
+  if (k < 0.4) { ev = { name: 'INVASÃO de atiradores', left: 10, until: T + 150, rew: 1 }; for (let i = 0; i < 6; i++) spawnEnemy(false, null, 'archer'); for (let i = 0; i < 4; i++) spawnEnemy(false, null, 'mage'); }
+  else if (k < 0.75) { ev = { name: 'HORDA de corredores', left: 14, until: T + 120, rew: 1 }; for (let i = 0; i < 14; i++) spawnEnemy(false, null, 'runner'); }
+  else { ev = { name: 'CAÇADA ao Bruto', left: 3, until: T + 150, rew: 2 }; for (let i = 0; i < 3; i++) spawnEnemy(false, null, 'brute'); }
+  enemies.slice(n0).forEach(e => { e.ev = ev; });
+  toast('⚠ EVENTO: ' + ev.name + '! Derrote todos (' + ev.left + ') para ganhar recompensa');
+}
+function finishEvent() {
+  const r = ev.rew, gold = state.level * 70 * r, gems = 5 * r + 2; state.gold += gold; state.gems += gems; ev = null; nextEvT = T + 220 + Math.random() * 150;
+  track('event'); toast('🏆 Evento vencido! +🪙' + gold + ' +💎' + gems); save(state); refreshHud();
+}
+
+// ---- dia e noite, clima, baús ----
+const EMOTES = ['👋', '😂', '👍', '❤️', '😡', '🎉'];
+function updateWorld(dt) {
+  const ov = $('nightov');
+  if (inHome) { ov.style.opacity = 0; if (rainPts) rainPts.visible = false; }
+  else {
+    dayT = (dayT + dt / 420) % 1;
+    const light = 0.5 + 0.5 * Math.sin((dayT - 0.25) * Math.PI * 2);
+    night = 1 - sstep(0.1, 0.4, light);
+    weatherLeft -= dt;
+    if (weatherLeft <= 0) {
+      const r = Math.random(), old = weather; weather = r < 0.55 ? 'clear' : r < 0.8 ? 'fog' : 'rain'; weatherLeft = weather === 'clear' ? 150 + Math.random() * 150 : 70 + Math.random() * 70;
+      if (weather !== old && !inCity) toast(weather === 'fog' ? '🌫️ Neblina densa — visão reduzida' : weather === 'rain' ? '🌧️ Começou a chover' : '☀️ O tempo abriu');
+    }
+    const rainy = weather === 'rain' ? 1 : 0;
+    hemi.intensity = 0.85 - 0.45 * night - 0.1 * rainy; sun.intensity = 1.1 - 0.8 * night - 0.35 * rainy;
+    ov.style.opacity = Math.min(0.62, night * 0.5 + rainy * 0.12).toFixed(3);
+    const fogFar = weather === 'fog' ? 62 : 140; scene.fog.far += (fogFar - scene.fog.far) * Math.min(1, dt * 0.6);
+    if (isNight !== night > 0.55) { isNight = night > 0.55; refreshHud(); if (!inCity) toast(isNight ? '🌙 A noite caiu: magos e elites aparecem mais!' : '🌅 Amanheceu'); }
+    if (rainy) {
+      if (!rainPts) {
+        const N = 380, g = new THREE.BufferGeometry(), arr = new Float32Array(N * 3), off = new Float32Array(N * 3);
+        for (let i = 0; i < N; i++) { off[i * 3] = (Math.random() - 0.5) * 44; off[i * 3 + 1] = Math.random() * 26; off[i * 3 + 2] = (Math.random() - 0.5) * 44; }
+        g.setAttribute('position', new THREE.BufferAttribute(arr, 3)); rainPts = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xbcdcff, size: 0.2, transparent: true, opacity: 0.75, depthWrite: false })); rainPts.userData.off = off; rainPts.frustumCulled = false; scene.add(rainPts);
+      }
+      rainPts.visible = true; const off = rainPts.userData.off, pa = rainPts.geometry.attributes.position, p = player.position;
+      for (let i = 0; i < off.length; i += 3) { off[i + 1] -= 24 * dt; if (off[i + 1] < 0) off[i + 1] += 26; pa.array[i] = p.x + off[i]; pa.array[i + 1] = off[i + 1]; pa.array[i + 2] = p.z + off[i + 2]; }
+      pa.needsUpdate = true;
+    } else if (rainPts) rainPts.visible = false;
+  }
+  if (inCity || inHome) return;
+  // eventos
+  if (ev && T > ev.until) { ev.left = 0; ev = null; nextEvT = T + 200; toast('⌛ O evento terminou'); }
+  if (!ev && T > nextEvT && !(state.stage === 5 && !state.endless) && enemies.length < 10 && !isPaused()) startEvent();
+  // baús
+  const p = player.position, now = Date.now(), m = ensureMeta(state);
+  chestMeshes.forEach(c => {
+    const ready = now >= (m.chests[c.i] || 0);
+    c.lid.rotation.x = ready ? 0 : -0.9; c.lid.position.y = ready ? 0.9 : 1.05; c.gem.visible = ready; if (ready) c.gem.position.y = 2.1 + Math.sin(T * 3 + c.i) * 0.15, c.gem.rotation.y = T * 2;
+    if (ready && Math.hypot(p.x - c.x, p.z - c.z) < 2.4) openChest(c);
+  });
+}
+function openChest(c) {
+  const m = ensureMeta(state); m.chests[c.i] = Date.now() + 5 * 60 * 1000;
+  const gold = Math.round((60 + state.level * 30) * (1 + Math.random() * 0.6)), gems = 2 + Math.floor(Math.random() * 5), tier = Math.min(5, state.act);
+  state.gold += gold; state.gems += gems; state.mats[tier] = (state.mats[tier] || 0) + 3; ringFx(player.position, 0xffd54f, 4, 0.7);
+  toast('🎁 Baú aberto! +🪙' + gold + ' +💎' + gems + ' +' + MATS[tier].icon + '3');
+  if (Math.random() < 0.35) giveItem(newItem(SLOT_ORDER[Math.floor(Math.random() * SLOT_ORDER.length)], tier, Math.random() < 0.2 ? 2 : 1, mainCls()));
+  track('chest'); save(state); refreshHud();
+}
+
+// ---- emotes (reaparecem para os outros jogadores) ----
+{
+  const bar = $('emobar');
+  EMOTES.forEach((em, i) => { const b = document.createElement('button'); b.textContent = em; b.onpointerdown = (e) => { e.stopPropagation(); doEmote(i); }; bar.appendChild(b); });
+  $('emobtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); bar.style.display = bar.style.display === 'flex' ? 'none' : 'flex'; });
+}
+let emoteAt = 0;
+function doEmote(i) {
+  if (T < emoteAt) return; emoteAt = T + 1.0;
+  ftAt(player.position, EMOTES[i], '#fff', 3.2); if (net) net.send({ t: 'chat', text: '§e' + i }); track('emote'); save(state);
+}
+
 function updateAllies(dt) {
   const p = player.position;
   allies.forEach((a, i) => {
@@ -494,6 +585,36 @@ function updateSkillLabel(force, cd) {
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.style.opacity = 1;
   clearTimeout(toast.h); toast.h = setTimeout(() => { t.style.opacity = 0; }, 2600);
+}
+
+// ===================== Metajogo: missões, login diário, conquistas =====================
+function track(key, n) {
+  n = n || 1; const m = ensureMeta(state); m.cnt[key] = (m.cnt[key] || 0) + n;
+  [m.dq, m.wq].forEach((list, wi) => list.forEach(q => {
+    if (q.key !== key || q.claimed) return; const was = q.have >= q.need; q.have = Math.min(q.need, q.have + n);
+    if (!was && q.have >= q.need) toast('📜 ' + (wi ? 'Missão semanal' : 'Missão') + ' completa: ' + q.label + ' — abra MISSÕES!');
+  }));
+  checkAch();
+}
+function checkAch() {
+  const m = ensureMeta(state);
+  ACH.forEach(a => { if (!m.ach[a.id] && a.ok(state)) { m.ach[a.id] = 1; state.gems += a.gems; toast('🏆 Conquista: ' + a.title + '  +' + a.gems + '💎'); if (!m.title) m.title = a.title; } });
+}
+const rewTxt = (r) => [r.gold && '🪙' + r.gold, r.gems && '💎' + r.gems, r.cash && '💵' + r.cash].filter(Boolean).join('  ');
+const giveRew = (r) => { state.gold += r.gold || 0; state.gems += r.gems || 0; state.cash += r.cash || 0; };
+function questsClaimable() { const m = ensureMeta(state); return [].concat(m.dq, m.wq).filter(q => !q.claimed && q.have >= q.need).length + (loginState(state).got ? 0 : 1); }
+function openQuests() {
+  const m = ensureMeta(state), ls = loginState(state);
+  const rows = [{ head: true, text: '🎁 LOGIN DIÁRIO — sequência: ' + ls.streak + ' dia(s)' }];
+  rows.push({ text: 'Dia ' + (ls.day + 1) + ' de 7: ' + rewTxt(loginReward(ls.day, state.level)) + (LOGIN_DAYS[ls.day].big ? '   ⭐ PRÊMIO GRANDE' : '') + '\nVolte todo dia sem falhar para chegar ao dia 7.', btn: ls.got ? '✔ HOJE' : 'COLETAR', enabled: !ls.got, fn: () => { const r = claimLogin(state); giveRew(r); save(state); refreshHud(); toast('🎁 ' + rewTxt(r)); openQuests(); } });
+  rows.push({ head: true, text: '📜 MISSÕES DIÁRIAS (renovam à meia-noite)' });
+  const addQ = (q, weekly) => { const rw = questReward(state.level, weekly); rows.push({ text: q.label + '   (' + q.have + '/' + q.need + ')\nRecompensa: ' + rewTxt(rw), btn: q.claimed ? '✔' : q.have >= q.need ? 'COLETAR' : '…', enabled: !q.claimed && q.have >= q.need, fn: () => { q.claimed = true; giveRew(rw); save(state); refreshHud(); toast('✅ ' + rewTxt(rw)); openQuests(); } }); };
+  m.dq.forEach(q => addQ(q, false));
+  rows.push({ head: true, text: '📅 MISSÕES SEMANAIS (renovam toda segunda)' });
+  m.wq.forEach(q => addQ(q, true));
+  rows.push({ head: true, text: '🏆 CONQUISTAS E TÍTULOS  (' + Object.keys(m.ach).length + '/' + ACH.length + ')' });
+  ACH.forEach(a => { const got = !!m.ach[a.id]; rows.push({ text: (got ? '✔ ' : '🔒 ') + a.title + '\n' + a.desc + '  •  +' + a.gems + '💎', btn: got ? (m.title === a.title ? 'EM USO' : 'USAR') : '', enabled: got && m.title !== a.title, fn: () => { m.title = a.title; save(state); refreshHud(); openQuests(); } }); });
+  openPanel('📜 MISSÕES', rows);
 }
 
 const _v = new THREE.Vector3();
@@ -680,7 +801,7 @@ function explode(pos, radius, dmg, color, exclude) {
 }
 
 // ===================== Inimigos / combate =====================
-function clearEnemies() { eshots.forEach(s => { scene.remove(s.mesh); s.mesh.material.dispose(); }); eshots.length = 0; enemies.forEach(e => scene.remove(e.mesh)); enemies.length = 0; dying.forEach(d => scene.remove(d.mesh)); dying.length = 0; bossRef = null; $('bossbar').style.display = 'none'; }
+function clearEnemies() { if (ev) { ev = null; nextEvT = T + 90; } eshots.forEach(s => { scene.remove(s.mesh); s.mesh.material.dispose(); }); eshots.length = 0; enemies.forEach(e => scene.remove(e.mesh)); enemies.length = 0; dying.forEach(d => scene.remove(d.mesh)); dying.length = 0; bossRef = null; $('bossbar').style.display = 'none'; }
 
 // Tipos de inimigo. ranged: atira de longe e mantém distância. Cada um tem vida/dano/velocidade próprios.
 const ETYPES = {
@@ -695,6 +816,7 @@ const ETYPES = {
 function pickEType() {
   const act = state.act, st = state.endless ? 5 : state.stage;
   const w = { minion: Math.max(18, 60 - act * 8 - st * 4), warrior: act > 0 ? 16 + act * 2 : 6, runner: st >= 2 || act > 0 ? 14 : 0, archer: st >= 2 || act > 0 ? 16 + act * 3 : 0, mage: act >= 1 || st >= 4 ? 8 + act * 4 : 0, brute: act >= 1 || st >= 4 ? 4 + act * 3 : 0 };
+  if (night > 0.55) { w.mage += 10; w.archer += 8; w.runner += 6; }
   let r = Math.random() * Object.values(w).reduce((a, b) => a + b, 0);
   for (const k in w) { r -= w[k]; if (r <= 0) return k; }
   return 'minion';
@@ -717,6 +839,11 @@ function spawnEnemy(boss, info, forceType) {
   const hpv = boss ? base * 14 * (state.endless ? 1.5 : 1) * 1.3 : base * T0.hp;
   const dmgBase = ((6 + lv * 0.8) * (1 + state.act * 0.12)) * 1.35 * catchD;
   const e = { mesh, hp: hpv, maxHp: hpv, speed: boss ? 1.5 : (1.9 + Math.random() * 1.0) * T0.spd, boss: !!boss, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? 1.4 : T0.r, t: Math.random() * 10, dmg: dmgBase * (boss ? 1.6 : T0.dmg), stun: 0, slow: 0, flash: 0, ranged: boss ? null : T0.ranged || null, shotAt: T + 1 + Math.random() * 2 };
+  if (!boss && !forceType && Math.random() < 0.04 + state.act * 0.01 + (night > 0.55 ? 0.03 : 0)) {
+    e.elite = true; e.hp = e.maxHp = e.hp * 4; e.dmg *= 1.4; e.radius *= 1.3; mesh.scale.multiplyScalar(1.35);
+    mesh.traverse(o => { if (o.isMesh && o.material) { if (o.material.emissive) o.material.emissive.setHex(0x664400); if (o.material.color) o.material.color.setHex(0xffd36b); } });
+    ftAt(mesh.position, '★ ELITE', '#ffd166', 3);
+  }
   enemies.push(e);
   if (boss) {
     bossRef = e; $('bossname').textContent = '👑 ' + info.name; $('bossfill').style.width = '100%'; $('bossbar').style.display = 'block';
@@ -762,7 +889,9 @@ function damageEnemy(e, dmg, crit) {
 }
 
 function onKill(e) {
-  dropLoot(e);
+  dropLoot(e); track('kill');
+  if (e.elite) { track('elite'); dropLoot(e); dropLoot(e); state.gold += 40 + state.level * 8; state.gems += Math.random() < 0.4 ? 2 : 1; ftAt(e.mesh.position, '★ +elite', '#ffd166', 2.4); }
+  if (e.ev && ev === e.ev) { ev.left--; if (ev.left <= 0) finishEvent(); else toast('⚔ ' + ev.name + ': faltam ' + ev.left); }
   state.kills++; state.gold += Math.round((5 + state.level + state.act * 2) * (1 + sk('greed') * 0.2));
   if (Math.random() < 0.05 + sk('greed') * 0.01) state.gems++;
   if (sk('vamp')) heal(maxHp * 0.01 * sk('vamp'));
@@ -770,7 +899,7 @@ function onKill(e) {
   state.xp++;
   if (state.xp >= xpNeed()) { state.xp = 0; state.level++; state.skillPts++; ftAt(player.position, 'LEVEL UP!', '#7CFC00', 2.8); }
   if (e.boss) {
-    if (state.endless) { bossRef = null; $('bossbar').style.display = 'none'; state.gems += 5; state.gold += 200 * state.level; toast('🏆 Chefe derrotado! +5💎'); }
+    if (state.endless) { track('boss'); bossRef = null; $('bossbar').style.display = 'none'; state.gems += 5; state.gold += 200 * state.level; toast('🏆 Chefe derrotado! +5💎'); }
     else bossDefeated();
   } else {
     state.stageKills++;
@@ -788,6 +917,7 @@ function equipItem(it, key) {
 }
 function unequipItem(it) { EQUIP_KEYS.forEach(k => { if (state.equip[k] === it.uid) delete state.equip[k]; }); recalcHp(); save(state); }
 function giveItem(it) {
+  track('drop');
   if (state.items.length >= 60) { const g = sellPrice(it); state.gold += g; toast('Mochila cheia: ' + itemName(it) + ' vendido por 🪙' + g); return; }
   state.items.push(it);
   const cur = equippedAt(keyFor(it)), better = !cur || itemValue(it) > itemValue(cur);
@@ -802,7 +932,7 @@ function dropLoot(e) {
 }
 
 function stageClear() {
-  state.stage++; state.stageKills = 0; clearEnemies();
+  track('stage'); state.stage++; state.stageKills = 0; clearEnemies();
   state.gold += 20 * state.level;
   if (state.stage >= 5) { toast('⚠ O chefe se aproxima!'); showDialog(curAct().bossIntro, spawnBoss); }
   else toast('✅ Estágio ' + (state.stage - 1) + ' concluído!');
@@ -810,7 +940,7 @@ function stageClear() {
 }
 
 function bossDefeated() {
-  const act = curAct(); clearEnemies();
+  track('boss'); const act = curAct(); clearEnemies();
   const replay = state.act < state.maxAct || state.storyDone;
   state.gold += 300 * (state.act + 1); state.gems += replay ? 4 : 10; state.cash += replay ? 30 : 100;
   toast('🏆 Chefe derrotado! +' + (replay ? 4 : 10) + '💎');
@@ -1104,6 +1234,7 @@ function runSkills(dt) {
 // ===================== Cidade, loja e mapa =====================
 function setCityMode(on) {
   if (inHome) cleanupHome();
+  if (on && !inCity) track('city');
   inCity = on; fieldGroup.visible = !on; ground.visible = on; terrain.visible = !on; if (city) city.group.visible = on;
   clearEnemies(); nearNpc = null; walkGoal = null; $('talk').style.display = 'none';
   if (on) {
@@ -1186,7 +1317,7 @@ function openNpc(n) { openNpcMenu(n); }
 function openFurnShop(n, keep) {
   const st = keep ? $('card').scrollTop : 0, again = () => openFurnShop(n, true);
   const rows = [{ text: '◀ Voltar ao menu', btn: 'VOLTAR', fn: () => openNpcMenu(n) }, { head: true, text: '🪙' + state.gold + '   Móveis no baú: ' + Object.values(state.stock).reduce((a, b) => a + b, 0) }];
-  FURN.forEach(f => rows.push({ text: f.icon + ' ' + f.name + '\nNo baú: ' + (state.stock[f.k] || 0), btn: '🪙' + f.price, enabled: state.gold >= f.price, fn: () => { state.gold -= f.price; state.stock[f.k] = (state.stock[f.k] || 0) + 1; save(state); refreshHud(); again(); } }));
+  FURN.forEach(f => rows.push({ text: f.icon + ' ' + f.name + '\nNo baú: ' + (state.stock[f.k] || 0), btn: '🪙' + f.price, enabled: state.gold >= f.price, fn: () => { state.gold -= f.price; track('furn'); state.stock[f.k] = (state.stock[f.k] || 0) + 1; save(state); refreshHud(); again(); } }));
   openPanel('🪑 Comprar móveis', rows);
   if (keep) $('card').scrollTop = st;
 }
@@ -1264,7 +1395,7 @@ function openPlotMenu(p) {
   else if (other) rows.push({ text: '👀 Visitar a casa de ' + o.name + '\nVeja os móveis dele', btn: 'VISITAR', enabled: !!(net && net.connected), fn: () => { closePanel(); net.send({ t: 'visit', plot: p.id }); } });
   else rows.push({
     text: (house ? '🛒 Comprar ' : '🔑 Alugar ') + p.name + '\nSala de ' + R.w + '×' + R.d + ' m para mobiliar', btn: '🪙' + p.price, enabled: state.gold >= p.price,
-    fn: () => { state.gold -= p.price; state.homes[p.id] = { furn: [] }; save(state); refreshHud(); if (net) net.send({ t: 'buy', plot: p.id }); refreshPlots(); closePanel(); toast(house ? '🏠 Casa comprada!' : '🏢 Apartamento alugado!'); again(); },
+    fn: () => { state.gold -= p.price; state.homes[p.id] = { furn: [] }; track('house'); save(state); refreshHud(); if (net) net.send({ t: 'buy', plot: p.id }); refreshPlots(); closePanel(); toast(house ? '🏠 Casa comprada!' : '🏢 Apartamento alugado!'); again(); },
   });
   rows.push({ text: '👋 Voltar', btn: 'FECHAR', fn: closePanel });
   openPanel((house ? '🏠 ' : '🏢 ') + p.name, rows);
@@ -1319,7 +1450,7 @@ function updateMark() {
 }
 function buyFurn(f) {
   if (!inHome || homeVisit) return;
-  if ((state.stock[f.k] || 0) > 0) state.stock[f.k]--; else if (state.gold >= f.price) state.gold -= f.price; else return;
+  if ((state.stock[f.k] || 0) > 0) state.stock[f.k]--; else if (state.gold >= f.price) { state.gold -= f.price; track('furn'); } else return;
   const m = addFurn({ k: f.k, x: 0, z: -1, r: 0 }); decor.sel = m; homeSave(); refreshHud(); updateMark(); renderDecor();
 }
 function rotFurn() { const m = decor.sel; if (!m || m.userData.k === 'painting') return; m.userData.r = (m.userData.r + 1) % 4; m.rotation.y = m.userData.r * Math.PI / 2; placeFurn(m, m.position.x, m.position.z); homeSave(); updateMark(); }
@@ -1536,6 +1667,7 @@ function travelTo(i) {
   save(state); refreshHud(); toast('🗺️ ' + (i === 'endless' ? 'Aventura Infinita' : ACTS[i].name));
 }
 
+$('questbtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (isPaused() || dialogOpen) return; openQuests(); });
 $('citybtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (isPaused()) return; if (inHome) leaveHome(); else setCityMode(!inCity); });
 $('mapbtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (!isPaused()) openMap(); });
 $('zoomin').addEventListener('pointerdown', (e) => { e.stopPropagation(); setZoom(zoomT * 0.82); });
@@ -1590,7 +1722,7 @@ function netEvent(m) {
   else if (m.t === 'leave') dropRemote(m.id);
   else if (m.t === 'furn') { if (homeVisit && homeRoom && inHome.id === m.plot) { homeRoom.items.forEach(x => homeRoom.group.remove(x)); homeRoom.items.length = 0; (m.furn || []).forEach(f => addFurn(f)); } }
   else if (m.t === 'move') { const r = remotes.get(m.id); if (r) { r.x = m.x; r.z = m.z; r.f = m.f; r.mv = m.mv; r.w = m.w; } }
-  else if (m.t === 'chat') { chatLine(m.name, m.text, false); }
+  else if (m.t === 'chat') { if (String(m.text).startsWith('§e')) { const r = remotes.get(m.id), em = EMOTES[+String(m.text).slice(2)]; if (r && em && r.mesh.visible) ftAt(r.mesh.position, em, '#fff', 3.2); } else chatLine(m.name, m.text, false); }
 }
 function startNet() {
   const q = new URLSearchParams(location.search).get('net');
@@ -1716,7 +1848,7 @@ function update(dt) {
     if (e.mesh.userData.glb) { ep.y = gE; animateHero(e.mesh, dt, { moving: sm > 0 && mv !== 0 && (mv < 0 || d > e.radius + 0.4), spd: sm }); }
     else ep.y = gE + Math.abs(Math.sin(e.t)) * 0.25;
     e.mesh.rotation.y = Math.atan2(vx, vz);
-    if (e.flash > 0) { e.flash -= dt; const on = e.flash > 0; e.mesh.traverse(o => { if (o.isMesh && o.material.emissive) o.material.emissive.setHex(on ? 0xffffff : 0x000000); }); }
+    if (e.flash > 0) { e.flash -= dt; const on = e.flash > 0; e.mesh.traverse(o => { if (o.isMesh && o.material.emissive) o.material.emissive.setHex(on ? 0xffffff : (e.elite ? 0x664400 : 0x000000)); }); }
     if (!e.ranged && d < e.radius + 0.5) { hitPlayer(e); if (e.mesh.userData.glb && T > (e.atkAt || 0)) { e.atkAt = T + 1.0; playOnce(e.mesh, 'atk', 0.6); } }
   });
   for (let i = dying.length - 1; i >= 0; i--) { const dd = dying[i]; animateHero(dd.mesh, dt, {}); if (T >= dd.until) { scene.remove(dd.mesh); dying.splice(i, 1); } }
@@ -1725,6 +1857,7 @@ function update(dt) {
   if (target && T - lastShot > hero.rate / 1000 * (1 - sk('haste') * 0.09)) { lastShot = T; doAttack(target); }
 
   updateAllies(dt);
+  updateWorld(dt);
 
   // mascote
   const pp = pet.position, pu = pet.userData;
@@ -1818,6 +1951,8 @@ setPet(); renderSkillChips();
 if (qs.get('skills')) { qs.get('skills').split(',').forEach(x => { const [k, v] = x.split(':'); state.skills[k] = +v || 1; }); renderSkillChips(); }
 if (qs.has('levelup')) state.skillPts = 1;
 if (qs.has('city')) setCityMode(true);
+if (qs.has('night')) dayT = +qs.get('night') || 0;
+if (qs.has('quests')) setTimeout(() => openQuests(), 1500);
 if (qs.has('dbg')) window.__g = { player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; } };
 if (qs.get('pos')) { const iv = setInterval(() => { if (!gameStarted) return; clearInterval(iv); setTimeout(() => { const [px, pz] = qs.get('pos').split(',').map(Number); if (inCity) setCityMode(false); player.position.set(px || 0, 0, pz || 0); playerGy = walkY(px || 0, pz || 0); }, 600); }, 300); }
 if (qs.has('zoom')) { setZoom(+qs.get('zoom')); zoom = zoomT; }
@@ -1873,6 +2008,11 @@ function editCharacter() { closePanel(); runCreator(); }
 let gameStarted = false;
 function startGame() {
   gameStarted = true;
+  if (!testing) {
+    const og = offlineGain(state);
+    if (og) { state.gold += og.gold; state.lastSeen = Date.now(); save(state); refreshHud(); setTimeout(() => toast('💤 Enquanto você estava fora (' + (og.mins >= 60 ? Math.floor(og.mins / 60) + 'h' + (og.mins % 60 ? ' ' + og.mins % 60 + 'min' : '') : og.mins + ' min') + '), seus aliados juntaram 🪙' + og.gold), 1500); }
+    if (!loginState(state).got) setTimeout(() => toast('🎁 Recompensa de login disponível! Abra 📜 MISSÕES'), og ? 5000 : 2000);
+  }
   if (!state.seen.intro) { state.seen.intro = 1; save(state); showDialog(INTRO.concat(ACTS[0].intro)); }
   else if (state.stage === 5 && !state.endless && !bossRef) spawnBoss();
 }
@@ -1986,6 +2126,19 @@ function runSelfTest() {
       else { const b = enemies.find(x => x.boss) || spawnEnemy(true, { name: 'x', color: 0xffffff }); damageEnemy(b, 1e9); }
     }
     out.push('historia completa: ' + (state.endless ? 'ok' : 'FALHOU') + ' (atos=' + (state.act + 1) + ', herois=' + state.owned.length + ', time=' + state.team.join(',') + ')');
+    // metajogo, mundo, eventos
+    state.endless = true; applyAct(); setCityMode(false); clearEnemies(); hp = 1e9; maxHp = 1e9;
+    const mm = ensureMeta(state), k0 = mm.cnt.kill || 0; const e1 = spawnEnemy(false); damageEnemy(e1, 1e9); if ((state.meta.cnt.kill || 0) <= k0) throw new Error('track kill');
+    mm.dq[0].have = mm.dq[0].need; if (questsClaimable() < 2) throw new Error('missao nao contou'); openQuests(); closePanel();
+    track('kill', 20000); if (!state.meta.ach.k10000) throw new Error('conquista');
+    const lr = claimLogin(state); if (!lr || claimLogin(state)) throw new Error('login diario');
+    const el = spawnEnemy(false); el.elite = true; damageEnemy(el, 1e9);
+    startEvent(); if (!ev) throw new Error('evento'); const evEn = enemies.filter(x => x.ev); evEn.forEach(x => damageEnemy(x, 1e9)); if (ev) throw new Error('evento nao terminou');
+    dayT = 0; updateWorld(0.1); if (night < 0.8) throw new Error('noite'); dayT = 0.5; updateWorld(0.1); if (night > 0.2) throw new Error('dia');
+    weather = 'rain'; weatherLeft = 99; updateWorld(0.1); if (!rainPts) throw new Error('chuva'); weather = 'clear';
+    const ch0 = chestMeshes[0]; if (!ch0) throw new Error('sem bau'); player.position.set(ch0.x, 0, ch0.z); state.meta.chests = {}; updateWorld(0.1); if (!state.meta.chests[ch0.i]) throw new Error('bau nao abriu');
+    doEmote(0);
+    out.push('missoes/conquistas/login/eventos/clima/baus/emotes: ok (conquistas=' + Object.keys(state.meta.ach).length + ')');
     for (let i = 0; i < 120; i++) update(0.05);
     out.push('SELFTEST OK');
   } catch (err) { out.push('ERRO: ' + err.message + '\n' + (err.stack || '')); }

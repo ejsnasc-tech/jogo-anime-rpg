@@ -23,7 +23,7 @@
   #skillbar .ic { font-size:20px; line-height:34px; }
   #skillbar .lv { position:absolute; right:3px; bottom:0; font:700 11px Arial; color:#ffe9a8; text-shadow:0 0 3px #000; }
   #skillbar .cd { position:absolute; left:0; right:0; bottom:0; height:0; background:rgba(0,0,0,.65); }
-  #topbtns { position:fixed; top:calc(env(safe-area-inset-top) + 96px); right:8px; display:flex; flex-direction:column; gap:6px; z-index:19; }
+  #topbtns { position:fixed; top:calc(env(safe-area-inset-top) + 96px); right:8px; display:flex; flex-direction:column; flex-wrap:wrap-reverse; align-content:flex-start; max-height:calc(100dvh - 320px); gap:6px; z-index:19; }
   #topbtns button { height:38px; border-radius:19px; border:2px solid #fff; background:rgba(41,128,185,.92); color:#fff; font:inherit; font-size:13px; padding:0 12px; cursor:pointer; }
   #talk { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom) + 236px); display:none; z-index:21; height:54px; padding:0 22px; border-radius:27px; background:#e67e22; border:3px solid #fff; color:#fff; font:inherit; font-size:17px; cursor:pointer; }
   #leftbtns { position:fixed; top:calc(env(safe-area-inset-top) + 96px); left:8px; display:flex; gap:6px; z-index:19; }
@@ -132,6 +132,9 @@
   #skill { position:fixed; right:18px; bottom:calc(env(safe-area-inset-bottom) + 100px); width:92px; height:92px; border-radius:50%; background:#e67e22; border:4px solid #fff; color:#fff; font:inherit; font-size:18px; line-height:1.05; z-index:20; cursor:pointer; padding:0; }
   #mount { position:fixed; right:14px; bottom:calc(env(safe-area-inset-bottom) + 205px); min-width:100px; height:48px; padding:0 10px; border-radius:24px; background:#2980b9; border:3px solid #fff; color:#fff; font:inherit; font-size:14px; z-index:20; cursor:pointer; }
 
+  #nightov { position:fixed; inset:0; z-index:4; pointer-events:none; background:#16257a; mix-blend-mode:multiply; opacity:0; }
+  #emobar { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom) + 112px); display:none; gap:8px; z-index:30; background:rgba(16,25,43,.92); border:2px solid #fff; border-radius:26px; padding:6px 10px; }
+  #emobar button { width:44px; height:44px; border-radius:50%; border:0; background:#26334f; font-size:24px; cursor:pointer; }
   #team { position:fixed; left:10px; bottom:calc(env(safe-area-inset-bottom) + 100px); display:flex; flex-direction:column-reverse; gap:8px; z-index:20; }
   .tbtn { width:64px; height:64px; border-radius:50%; background:rgba(16,25,43,.92); border:4px solid #fff; color:#fff; font:inherit; font-size:24px; line-height:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0; cursor:pointer; }
   .tbtn small { font-size:10px; margin-top:2px; }
@@ -217,7 +220,7 @@
 <div id="leftbtns"><button id="eqbtn">🧍 EQUIP</button><button id="bagbtn">🎒 BAG</button></div>
 <div id="inv"></div>
 <canvas id="minimap" width="208" height="208"></canvas>
-<div id="topbtns"><button id="citybtn">🏰 CIDADE</button><button id="mapbtn">🗺️ MAPA</button><button id="zoomin">🔍＋</button><button id="zoomout">🔍－</button><button id="netbtn">🔴 offline</button><button id="chatbtn">💬 CHAT</button></div>
+<div id="topbtns"><button id="citybtn">🏰 CIDADE</button><button id="mapbtn">🗺️ MAPA</button><button id="zoomin">🔍＋</button><button id="zoomout">🔍－</button><button id="questbtn">📜 MISSÕES</button><button id="emobtn">😀 EMOTE</button><button id="netbtn">🔴 offline</button><button id="chatbtn">💬 CHAT</button></div>
 <button id="talk" class="stroke"></button>
 <div id="chatlog"></div><div id="chatbar"><input id="chatinp" maxlength="120" placeholder="Digite e toque em enviar…" autocomplete="off"><button id="chatsend">➤</button></div>
 <div id="homebar"><button id="decbtn">🛠 DECORAR</button></div>
@@ -225,6 +228,8 @@
 <div id="bossbar" class="stroke"><div id="bossname"></div><div class="bg"><div id="bossfill"></div></div></div>
 
 <div id="joy-base"></div><div id="joy-knob"></div>
+<div id="nightov"></div>
+<div id="emobar"></div>
 <div id="team"></div>
 <button id="skill" class="stroke">ULT</button>
 <button id="mount" class="stroke">🐾 MONTAR</button>
