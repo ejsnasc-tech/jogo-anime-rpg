@@ -95,14 +95,15 @@ export class Arena {
     } else if (m.t === 'furn') {
       const id = String(m.plot || ''), pl = this.plots[id];
       if (!pl || pl.oid !== me.oid || !Array.isArray(m.furn)) return;
-      pl.furn = m.furn.slice(0, 80).filter(f => f && FURN_RE.test(String(f.k))).map(f => ({ k: String(f.k), x: num(f.x, 20), z: num(f.z, 20), r: (f.r | 0) & 3 }));
-      await this.savePlots(); this.broadcast({ t: 'furn', plot: id, furn: pl.furn }, ws);
+      pl.furn = m.furn.slice(0, 240).filter(f => f && FURN_RE.test(String(f.k))).map(f => ({ k: String(f.k), x: num(f.x, 30), z: num(f.z, 30), r: (f.r | 0) & 3, fl: (f.fl | 0) & 3 }));
+      pl.sz = Math.max(0, Math.min(3, m.sz | 0)); pl.fls = Math.max(1, Math.min(4, m.fls | 0 || 1));
+      await this.savePlots(); this.broadcast({ t: 'furn', plot: id, furn: pl.furn, sz: pl.sz, fls: pl.fls }, ws);
     } else if (m.t === 'sell') {
       const id = String(m.plot || ''), pl = this.plots[id];
       if (pl && pl.oid === me.oid) { delete this.plots[id]; await this.savePlots(); this.broadcast({ t: 'plot', id, oid: '', name: '' }); this.send(ws, { t: 'plot', id, oid: '', name: '' }); }
     } else if (m.t === 'visit') {
       const pl = this.plots[String(m.plot || '')];
-      if (pl) this.send(ws, { t: 'home', plot: String(m.plot), name: pl.name, furn: pl.furn || [] });
+      if (pl) this.send(ws, { t: 'home', plot: String(m.plot), name: pl.name, furn: pl.furn || [], sz: pl.sz | 0, fls: pl.fls || 1 });
     } else if (m.t === 'chat') {
       const now = Date.now(); if (now - (me.t || 0) < 900) return; me.t = now; ws.serializeAttachment(me);
       const text = clean(m.text, 120); if (text) this.broadcast({ t: 'chat', id: me.id, name: me.name, text });

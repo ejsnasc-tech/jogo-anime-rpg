@@ -10,14 +10,15 @@ import { itemGemSum, SLOTS, SLOT_ORDER, EQUIP_KEYS, KINDS, WEAPON_KIND, OFF_KIND
 import { itemArt, ghostArt } from './itemart.js';
 import { buildCity, CITY_R, CITY_SPAWN, PLOTS } from './city.js';
 import { createNet, nameTag, NET_URL } from './net.js';
+import { makeBiome, groundTex, BIOME_INFO } from './biomes.js';
 import { QUESTS, ACH, LOGIN_DAYS, ensureMeta, loginState, claimLogin, loginReward, questReward, offlineGain } from './meta.js';
 import { initSocial } from './social.js';
 import { openAuth, api, getSess, setSess } from './auth.js';
-import { ROOMS, FURN, furnByKey, makeFurniture, footprint, buildRoom } from './home.js';
+import { ROOMS, SZ_MAX, FLOOR_TINT, roomDims, FURN, furnByKey, makeFurniture, footprint, buildRoom } from './home.js';
 
 const WORLD = 200;          // metade do tamanho do mapa
 const PLAYER_SPEED = 7;
-const MAX_TEAM = 3;
+const MAX_TEAM = 1;
 
 const testing = new URLSearchParams(location.search).has('selftest');
 const _q0 = new URLSearchParams(location.search);
@@ -29,7 +30,7 @@ const $ = (id) => document.getElementById(id);
 // ===================== Save =====================
 const defaults = () => ({
   gold: 0, gems: 80, cash: 0, level: 1, kills: 0,
-  gembag: {}, owned: ['kaito'], team: ['kaito'], upgrades: { atk: 0, hp: 0 }, stars: {},
+  profs: {}, profOwned: [], gembag: {}, owned: ['kaito'], team: ['kaito'], upgrades: { atk: 0, hp: 0 }, stars: {},
   pets: ['fox'], activePet: 'fox', petStars: {},
   skills: {}, xp: 0, skillPts: 0, items: [], equip: {}, mats: {}, homes: {}, stock: {}, maxAct: 0, storyDone: false,
   act: 0, stage: 1, stageKills: 0, endless: false, seen: {}, account: null, custom: null, lastSeen: Date.now(),
@@ -52,7 +53,7 @@ function load() {
   s.owned = s.owned.filter(id => ids.includes(id)); if (!s.owned.length) s.owned = ['kaito'];
   s.team = s.team.filter(id => s.owned.includes(id)).slice(0, MAX_TEAM); if (!s.team.length) s.team = [s.owned[0]];
   if (!s.pets.length) s.pets = ['fox'];
-  if (s.custom) { if (!s.owned.includes('player')) s.owned.push('player'); if (!s.owned.includes('kaito')) s.owned.push('kaito'); s.team = ['player'].concat(s.team.filter(id => id !== 'player' && s.owned.includes(id))).slice(0, MAX_TEAM); if (s.team.length < 2) s.team.push('kaito'); }
+  if (s.custom) { if (!s.owned.includes('player')) s.owned.push('player'); if (!s.owned.includes('kaito')) s.owned.push('kaito'); s.team = ['player']; if (!s.profs) s.profs = {}; if (!s.profOwned || !s.profOwned.length) s.profOwned = [s.custom.cls]; if (!s.profOwned.includes(s.custom.cls)) s.profOwned.push(s.custom.cls); }
   return s;
 }
 let cloudDirty = false, cloudBusy = false;
@@ -85,7 +86,8 @@ scene.fog = new THREE.Fog(0xcfe9ff, 35, 140);
 const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 300);
 const CAM_OFFSET = new THREE.Vector3(0, 8.2, 10);
 const _co = new THREE.Vector3(); let zoom = 1, zoomT = 1;
-const setZoom = (f) => { zoomT = Math.min(2.8, Math.max(0.55, f)); };
+const setZoom = (f) => { zoomT = Math.min(decor.on ? 7 : 2.8, Math.max(0.55, f)); };
+const CAM_DECOR = new THREE.Vector3(0, 13, 5.2);
 
 const hemi = new THREE.HemisphereLight(0xffffff, 0x4a7a3a, 0.85); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff2d6, 1.1);
@@ -129,7 +131,8 @@ function groundH(x, z) { const d = riverDepth(x, z); return hillH(x, z) * (1 - d
 const BR = (() => { let z = -30, x = 0; for (let i = 0; i < 8; i++) { x = trailX(z); z = riverZ(x); } return { x, z, len: riverHW(x) + 5.5 }; })();
 function walkY(x, z) { if (Math.abs(x - BR.x) < 2.6 && Math.abs(z - BR.z) < BR.len) return 0.45; return groundH(x, z); }
 
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), new THREE.MeshStandardMaterial({ map: grassTexture(), roughness: 1 }));
+const grassMap = grassTexture();
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), new THREE.MeshStandardMaterial({ map: grassMap, roughness: 1 }));
 ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);   // chão plano: só na cidade
 const terrain = (() => {
   const g = new THREE.PlaneGeometry(520, 520, 260, 260); g.rotateX(-Math.PI / 2);
@@ -140,9 +143,20 @@ const terrain = (() => {
 })();
 ground.visible = false;   // começa no campo; o chão plano só aparece na cidade
 
+// ---- cenários por setor (cada reino tem o seu bioma) ----
+const biomes = {}; let biomeNotify = false, curBiome = null, biomeFar = 140, baseTrees = [], baseRock = null, mtnMat = null, capMat = null, cloudMat = null;
 function applyAct() {
-  const r = REALMS[ACTS[state.act].realm];
-  setSky(r.sky); scene.fog.color.set(r.fog); ground.material.color.set(r.ground);
+  const key = ACTS[state.act].realm, r = REALMS[key], bi = BIOME_INFO[key];
+  setSky(r.sky); scene.fog.color.set(r.fog);
+  ground.material.map = groundTex(key); ground.material.color.set(0xffffff); ground.material.needsUpdate = true;
+  hemi.groundColor.set(bi.hemi); scene.fog.near = bi.fog[0]; biomeFar = bi.fog[1];
+  if (mtnMat) { mtnMat.color.set(bi.mtn); capMat.color.set(bi.cap); cloudMat.color.set(bi.cloud); }
+  baseTrees.forEach(m => { m.visible = key === 'primeva'; }); if (baseRock) baseRock.visible = key !== 'mares';
+  Object.keys(biomes).forEach(k => { biomes[k].visible = k === key; });
+  if (!biomes[key]) { biomes[key] = makeBiome(key, { groundH, riverDepth, trailX, WORLD }); fieldGroup.add(biomes[key]); }
+  biomes[key].visible = true;
+  if (curBiome && curBiome !== key && biomeNotify) toast(r.icon + ' Novo setor: ' + bi.title + ' — ' + bi.sub);
+  curBiome = key;
 }
 
 const fieldGroup = new THREE.Group(); scene.add(fieldGroup);
@@ -183,6 +197,7 @@ const fieldGroup = new THREE.Group(); scene.add(fieldGroup);
   for (; ti < N_TREE + N_EDGE; ti++) addTree(9999, 9999, 1);
   for (; ri < N_ROCK + N_EDGE; ri++) addRock(9999, 9999, 1, 1, 1);
   [trunk, leaf, rock].forEach(m => { m.castShadow = m !== rock || true; m.frustumCulled = false; m.instanceMatrix.needsUpdate = true; fieldGroup.add(m); });
+  baseTrees = [trunk, leaf]; baseRock = rock;
 })();
 
 // Cenário: montanhas, nuvens, torres, rio, trilha e flores
@@ -191,13 +206,14 @@ let waterTex = null;
 const RUINS = [], chestMeshes = [];
 (function scenery() {
   const mat = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 1, flatShading: true }, o));
+  mtnMat = mat(0x8fa6bd); capMat = mat(0xffffff);
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * Math.PI * 2 + Math.random() * 0.2, r = 115 + Math.random() * 25, h = 30 + Math.random() * 28, w = 22 + Math.random() * 16;
-    const m = new THREE.Mesh(new THREE.ConeGeometry(w, h, 6), mat(0x8fa6bd)); m.position.set(Math.cos(a) * r, h / 2 - 1, Math.sin(a) * r);
-    const cap = new THREE.Mesh(new THREE.ConeGeometry(w * 0.34, h * 0.3, 6), mat(0xffffff)); cap.position.set(m.position.x, h * 0.85 - 1, m.position.z);
+    const m = new THREE.Mesh(new THREE.ConeGeometry(w, h, 6), mtnMat); m.position.set(Math.cos(a) * r, h / 2 - 1, Math.sin(a) * r);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(w * 0.34, h * 0.3, 6), capMat); cap.position.set(m.position.x, h * 0.85 - 1, m.position.z);
     farGroup.add(m, cap);
   }
-  const cm = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, fog: false });
+  const cm = cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, fog: false });
   for (let i = 0; i < 16; i++) {
     const g = new THREE.Group();
     for (let k = 0; k < 4; k++) { const s = new THREE.Mesh(new THREE.SphereGeometry(4 + Math.random() * 3, 10, 8), cm); s.position.set(k * 5 - 8, Math.random() * 2, Math.random() * 3); s.scale.y = 0.55; g.add(s); }
@@ -386,7 +402,7 @@ let ev = null, nextEvT = 150 + Math.random() * 100, dayT = 0.3, night = 0, weath
 let bossRef = null;
 let panelOpen = false, dialogOpen = false, creatorOpen = false;
 let inCity = false, city = null, nearNpc = null, walkGoal = null, invOpen = false, mmT = 0;
-let inHome = null, homeRoom = null, homeVisit = null;
+let inHome = null, homeRoom = null, homeVisit = null, homeFloor = 0;
 const owners = {}; let myOid = ''; const recover = new Set();
 const decor = { on: false, sel: null, drag: false, mark: null };
 const isPaused = () => panelOpen || dialogOpen || creatorOpen || invOpen;
@@ -466,7 +482,7 @@ function switchHero(i) {
 
 // ===================== HUD =====================
 function refreshHud() {
-  $('hname').textContent = 'Nv.' + state.level + ' ' + hero.name.split(' ')[0] + (state.meta && state.meta.title ? ' «' + state.meta.title + '»' : '');
+  $('hname').textContent = CLASSES[hero.cls].icon + ' Nv.' + state.level + ' ' + hero.name.split(' ')[0] + (state.meta && state.meta.title ? ' «' + state.meta.title + '»' : '');
   { const n = questsClaimable(); $('questbtn').textContent = '📜 MISSÕES' + (n ? ' ❗' + n : ''); }
   $('hgems').textContent = '💎' + state.gems; $('hgold').textContent = '🪙' + state.gold; $('hcash').textContent = '💵' + state.cash;
   const a = curAct();
@@ -530,7 +546,7 @@ function updateWorld(dt) {
     const rainy = weather === 'rain' ? 1 : 0;
     hemi.intensity = 0.85 - 0.45 * night - 0.1 * rainy; sun.intensity = 1.1 - 0.8 * night - 0.35 * rainy;
     ov.style.opacity = Math.min(0.62, night * 0.5 + rainy * 0.12).toFixed(3);
-    const fogFar = weather === 'fog' ? 62 : 140; scene.fog.far += (fogFar - scene.fog.far) * Math.min(1, dt * 0.6);
+    const fogFar = weather === 'fog' ? Math.min(62, biomeFar) : biomeFar; scene.fog.far += (fogFar - scene.fog.far) * Math.min(1, dt * 0.6);
     if (isNight !== night > 0.55) { isNight = night > 0.55; refreshHud(); if (!inCity) toast(isNight ? '🌙 A noite caiu: magos e elites aparecem mais!' : '🌅 Amanheceu'); }
     if (rainy) {
       if (!rainPts) {
@@ -816,26 +832,32 @@ function openPanel(title, rows) {
   $('panel').classList.add('open');
 }
 
-function toggleTeam(id) {
-  const curId = hero.id, i = state.team.indexOf(id);
-  if (i >= 0) { if (state.team.length > 1) state.team.splice(i, 1); }
-  else if (state.team.length < MAX_TEAM) state.team.push(id);
-  const ni = state.team.indexOf(curId);
-  activeIdx = ni >= 0 ? ni : 0;
-  save(state); setHero(); openCrew();
+// ---- Vocações: o personagem pode dominar todas as classes; cada uma tem nível, habilidades e equipamento próprios ----
+const PROF_NEW = () => ({ level: 1, xp: 0, skillPts: 0, skills: {}, equip: {}, upgrades: { atk: 0, hp: 0 } });
+const profCost = () => 100 + 80 * (state.profOwned.length - 1);
+const profNow = () => ({ level: state.level, xp: state.xp, skillPts: state.skillPts, skills: state.skills, equip: state.equip, upgrades: state.upgrades });
+const profData = (c) => c === mainCls() ? profNow() : (state.profs[c] || PROF_NEW());
+let profReady = 0;
+function changeProf(cls) {
+  if (cls === mainCls() || !state.profOwned.includes(cls)) return;
+  if (dg || wb) { toast('Saia da masmorra / chefe mundial antes de trocar de vocação'); return; }
+  if (T < profReady) { toast('Aguarde um instante para trocar de novo'); return; }
+  profReady = T + 3;
+  state.profs[mainCls()] = profNow();
+  const t = state.profs[cls] || PROF_NEW(); delete state.profs[cls];
+  state.level = t.level; state.xp = t.xp; state.skillPts = t.skillPts; state.skills = t.skills; state.equip = t.equip; state.upgrades = t.upgrades;
+  state.custom = Object.assign({}, state.custom, { cls, model: undefined }); upsertPlayer(state.custom);
+  skillReady.player = 0; clearEnemies(); setHero(); recalcHp(); hp = maxHp; renderSkillChips(); refreshHud();
+  save(state); ringFx(player.position, hero.color, 4, 0.6); toast(CLASSES[cls].icon + ' Agora você é ' + CLASSES[cls].name + ' Nv.' + state.level);
 }
-
-function openCrew(msg) {
-  const rows = [{ head: true, text: (msg ? msg + '\n' : '') + 'SEU PERSONAGEM + até ' + (MAX_TEAM - 1) + ' ALIADOS. Os aliados lutam sozinhos ao seu lado; você só controla o seu personagem.' }];
-  rows.push({ text: 'Invocar herói\nRaro 55% • Épico 35% • Lendário 10%\nRepetido = +10% ATK', btn: '💎30', enabled: state.gems >= 30, fn: summon });
-  HEROES.forEach(h => {
-    const c = CLASSES[h.cls], r = REALMS[h.realm], owned = state.owned.includes(h.id), inTeam = state.team.includes(h.id);
-    const text = c.icon + ' ' + h.name + '  [' + RARITY[h.rar].name + ']\n' + r.icon + ' ' + r.name + ' • ' + c.name + ' • ATK ' + h.atk + (owned ? '  •  ★' + (state.stars[h.id] || 0) : '');
-    if (!owned) {
-      if (h.cost > 0) rows.push({ text, btn: '🪙' + h.cost, enabled: state.gold >= h.cost, fn: () => { state.gold -= h.cost; state.owned.push(h.id); if (state.team.length < MAX_TEAM) state.team.push(h.id); save(state); refreshHud(); refreshTeam(); openCrew(); } });
-      else rows.push({ text: text + '\n🔒 Conquiste na história ou invoque', btn: '🔒', enabled: false });
-    } else if (h.id === 'player') rows.push({ text, btn: 'VOCÊ', enabled: false });
-    else rows.push({ text, btn: inTeam ? (state.team.length > 1 ? 'REMOVER' : 'NA EQUIPE') : 'ADICIONAR', enabled: inTeam ? state.team.length > 1 : state.team.length < MAX_TEAM, fn: () => toggleTeam(h.id) });
+function openProfs(msg) {
+  const rows = [{ head: true, text: (msg ? msg + '\n' : '') + '🎓 VOCAÇÕES\nVocê pode dominar TODAS as vocações. Cada uma tem o próprio nível, habilidades e equipamento: ao trocar, a outra fica guardada e você volta exatamente de onde parou. Uma vocação nova começa do nível 1.\nPróxima vocação a desbloquear: 💎' + profCost() }];
+  Object.keys(CLASSES).forEach(c => {
+    const d = CLASSES[c], own = state.profOwned.includes(c), pd = profData(c), cur = c === mainCls();
+    const text = d.icon + ' ' + d.name + ' — ' + d.role + '\n' + (own ? 'Nv.' + pd.level + (cur ? '   •   ATUAL' : '   •   ' + Object.keys(pd.skills).length + ' habilidade(s)') : d.desc);
+    if (cur) rows.push({ text, btn: '✔ ATUAL', enabled: false });
+    else if (own) rows.push({ text, btn: 'TROCAR', fn: () => { changeProf(c); openProfs(); } });
+    else rows.push({ text, btn: '💎' + profCost(), enabled: state.gems >= profCost(), fn: () => { state.gems -= profCost(); state.profOwned.push(c); save(state); refreshHud(); openProfs('🔓 ' + d.name + ' desbloqueada! Toque em TROCAR para começar do nível 1.'); } });
   });
   rows.push({ head: true, text: '— Criaturas (mascote + montaria) —' });
   rows.push({ text: 'Invocar criatura\nRepetida = +10% dano', btn: '💎40', enabled: state.gems >= 40, fn: summonPet });
@@ -843,10 +865,11 @@ function openCrew(msg) {
     const owned = state.pets.includes(p.id);
     const text = p.name + '\nDano ' + Math.round(p.dmg * 100) + '%  •  Velocidade montado x' + p.speed + (owned ? '  •  ★' + (state.petStars[p.id] || 0) : '') + '\nBônus: ' + p.perk.txt + '  •  Montado: atravessa a água sem lentidão';
     if (!owned) rows.push({ text, btn: 'BLOQUEADO', enabled: false });
-    else rows.push({ text, btn: state.activePet === p.id ? 'ATIVO' : 'USAR', enabled: state.activePet !== p.id, fn: () => { state.activePet = p.id; save(state); setPet(); openCrew(); } });
+    else rows.push({ text, btn: state.activePet === p.id ? 'ATIVO' : 'USAR', enabled: state.activePet !== p.id, fn: () => { state.activePet = p.id; save(state); setPet(); openProfs(); } });
   });
-  openPanel('CREW', rows);
+  openPanel('🎓 VOCAÇÕES', rows);
 }
+const openCrew = openProfs;
 
 function openProfile(keep) {
   const st = keep ? $('card').scrollTop : 0;
@@ -901,14 +924,13 @@ function summonPet() {
   let r = Math.random() * 100, pick = PETS[0];
   for (const p of PETS) { r -= p.weight; if (r <= 0) { pick = p; break; } }
   if (state.pets.includes(pick.id)) state.petStars[pick.id] = (state.petStars[pick.id] || 0) + 1; else state.pets.push(pick.id);
-  save(state); refreshHud(); openCrew(pick.name.split(',')[0] + ' obtido!');
+  save(state); refreshHud(); openProfs(pick.name.split(',')[0] + ' obtido!');
 }
 
 function unlockHero(id) {
   const h = HEROES.find(x => x.id === id); if (!h) return;
   if (!state.owned.includes(id)) state.owned.push(id);
-  if (!state.team.includes(id) && state.team.length < MAX_TEAM) state.team.push(id);
-  toast('✨ ' + h.name + ' se juntou à equipe!'); refreshTeam(); save(state);
+  toast('✨ ' + h.name + ' entrou para a sua história (veja no INDEX)'); save(state);
 }
 
 function toggleMount() {
@@ -1485,7 +1507,7 @@ function setCityMode(on) {
   inCity = on; fieldGroup.visible = !on; ground.visible = on; terrain.visible = !on; if (city) city.group.visible = on;
   clearEnemies(); nearNpc = null; walkGoal = null; $('talk').style.display = 'none';
   if (on) {
-    setSky(['#6ec6ff', '#bfe6ff', '#fff1d6']); scene.fog.color.set(0xdff0ff); ground.material.color.set(0xb5d99c);
+    setSky(['#6ec6ff', '#bfe6ff', '#fff1d6']); scene.fog.color.set(0xdff0ff); ground.material.map = grassMap; ground.material.needsUpdate = true; ground.material.color.set(0xb5d99c); hemi.groundColor.set(0x4a7a3a); scene.fog.near = 35; biomeFar = 140;
     player.position.set(CITY_SPAWN[0], 0, CITY_SPAWN[1]);
   } else {
     applyAct(); player.position.set(0, 0, 0);
@@ -1566,7 +1588,7 @@ function openNpcMenu(n) {
     rows.push({ text: '🛍 Loja de aparências\nAuras e títulos (só cosméticos)', btn: 'ABRIR', fn: () => shop.openCosmetics(back) });
     rows.push({ text: '💎 Comprar gemas\nPacotes (pagamento real em breve)', btn: 'ABRIR', fn: () => shop.openGemPacks(back) });
   }
-  if (n.role === 'summoner') rows.push({ text: '🔮 Invocar heróis e criaturas\nGaste 💎 para chamar aliados', btn: 'ABRIR', fn: () => openCrew() });
+  if (n.role === 'summoner') rows.push({ text: '🎓 Vocações e criaturas\nDesbloqueie novas classes e invoque mascotes', btn: 'ABRIR', fn: () => openProfs() });
   if (n.role === 'map') {
     rows.push({ text: '🗺️ Mapa das florestas\nEscolha para onde viajar', btn: 'ABRIR', fn: () => openMap() });
     rows.push({ text: '🏰 Mapa da cidade\nVeja onde está cada morador', btn: 'ABRIR', fn: () => openCityMap() });
@@ -1672,10 +1694,11 @@ function openPlotMenu(p) {
   const own = state.homes[p.id], o = owners[p.id], other = !own && o && o.oid !== myOid, house = p.kind === 'house', R = ROOMS[p.kind], again = () => openPlotMenu(p);
   const rows = [{ head: true, text: (house ? '🏠 ' : '🏢 ') + p.name + ' — ' + R.label + '\n' + (own ? 'Este lar é seu! Entre para decorar com móveis.' : other ? 'Morada de ' + o.name + '. Você pode visitar e ver a decoração.' : house ? 'Casa ampla para decorar do seu jeito.' : 'Apartamento aconchegante para morar e decorar.') }];
   if (other && o.name === meName()) rows.push({ head: true, text: '⚠ Esta casa tem o mesmo nome que o seu, mas foi comprada em outro navegador/aparelho, por isso você só pode visitar. Para ter acesso de dono, abra PERFIL → “Entrar com um código de conta” e use o código do navegador onde comprou.' });
-  if (own) rows.push({ text: '🚪 Entrar\n' + (own.furn || []).length + ' móvel(is) na sala', btn: 'ENTRAR', fn: () => { closePanel(); enterHome(p); } });
+  if (own) rows.push({ text: '🚪 Entrar\n' + (own.furn || []).length + ' móvel(is) • sala ' + roomDims(p.kind, own.sz).w + '×' + roomDims(p.kind, own.sz).d + ' m • ' + (own.fls || 1) + ' andar(es)', btn: 'ENTRAR', fn: () => { closePanel(); enterHome(p); } });
+  if (own) rows.push({ text: '📐 Ampliar sala / 🏗 Novos andares\nMais espaço para decorar', btn: 'ABRIR', fn: () => openHomeUp(p) });
   else if (other) rows.push({ text: '👀 Visitar a casa de ' + o.name + '\nVeja os móveis dele', btn: 'VISITAR', enabled: !!(net && net.connected), fn: () => { closePanel(); net.send({ t: 'visit', plot: p.id }); } });
   else rows.push({
-    text: (house ? '🛒 Comprar ' : '🔑 Alugar ') + p.name + '\nSala de ' + R.w + '×' + R.d + ' m para mobiliar', btn: '🪙' + p.price, enabled: state.gold >= p.price,
+    text: (house ? '🛒 Comprar ' : '🔑 Alugar ') + p.name + '\nSala de ' + R.w + '×' + R.d + ' m (dá para ampliar e ter mais andares)', btn: '🪙' + p.price, enabled: state.gold >= p.price,
     fn: () => { state.gold -= p.price; state.homes[p.id] = p.kind === 'apt' ? { furn: [], paid: Date.now() + WEEK } : { furn: [] }; track('house'); save(state); refreshHud(); if (net) net.send({ t: 'buy', plot: p.id }); refreshPlots(); closePanel(); toast(house ? '🏠 Casa comprada!' : '🏢 Apartamento alugado!'); again(); },
   });
   if (own) {
@@ -1690,7 +1713,8 @@ function openPlotMenu(p) {
 function enterHome(p, visit) {
   if (!visit && !state.homes[p.id]) return;
   if (inHome) cleanupHome();
-  homeVisit = visit || null; inHome = p; homeRoom = buildRoom(p.kind); homeRoom.items = []; scene.add(homeRoom.group);
+  const hd0 = visit || state.homes[p.id] || {};
+  homeVisit = visit || null; inHome = p; homeRoom = buildRoom(p.kind, hd0.sz | 0); homeRoom.items = []; homeRoom.fls = Math.max(1, Math.min(ROOMS[p.kind].maxFl, hd0.fls | 0 || 1)); homeFloor = 0; scene.add(homeRoom.group);
   const mk = new THREE.Group();
   mk.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffe14d, transparent: true, opacity: 0.28, depthWrite: false })));
   mk.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 0.1, 1)), new THREE.LineBasicMaterial({ color: 0xffe14d })));
@@ -1700,8 +1724,8 @@ function enterHome(p, visit) {
   setSky(['#2b2140', '#4a3a66', '#7a5f8f']); scene.fog.color.set(0x2b2140); ground.material.color.set(0x241c33);
   clearEnemies(); nearNpc = null; walkGoal = null; $('talk').style.display = 'none';
   player.position.set(0, 0, homeRoom.hd - 1.8); facing = Math.PI;
-  setZoom(1.7); zoom = zoomT; syncCam();
-  document.body.classList.add('inhome'); $('minimap').style.display = 'none'; $('homebar').style.display = visit ? 'none' : 'flex'; $('decor').style.display = 'none';
+  setZoom(1.7 + (homeRoom.hw > 9 ? 0.4 : 0)); zoom = zoomT; syncCam(); showFloor(0, true);
+  document.body.classList.add('inhome'); $('minimap').style.display = 'none'; $('decor').style.display = 'none'; updateHomeUi();
   $('citybtn').textContent = '🚪 SAIR'; refreshHud(); toast(visit ? '👀 Visitando a casa de ' + visit.name : '🏠 ' + p.name + ' — toque em DECORAR para mobiliar');
 }
 function cleanupHome() {
@@ -1716,10 +1740,48 @@ function leaveHome() {
   player.position.set(p.door[0], 0, p.door[1]); facing = p.ry; syncCam(); refreshPlots();
 }
 
+// ---- andares, ampliação e interface da casa ----
+function showFloor(n, quiet) {
+  homeFloor = n; homeRoom.items.forEach(m => { m.visible = m.userData.fl === n; });
+  homeRoom.wallM.color.setHex(FLOOR_TINT[n % 4]); decor.sel = null; updateMark(); if (decor.on) renderDecor();
+  if (!quiet) toast('🪜 Andar ' + (n + 1) + ' de ' + homeRoom.fls);
+  updateHomeUi();
+}
+function updateHomeUi() {
+  if (!homeRoom) return;
+  const fl = homeRoom.fls > 1, vis = !!homeVisit;
+  $('flbtn').style.display = fl && !decor.on ? '' : 'none'; $('flbtn').textContent = '🪜 ANDAR ' + (homeFloor + 1) + '/' + homeRoom.fls;
+  $('decfl').style.display = fl ? '' : 'none'; $('decfl').textContent = '🪜 ' + (homeFloor + 1) + '/' + homeRoom.fls;
+  $('decbtn').style.display = vis ? 'none' : ''; $('upbtn').style.display = vis ? 'none' : '';
+  $('homebar').style.display = decor.on || (vis && !fl) ? 'none' : 'flex';
+}
+const cycleFloor = () => { if (homeRoom && homeRoom.fls > 1) showFloor((homeFloor + 1) % homeRoom.fls); };
+function openHomeUp(p, msg) {
+  const h = state.homes[p.id]; if (!h) return;
+  const R = ROOMS[p.kind], sz = h.sz | 0, fls = h.fls || 1, again = (m) => openHomeUp(p, m), after = () => { save(state); refreshHud(); if (net) net.send({ t: 'furn', plot: p.id, furn: h.furn || [], sz: h.sz | 0, fls: h.fls || 1 }); if (inHome && inHome.id === p.id) { const f0 = homeFloor; enterHome(p); showFloor(Math.min(f0, homeRoom.fls - 1), true); } };
+  const rows = [{ text: '◀ Voltar', btn: 'VOLTAR', fn: () => { closePanel(); if (inHome) return; openPlotMenu(p); } }];
+  rows.push({ head: true, text: (msg ? msg + '\n' : '') + '📐 AMPLIAR ' + p.name.toUpperCase() + '\nSala atual: ' + roomDims(p.kind, sz).w + '×' + roomDims(p.kind, sz).d + ' m  •  ' + fls + ' andar(es)\nPague com 🪙 ouro do jogo ou com 💎 gemas (as gemas serão compradas com dinheiro real no futuro).' });
+  if (sz < SZ_MAX) {
+    const n = sz + 1, g = Math.round(p.price * 0.35 * n), gm = 30 * n, nd = roomDims(p.kind, n);
+    rows.push({ text: '📐 Ampliar sala — nível ' + n + '/' + SZ_MAX + '\nNova sala: ' + nd.w + '×' + nd.d + ' m', btns: [
+      { label: '🪙' + g, enabled: state.gold >= g, fn: () => { state.gold -= g; h.sz = n; after(); again('✅ Sala ampliada!'); } },
+      { label: '💎' + gm, enabled: state.gems >= gm, fn: () => { state.gems -= gm; h.sz = n; after(); again('✅ Sala ampliada!'); } },
+    ] });
+  } else rows.push({ text: '📐 Sala no tamanho máximo (' + roomDims(p.kind, SZ_MAX).w + '×' + roomDims(p.kind, SZ_MAX).d + ' m) ✔' });
+  if (fls < R.maxFl) {
+    const gm = 80 * fls, ca = 600 * fls;
+    rows.push({ text: '🏗 Construir andar ' + (fls + 1) + '/' + R.maxFl + '\nMais um piso inteiro para mobiliar (use 🪜 para subir e descer)', btns: [
+      { label: '💎' + gm, enabled: state.gems >= gm, fn: () => { state.gems -= gm; h.fls = fls + 1; after(); again('✅ Novo andar construído!'); } },
+      { label: '💵' + ca, enabled: state.cash >= ca, fn: () => { state.cash -= ca; h.fls = fls + 1; after(); again('✅ Novo andar construído!'); } },
+    ] });
+  } else rows.push({ text: '🏗 Número máximo de andares (' + R.maxFl + ') ✔' });
+  openPanel('📐 AMPLIAR', rows);
+}
+
 function homeSave() {
   if (homeVisit) return;
-  const f = homeRoom.items.map(m => ({ k: m.userData.k, x: m.position.x, z: m.position.z, r: m.userData.r }));
-  state.homes[inHome.id].furn = f; save(state); if (net) net.send({ t: 'furn', plot: inHome.id, furn: f });
+  const f = homeRoom.items.map(m => ({ k: m.userData.k, x: m.position.x, z: m.position.z, r: m.userData.r, fl: m.userData.fl | 0 })), h = state.homes[inHome.id];
+  h.furn = f; save(state); if (net) net.send({ t: 'furn', plot: inHome.id, furn: f, sz: h.sz | 0, fls: h.fls || 1 });
 }
 function placeFurn(m, x, z) {
   const k = m.userData.k, [fw, fd] = footprint(k, m.userData.r), sn = (v) => Math.round(v * 2) / 2, C = THREE.MathUtils.clamp;
@@ -1727,7 +1789,7 @@ function placeFurn(m, x, z) {
   m.position.z = k === 'painting' ? -homeRoom.hd + fd / 2 + 0.02 : C(sn(z), -homeRoom.hd + fd / 2, homeRoom.hd - fd / 2);
 }
 function addFurn(f) {
-  const m = makeFurniture(f.k); m.userData.r = f.r || 0; m.rotation.y = m.userData.r * Math.PI / 2;
+  const m = makeFurniture(f.k); m.userData.r = f.r || 0; m.userData.fl = (f.fl | 0) % homeRoom.fls; m.rotation.y = m.userData.r * Math.PI / 2; m.visible = m.userData.fl === homeFloor;
   homeRoom.group.add(m); homeRoom.items.push(m); placeFurn(m, f.x || 0, f.z || 0); return m;
 }
 function updateMark() {
@@ -1738,7 +1800,7 @@ function updateMark() {
 function buyFurn(f) {
   if (!inHome || homeVisit) return;
   if ((state.stock[f.k] || 0) > 0) state.stock[f.k]--; else if (!f.prem && state.gold >= f.price) { state.gold -= f.price; track('furn'); } else return;
-  const m = addFurn({ k: f.k, x: 0, z: -1, r: 0 }); decor.sel = m; homeSave(); refreshHud(); updateMark(); renderDecor();
+  const m = addFurn({ k: f.k, x: 0, z: -1, r: 0, fl: homeFloor }); decor.sel = m; homeSave(); refreshHud(); updateMark(); renderDecor();
 }
 function rotFurn() { const m = decor.sel; if (!m || m.userData.k === 'painting') return; m.userData.r = (m.userData.r + 1) % 4; m.rotation.y = m.userData.r * Math.PI / 2; placeFurn(m, m.position.x, m.position.z); homeSave(); updateMark(); }
 function delFurn() {
@@ -1762,7 +1824,8 @@ function toggleDecor(on) {
   decor.on = on; decor.sel = null; decor.drag = false; updateMark();
   $('decor').style.display = on ? 'block' : 'none'; $('homebar').style.display = on ? 'none' : 'flex';
   joy.active = false; joy.dx = joy.dy = 0; $('joy-base').style.display = $('joy-knob').style.display = 'none';
-  if (on) { setZoom(1.9); renderDecor(); } else setZoom(1.7);
+  if (on) { renderDecor(); const t2 = Math.tan(camera.fov * Math.PI / 360), D = Math.max(homeRoom.hw * 2.15 / (2 * t2 * camera.aspect), homeRoom.hd * 1.55 / (2 * t2)); setZoom(D / CAM_DECOR.length()); zoom = zoomT; } else { setZoom(1.7 + (homeRoom.hw > 9 ? 0.4 : 0)); }
+  updateHomeUi();
 }
 const _rc = new THREE.Raycaster(), _pl = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), _pt = new THREE.Vector3(), _nd = new THREE.Vector2();
 function floorPoint(cx, cy) {
@@ -1772,6 +1835,7 @@ function floorPoint(cx, cy) {
 function pickFurn(cx, cy) {
   const r = renderer.domElement.getBoundingClientRect(); let best = null, bd = 64;
   homeRoom.items.forEach(m => {
+    if (!m.visible) return;
     const v = new THREE.Vector3(m.position.x, m.userData.k === 'painting' ? 2.2 : 0.9, m.position.z).project(camera); if (v.z > 1) return;
     const d = Math.hypot((v.x * 0.5 + 0.5) * r.width + r.left - cx, (-v.y * 0.5 + 0.5) * r.height + r.top - cy); if (d < bd) { bd = d; best = m; }
   });
@@ -1791,6 +1855,9 @@ $('decbtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (!i
 $('decdone').addEventListener('pointerdown', (e) => { e.stopPropagation(); toggleDecor(false); });
 $('decrot').addEventListener('pointerdown', (e) => { e.stopPropagation(); rotFurn(); });
 $('decdel').addEventListener('pointerdown', (e) => { e.stopPropagation(); delFurn(); });
+$('decfl').addEventListener('pointerdown', (e) => { e.stopPropagation(); cycleFloor(); });
+$('flbtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); cycleFloor(); });
+$('upbtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (!isPaused() && inHome && !homeVisit) openHomeUp(inHome); });
 
 // ===================== Telas: EQUIPAMENTO (boneco) e MOCHILA =====================
 let invSel = null, bagFilter = 'all', invMsg = '', invMode = 'eq';
@@ -1994,20 +2061,20 @@ function syncHomes() {
   Object.keys(state.homes).forEach(id => {
     const o = owners[id];
     if (o && o.oid !== myOid) { delete state.homes[id]; toast('⚠ ' + id + ' já pertence a ' + o.name); }
-    else if (!o && net) { net.send({ t: 'buy', plot: id }); net.send({ t: 'furn', plot: id, furn: state.homes[id].furn || [] }); }
+    else if (!o && net) { net.send({ t: 'buy', plot: id }); net.send({ t: 'furn', plot: id, furn: state.homes[id].furn || [], sz: state.homes[id].sz | 0, fls: state.homes[id].fls || 1 }); }
   });
   save(state); refreshPlots();
 }
 function netEvent(m) {
   if (m.t === 'plot') { owners[m.id] = { oid: m.oid, name: m.name }; refreshPlots(); }
   else if (m.t === 'buyfail') { delete state.homes[m.plot]; refreshPlots(); toast('⚠ Alguém comprou essa casa antes'); }
-  else if (m.t === 'home' && recover.has(m.plot)) { recover.delete(m.plot); if (state.homes[m.plot]) { state.homes[m.plot].furn = m.furn || []; save(state); } toast('🏠 Casa recuperada: ' + m.plot); }
-  else if (m.t === 'home') { const p = PLOTS.find(x => x.id === m.plot); if (p && inCity && !inHome) enterHome(p, { name: m.name, furn: m.furn }); }
+  else if (m.t === 'home' && recover.has(m.plot)) { recover.delete(m.plot); if (state.homes[m.plot]) { state.homes[m.plot].furn = m.furn || []; state.homes[m.plot].sz = m.sz | 0; state.homes[m.plot].fls = m.fls || 1; save(state); } toast('🏠 Casa recuperada: ' + m.plot); }
+  else if (m.t === 'home') { const p = PLOTS.find(x => x.id === m.plot); if (p && inCity && !inHome) enterHome(p, { name: m.name, furn: m.furn, sz: m.sz | 0, fls: m.fls || 1 }); }
   else if (m.t === 'hello') {
     myOid = m.oid || ''; Object.keys(owners).forEach(k => delete owners[k]); Object.assign(owners, m.plots || {}); syncHomes(); netId = m.id; remotes.forEach((r, id) => { if (id === netId) dropRemote(id); }); (m.players || []).forEach(addRemote); refreshNet(); }
   else if (m.t === 'join') addRemote(m.p);
   else if (m.t === 'leave') dropRemote(m.id);
-  else if (m.t === 'furn') { if (homeVisit && homeRoom && inHome.id === m.plot) { homeRoom.items.forEach(x => homeRoom.group.remove(x)); homeRoom.items.length = 0; (m.furn || []).forEach(f => addFurn(f)); } }
+  else if (m.t === 'furn') { if (homeVisit && homeRoom && inHome.id === m.plot) { const pl0 = inHome; enterHome(pl0, { name: homeVisit.name, furn: m.furn || [], sz: m.sz | 0, fls: m.fls || 1 }); } }
   else if (m.t === 'move') { const r = remotes.get(m.id); if (r) { r.x = m.x; r.z = m.z; r.f = m.f; r.mv = m.mv; r.w = m.w; r.rm = m.rm || ''; } }
   else if (m.t === 'host') { if (m.rm === rmCur) { const was = isHost(); rmHost = m.host; rmN = m.n || 1; if (was !== isHost()) { clearEnemies(); if (isHost() && !state.endless && state.stage === 5) spawnBoss(); } refreshHud(); } }
   else if (m.t === 'rl') onRelay(m);
@@ -2241,9 +2308,10 @@ function frame() {
   updateNet(dt);
   const p = player.position;
   zoom += (zoomT - zoom) * Math.min(1, dt * 8);
-  camera.position.lerp(new THREE.Vector3(p.x, 0, p.z).add(_co.copy(CAM_OFFSET).multiplyScalar(zoom)), Math.min(1, dt * 6));
+  const dcm = decor.on && homeRoom, cx = dcm ? 0 : p.x, cz = dcm ? 1.2 : p.z;
+  camera.position.lerp(new THREE.Vector3(cx, 0, cz).add(_co.copy(dcm ? CAM_DECOR : CAM_OFFSET).multiplyScalar(zoom)), Math.min(1, dt * (dcm ? 9 : 6)));
   if (shake > 0) { shake -= dt; camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake; }
-  camera.lookAt(p.x, 0.8, p.z);
+  camera.lookAt(cx, dcm ? 0 : 0.8, cz);
   farGroup.position.set(p.x, 0, p.z);
   sun.position.set(p.x + 10, 18, p.z + 7); sun.target.position.copy(p);
   renderer.render(scene, camera);
@@ -2276,7 +2344,7 @@ if (qs.has('citymap')) { setTimeout(() => openCityMap(), 300); }
 if (qs.has('loot')) { for (let i = 0; i < 12; i++) giveItem(newItem(SLOT_ORDER[i % 8], i % 3, i % 4, mainCls())); state.gold = 900; state.mats[0] = 7; }
 if (qs.get('npc')) { setCityMode(true); openNpc(city.npcs.find(n => n.role === qs.get('npc'))); }
 if (qs.has('home')) {
-  state.gold = 99999; setCityMode(true); const hp_ = PLOTS[+qs.get('home') || 0]; state.homes[hp_.id] = state.homes[hp_.id] || { furn: [] }; refreshPlots();
+  state.gold = 99999; setCityMode(true); const hp_ = PLOTS[+qs.get('home') || 0]; state.homes[hp_.id] = state.homes[hp_.id] || { furn: [{ k: 'bed', x: -3, z: -4, r: 0 }, { k: 'sofa', x: 2, z: 1, r: 0 }, { k: 'table', x: 5, z: -3, r: 0, fl: 1 }], sz: +qs.get('homesz') || 0, fls: +qs.get('homefl') || 1 }; refreshPlots();
   if (qs.has('plotview')) { player.position.set(hp_.door[0], 0, hp_.door[1] + 6); syncCam(); } else {
   enterHome(hp_); if (qs.has('furn')) ['bed', 'sofa', 'table', 'shelf', 'rug', 'plant', 'fireplace', 'painting'].forEach((k, i) => addFurn({ k, x: -4 + (i % 4) * 2.6, z: -3 + Math.floor(i / 4) * 3.4, r: 0 }));
   if (qs.has('decor')) toggleDecor(true); }
@@ -2298,9 +2366,8 @@ function applyCustom(custom) {
   state.custom = custom; upsertPlayer(custom);
   if (!state.owned.includes('player')) state.owned.push('player');
   if (!state.owned.includes('kaito')) state.owned.push('kaito');
-  const rest = state.team.filter(id => id !== 'player' && state.owned.includes(id));
-  state.team = ['player'].concat(rest).slice(0, MAX_TEAM);
-  if (state.team.length < 2 && !state.team.includes('kaito')) state.team.push('kaito');
+  state.team = ['player']; if (!state.profs) state.profs = {};
+  if (!state.profOwned || !state.profOwned.length) state.profOwned = [custom.cls];
   activeIdx = 0;
 }
 
@@ -2321,11 +2388,11 @@ function editCharacter() { closePanel(); runCreator(); }
 
 let gameStarted = false;
 function startGame() {
-  gameStarted = true;
+  gameStarted = true; biomeNotify = true;
   if (!testing) {
     social.startPolls(); setTimeout(() => checkRent(), 3000); setInterval(() => checkRent(true), 300000);
     const og = offlineGain(state);
-    if (og) { state.gold += og.gold; state.lastSeen = Date.now(); save(state); refreshHud(); setTimeout(() => toast('💤 Enquanto você estava fora (' + (og.mins >= 60 ? Math.floor(og.mins / 60) + 'h' + (og.mins % 60 ? ' ' + og.mins % 60 + 'min' : '') : og.mins + ' min') + '), seus aliados juntaram 🪙' + og.gold), 1500); }
+    if (og) { state.gold += og.gold; state.lastSeen = Date.now(); save(state); refreshHud(); setTimeout(() => toast('💤 Enquanto você estava fora (' + (og.mins >= 60 ? Math.floor(og.mins / 60) + 'h' + (og.mins % 60 ? ' ' + og.mins % 60 + 'min' : '') : og.mins + ' min') + '), seu personagem juntou 🪙' + og.gold), 1500); }
     if (!loginState(state).got) setTimeout(() => toast('🎁 Recompensa de login disponível! Abra 📜 MISSÕES'), og ? 5000 : 2000);
   }
   if (!state.seen.intro) { state.seen.intro = 1; save(state); showDialog(INTRO.concat(ACTS[0].intro)); }
@@ -2472,6 +2539,22 @@ function runSelfTest() {
     if (!(homeBonus().atk >= 0)) throw new Error('bonus casa'); spawnWander(); if (!wander) throw new Error('mercador'); openWanderShop(); dropWander();
     out.push('passe/loja/imoveis/mercador: ok');
     out.push('missoes/conquistas/login/eventos/clima/baus/emotes: ok (conquistas=' + Object.keys(state.meta.ach).length + ')');
+    // vocacoes: cada classe guarda o proprio nivel/habilidades
+    { const c0 = mainCls(), other = Object.keys(CLASSES).find(c => c !== c0); state.level = 7; state.skills = { might: 2 }; state.profOwned = [c0, other]; state.profs = {};
+      profReady = 0; changeProf(other); if (state.level !== 1 || Object.keys(state.skills).length || mainCls() !== other || hero.cls !== other) throw new Error('vocacao nova nao comecou do zero');
+      state.level = 3; profReady = 0; changeProf(c0); if (state.level !== 7 || state.skills.might !== 2) throw new Error('vocacao nao restaurou o progresso');
+      profReady = 0; changeProf(other); if (state.level !== 3) throw new Error('segunda vocacao perdeu o progresso'); profReady = 0; changeProf(c0); openProfs(); closePanel(); }
+    out.push('vocacoes: ok');
+    // casa ampliada e andares
+    { const pl = PLOTS.find(x => x.kind === 'house'); state.homes[pl.id] = { furn: [], sz: 0, fls: 1 }; enterHome(pl); const hw0 = homeRoom.hw; leaveHome();
+      state.homes[pl.id].sz = 2; state.homes[pl.id].fls = 2; enterHome(pl); if (!(homeRoom.hw > hw0) || homeRoom.fls !== 2) throw new Error('casa nao ampliou');
+      state.stock.bed = 1; buyFurn(furnByKey('bed')); showFloor(1, true); buyFurn(furnByKey('table')); if (!homeRoom.items.find(m => m.userData.k === 'table').visible) throw new Error('movel do andar 2 invisivel');
+      if (homeRoom.items.find(m => m.userData.k === 'bed').visible) throw new Error('movel do andar 1 aparece no 2'); homeSave(); leaveHome();
+      enterHome(pl); if (homeRoom.items.length !== 2) throw new Error('moveis por andar nao salvaram'); toggleDecor(true); if (!(zoomT > 2.5)) throw new Error('camera de decoracao'); toggleDecor(false); openHomeUp(pl); closePanel(); leaveHome(); }
+    out.push('casas ampliadas/andares: ok');
+    // cenarios por setor
+    { ACTS.forEach((a, i) => { state.act = i; applyAct(); }); state.act = 0; state.stage = 1; applyAct(); }
+    out.push('cenarios: ok');
     for (let i = 0; i < 120; i++) update(0.05);
     out.push('SELFTEST OK');
   } catch (err) { out.push('ERRO: ' + err.message + '\n' + (err.stack || '')); }

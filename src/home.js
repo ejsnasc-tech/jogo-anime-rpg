@@ -2,9 +2,12 @@
 import * as THREE from 'three';
 
 export const ROOMS = {
-  house: { w: 14, d: 12, label: 'Casa' },
-  apt: { w: 10, d: 9, label: 'Apartamento' },
+  house: { w: 18, d: 15, label: 'Casa', ew: 4, ed: 3, maxFl: 4 },
+  apt: { w: 12, d: 10, label: 'Apartamento', ew: 3, ed: 2.5, maxFl: 2 },
 };
+export const SZ_MAX = 3;
+export const roomDims = (kind, sz) => { const R = ROOMS[kind], n = Math.max(0, Math.min(SZ_MAX, sz | 0)); return { w: R.w + R.ew * n, d: R.d + R.ed * n }; };
+export const FLOOR_TINT = [0xeadfc8, 0xdbe6f2, 0xf2dfe8, 0xdff0df];
 
 const M = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.9, flatShading: true }, o));
 function part(parent, geo, mat, x, y, z) { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; parent.add(m); return m; }
@@ -83,11 +86,11 @@ function plankTexture() {
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
-export function buildRoom(kind) {
-  const R = ROOMS[kind], hw = R.w / 2, hd = R.d / 2, g = new THREE.Group();
+export function buildRoom(kind, sz) {
+  const R = roomDims(kind, sz), hw = R.w / 2, hd = R.d / 2, g = new THREE.Group();
   const tex = plankTexture(); tex.repeat.set(R.w / 4, R.d / 4);
   const floor = part(g, B(R.w, 0.3, R.d), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }), 0, -0.15, 0); floor.castShadow = false;
-  const wallM = M(kind === 'house' ? 0xeadfc8 : 0xdfe6ee), trim = M(0x6b4423), H = 5.2;
+  const wallM = M(kind === 'house' ? 0xeadfc8 : 0xdfe6ee), trim = M(0x6b4423), H = 5.6;
   part(g, B(R.w + 0.6, H, 0.4), wallM, 0, H / 2, -hd - 0.2);
   part(g, B(0.4, H, R.d + 0.4), wallM, -hw - 0.2, H / 2, 0); part(g, B(0.4, H, R.d + 0.4), wallM, hw + 0.2, H / 2, 0);
   part(g, B(R.w, 0.25, 0.2), trim, 0, 0.12, -hd + 0.1); part(g, B(0.2, 0.25, R.d), trim, -hw + 0.1, 0.12, 0); part(g, B(0.2, 0.25, R.d), trim, hw - 0.1, 0.12, 0);
@@ -99,6 +102,6 @@ export function buildRoom(kind) {
   // porta de saida na frente (arco)
   part(g, B(0.3, 3.4, 0.3), trim, -1.4, 1.7, hd); part(g, B(0.3, 3.4, 0.3), trim, 1.4, 1.7, hd);
   part(g, B(2.2, 0.06, 0.9), M(0xc0392b), 0, 0.03, hd - 0.7);
-  const L = new THREE.PointLight(0xffe2b0, 28, 30, 1.6); L.position.set(0, 4.3, 0); g.add(L);
-  return { group: g, hw, hd, kind };
+  [[0, 0], [-hw * 0.5, -hd * 0.45], [hw * 0.5, -hd * 0.45], [-hw * 0.5, hd * 0.45], [hw * 0.5, hd * 0.45]].forEach(([x, z]) => { const L = new THREE.PointLight(0xffe2b0, 22, Math.max(20, R.w * 1.1), 1.6); L.position.set(x, 4.6, z); g.add(L); });
+  return { group: g, hw, hd, kind, wallM };
 }
