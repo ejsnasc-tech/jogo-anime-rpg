@@ -11,6 +11,8 @@ import { itemArt, ghostArt } from './itemart.js';
 import { buildCity, CITY_R, CITY_SPAWN, PLOTS } from './city.js';
 import { createNet, nameTag, NET_URL } from './net.js';
 import { makeBiome, groundTex, BIOME_INFO } from './biomes.js';
+import { EXTRA_PETS } from './pets.js';
+const IMG = ((import.meta.env && import.meta.env.BASE_URL) || './') + 'img/';
 import { QUESTS, ACH, LOGIN_DAYS, ensureMeta, loginState, claimLogin, loginReward, questReward, offlineGain } from './meta.js';
 import { initSocial } from './social.js';
 import { openAuth, api, getSess, setSess } from './auth.js';
@@ -371,8 +373,9 @@ function makeDragon() {
 // seat = altura do assento montado; speed = bônus de velocidade montado
 const PETS = [
   { id: 'fox',    perk: { gold: 0.10, txt: '+10% de ouro' }, name: 'Kitsune, Raposa de Gelo',    make: makeFox,    scale: 1,    mountScale: 1.7, seat: 1.6, speed: 1.3, dmg: 0.6, rate: 1.5, color: 0x7fdcff, weight: 50 },
-  { id: 'rhino',  perk: { crit: 0.05, txt: '+5% de crítico' }, name: 'Rhino Lilás, Trovão Roxo',   make: makeRhino,  scale: 0.8,  mountScale: 1.4, seat: 2.1, speed: 1.6, dmg: 0.8, rate: 1.8, color: 0xc9a0ff, weight: 30 },
-  { id: 'dragon', perk: { regen: 0.012, txt: 'Regenera 1,2% da vida por segundo' }, name: 'Glaciar, Dragão de Cristal', make: makeDragon, scale: 0.55, mountScale: 1.1, seat: 2.2, speed: 1.9, dmg: 1.3, rate: 2.2, color: 0x6fe3ff, weight: 20 },
+  { id: 'rhino',  perk: { crit: 0.05, txt: '+5% de crítico' }, price: { gold: 3500 }, name: 'Rhino Lilás, Trovão Roxo',   make: makeRhino,  scale: 0.8,  mountScale: 1.4, seat: 2.1, speed: 1.6, dmg: 0.8, rate: 1.8, color: 0xc9a0ff, weight: 30 },
+  { id: 'dragon', perk: { regen: 0.012, txt: 'Regenera 1,2% da vida por segundo' }, price: { gems: 300 }, name: 'Glaciar, Dragão de Cristal', make: makeDragon, scale: 0.55, mountScale: 1.1, seat: 2.2, speed: 1.9, dmg: 1.3, rate: 2.2, color: 0x6fe3ff, weight: 20 },
+  ...EXTRA_PETS,
 ];
 
 const bulletGeo = new THREE.SphereGeometry(0.2, 10, 10);
@@ -431,7 +434,7 @@ function atkPower() {
   m *= 1 + sk('might') * 0.12 + homeBonus().atk;
   if (Date.now() < (state.rest || 0)) m *= 1.15;
   if (sk('bulwark') && hp < maxHp * 0.5) m *= 1 + sk('bulwark') * 0.1;
-  m *= 1 + statSum('atk');
+  m *= 1 + statSum('atk') + petPerk('atk');
   if (T < bearUntil) m *= 2;
   if (hero.cls === 'sorcerer') m *= 1 + overload / 100 * 0.6 * (1 + sk('overload') * 0.25);
   return Math.max(1, Math.round(hero.atk * m));
@@ -816,7 +819,8 @@ function openPanel(title, rows) {
   const h = document.createElement('h2'); h.textContent = title; card.appendChild(h);
   rows.forEach(r => {
     const row = document.createElement('div'); row.className = 'prow' + (r.head ? ' head' : '');
-    const t = document.createElement('span'); t.textContent = r.text; if (r.color) t.style.color = r.color; row.appendChild(t);
+    if (r.img) { const im = document.createElement('img'); im.src = IMG + r.img; im.alt = ''; im.style.cssText = 'width:64px;height:64px;border-radius:12px;object-fit:cover;flex:none;margin-right:10px;border:2px solid #f5c542'; im.onerror = () => im.remove(); row.appendChild(im); }
+    const t = document.createElement('span'); t.style.flex = '1'; t.textContent = r.text; if (r.color) t.style.color = r.color; row.appendChild(t);
     const bl = r.btns || (r.btn ? [{ label: r.btn, fn: r.fn, enabled: r.enabled }] : []);
     if (bl.length) {
       const wrap = document.createElement('div'); wrap.style.cssText = 'display:flex;flex-direction:column;gap:6px';
@@ -855,19 +859,29 @@ function openProfs(msg) {
   Object.keys(CLASSES).forEach(c => {
     const d = CLASSES[c], own = state.profOwned.includes(c), pd = profData(c), cur = c === mainCls();
     const text = d.icon + ' ' + d.name + ' — ' + d.role + '\n' + (own ? 'Nv.' + pd.level + (cur ? '   •   ATUAL' : '   •   ' + Object.keys(pd.skills).length + ' habilidade(s)') : d.desc);
-    if (cur) rows.push({ text, btn: '✔ ATUAL', enabled: false });
-    else if (own) rows.push({ text, btn: 'TROCAR', fn: () => { changeProf(c); openProfs(); } });
-    else rows.push({ text, btn: '💎' + profCost(), enabled: state.gems >= profCost(), fn: () => { state.gems -= profCost(); state.profOwned.push(c); save(state); refreshHud(); openProfs('🔓 ' + d.name + ' desbloqueada! Toque em TROCAR para começar do nível 1.'); } });
+    if (cur) rows.push({ img: 'classes/' + c + '.webp', text, btn: '✔ ATUAL', enabled: false });
+    else if (own) rows.push({ img: 'classes/' + c + '.webp', text, btn: 'TROCAR', fn: () => { changeProf(c); openProfs(); } });
+    else rows.push({ img: 'classes/' + c + '.webp', text, btn: '💎' + profCost(), enabled: state.gems >= profCost(), fn: () => { state.gems -= profCost(); state.profOwned.push(c); save(state); refreshHud(); openProfs('🔓 ' + d.name + ' desbloqueada! Toque em TROCAR para começar do nível 1.'); } });
   });
   rows.push({ head: true, text: '— Criaturas (mascote + montaria) —' });
-  rows.push({ text: 'Invocar criatura\nRepetida = +10% dano', btn: '💎40', enabled: state.gems >= 40, fn: summonPet });
+  rows.push({ text: '🐾 Loja de Criaturas\n' + PETS.length + ' criaturas para comprar ou invocar. Você tem ' + state.pets.length + '.', btn: 'ABRIR', fn: () => openPets() });
+  openPanel('🎓 VOCAÇÕES', rows);
+}
+const priceTxt = (pr) => pr.gems ? '💎' + pr.gems : '🪙' + pr.gold;
+const canPay = (pr) => pr.gems ? state.gems >= pr.gems : state.gold >= pr.gold;
+function openPets(msg, keep) {
+  const st = keep ? $('card').scrollTop : 0;
+  const rows = [{ head: true, text: (msg ? msg + '\n' : '') + '🐾 CRIATURAS\nCada criatura é mascote (ataca com você) e montaria. Compre a que quiser ou invoque uma surpresa. Repetida = +10% de dano.' }];
+  rows.push({ text: '🎲 Invocar criatura surpresa\nPode vir qualquer uma da loja', btn: '💎40', enabled: state.gems >= 40, fn: summonPet });
   PETS.forEach(p => {
     const owned = state.pets.includes(p.id);
-    const text = p.name + '\nDano ' + Math.round(p.dmg * 100) + '%  •  Velocidade montado x' + p.speed + (owned ? '  •  ★' + (state.petStars[p.id] || 0) : '') + '\nBônus: ' + p.perk.txt + '  •  Montado: atravessa a água sem lentidão';
-    if (!owned) rows.push({ text, btn: 'BLOQUEADO', enabled: false });
-    else rows.push({ text, btn: state.activePet === p.id ? 'ATIVO' : 'USAR', enabled: state.activePet !== p.id, fn: () => { state.activePet = p.id; save(state); setPet(); openProfs(); } });
+    const text = p.name + '\nDano ' + Math.round(p.dmg * 100) + '%  •  Velocidade montado x' + p.speed + (owned ? '  •  ★' + (state.petStars[p.id] || 0) : '') + '\nBônus: ' + p.perk.txt;
+    if (owned) rows.push({ img: 'pets/' + p.id + '.webp', text, btn: state.activePet === p.id ? 'ATIVO' : 'USAR', enabled: state.activePet !== p.id, fn: () => { state.activePet = p.id; save(state); setPet(); openPets(null, true); } });
+    else if (p.price) rows.push({ img: 'pets/' + p.id + '.webp', text, btn: priceTxt(p.price), enabled: canPay(p.price), fn: () => { if (p.price.gems) state.gems -= p.price.gems; else state.gold -= p.price.gold; state.pets.push(p.id); state.activePet = p.id; save(state); refreshHud(); setPet(); openPets('🎉 ' + p.name.split(',')[0] + ' comprada e ativada!'); } });
+    else rows.push({ img: 'pets/' + p.id + '.webp', text, btn: 'BLOQUEADO', enabled: false });
   });
-  openPanel('🎓 VOCAÇÕES', rows);
+  openPanel('🐾 CRIATURAS', rows);
+  if (keep) $('card').scrollTop = st;
 }
 const openCrew = openProfs;
 
@@ -892,7 +906,7 @@ function openProfile(keep) {
 function openIndex() {
   const rows = [];
   const a = curAct();
-  rows.push({ head: true, text: '📖 HISTÓRIA\n' + (state.endless ? 'Tomo restaurado! Aventura Infinita.' : 'Ato ' + (state.act + 1) + '/6 — ' + REALMS[a.realm].icon + ' ' + a.name + '\nEstágio ' + state.stage + '/5') });
+  rows.push({ img: 'acts/' + a.realm + '.webp', head: true, text: '📖 HISTÓRIA\n' + (state.endless ? 'Tomo restaurado! Aventura Infinita.' : 'Ato ' + (state.act + 1) + '/6 — ' + REALMS[a.realm].icon + ' ' + a.name + '\nEstágio ' + state.stage + '/5') });
   const er = a.realm;
   rows.push({ text: 'Inimigos deste reino: ' + REALMS[er].icon + ' ' + REALMS[er].name + '\nVantagem: heróis de ' + Object.keys(REALMS).filter(k => REALMS[k].strong === er).map(k => REALMS[k].name).join(', ') + ' (+25% dano)' });
   rows.push({ head: true, text: '⚔️ CLASSES' });
@@ -921,10 +935,10 @@ function summon() {
 function summonPet() {
   if (state.gems < 40) return;
   state.gems -= 40;
-  let r = Math.random() * 100, pick = PETS[0];
+  let r = Math.random() * PETS.reduce((a, p) => a + p.weight, 0), pick = PETS[0];
   for (const p of PETS) { r -= p.weight; if (r <= 0) { pick = p; break; } }
   if (state.pets.includes(pick.id)) state.petStars[pick.id] = (state.petStars[pick.id] || 0) + 1; else state.pets.push(pick.id);
-  save(state); refreshHud(); openProfs(pick.name.split(',')[0] + ' obtido!');
+  save(state); refreshHud(); openPets('🎁 ' + pick.name.split(',')[0] + (state.petStars[pick.id] ? ' (repetida, +10% de dano)' : ' obtida!'));
 }
 
 function unlockHero(id) {
@@ -2154,7 +2168,7 @@ function update(dt) {
   const m = Math.hypot(dx, dz); if (m > 1) { dx /= m; dz /= m; }
   const p = player.position, bear = T < bearUntil;
   const gyNow = inCity ? 0 : walkY(p.x, p.z), wet = gyNow < -0.35 && !mounted;
-  const spd = (wet ? 0.62 : 1) * PLAYER_SPEED * (1 + sk('swift') * 0.06) * (1 + Math.min(0.5, statSum('spd'))) * CLASSES[hero.cls].spd * (mounted ? petDef.speed : 1) * (bear ? 0.9 : 1);
+  const spd = (wet ? 0.62 : 1) * PLAYER_SPEED * (1 + sk('swift') * 0.06) * (1 + Math.min(0.5, statSum('spd'))) * CLASSES[hero.cls].spd * (mounted ? petDef.speed : 1) * (1 + petPerk('spd')) * (bear ? 0.9 : 1);
   p.x = THREE.MathUtils.clamp(p.x + dx * spd * dt, -WORLD, WORLD);
   p.z = THREE.MathUtils.clamp(p.z + dz * spd * dt, -WORLD, WORLD);
   if (inHome && homeRoom) {
