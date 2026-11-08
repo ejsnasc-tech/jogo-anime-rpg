@@ -53,13 +53,13 @@ export const ORIGINS = ['mares', 'sombras', 'arcana', 'planalto', 'primeva'];
 // Personagens prontos para escolher (todos originais)
 export const PREMADE = [
   { name: 'Aldric Muralha', model: 'Knight', hat: true,   cls: 'warrior',  realm: 'planalto', skin: 1, hairStyle: 'short',    hair: 1, eye: 1, face: 'fierce', outfit: 2, cape: 0, bio: 'Cavaleiro que jurou proteger quem não pode se proteger.' },
-  { name: 'Seraphina Alva', model: 'Knight', hat: false,   cls: 'paladin',  realm: 'arcana',   skin: 0, hairStyle: 'long',     hair: 5, eye: 6, face: 'calm',   outfit: 0, cape: 3, bio: 'Paladina cuja luz cura aliados e queima a escuridão.' },
+  { name: 'Seraphina Alva', body: 'f', model: 'Knight', hat: false,   cls: 'paladin',  realm: 'arcana',   skin: 0, hairStyle: 'long',     hair: 5, eye: 6, face: 'calm',   outfit: 0, cape: 3, bio: 'Paladina cuja luz cura aliados e queima a escuridão.' },
   { name: 'Shiro Kageri', model: 'Rogue_Hooded', hat: true,     cls: 'assassin', realm: 'sombras',  skin: 2, hairStyle: 'spiky',    hair: 0, eye: 4, face: 'fierce', outfit: 1, cape: 4, bio: 'Sombra silenciosa que age antes que você perceba.' },
-  { name: 'Ilyra Folha-Lua', model: 'Rogue', hat: true,  cls: 'archer',   realm: 'primeva',  skin: 3, hairStyle: 'ponytail', hair: 8, eye: 2, face: 'smile',  outfit: 4, cape: 2, bio: 'Caçadora que nunca erra um alvo sob a luz da lua.' },
+  { name: 'Ilyra Folha-Lua', body: 'f', model: 'Rogue', hat: true,  cls: 'archer',   realm: 'primeva',  skin: 3, hairStyle: 'ponytail', hair: 8, eye: 2, face: 'smile',  outfit: 4, cape: 2, bio: 'Caçadora que nunca erra um alvo sob a luz da lua.' },
   { name: 'Orin Estelar', model: 'Mage', hat: true,     cls: 'mage',     realm: 'arcana',   skin: 1, hairStyle: 'long',     hair: 5, eye: 1, face: 'calm',   outfit: 3, cape: 4, bio: 'Mago sereno que lê as estrelas como livros.' },
-  { name: 'Vexa Ruína', model: 'Mage', hat: false,       cls: 'sorcerer', realm: 'sombras',  skin: 0, hairStyle: 'mohawk',   hair: 7, eye: 5, face: 'fierce', outfit: 6, cape: 9, bio: 'Feiticeira de poder instável e sorriso perigoso.' },
+  { name: 'Vexa Ruína', body: 'f', model: 'Mage', hat: false,       cls: 'sorcerer', realm: 'sombras',  skin: 0, hairStyle: 'mohawk',   hair: 7, eye: 5, face: 'fierce', outfit: 6, cape: 9, bio: 'Feiticeira de poder instável e sorriso perigoso.' },
   { name: 'Bram Raiz-Velha', model: 'Mage', hat: false,  cls: 'druid',    realm: 'primeva',  skin: 4, hairStyle: 'long',     hair: 1, eye: 3, face: 'smile',  outfit: 5, cape: 2, bio: 'Druida gentil que fala com árvores e animais.' },
-  { name: 'Mara Vento-Sul', model: 'Barbarian', hat: false,   cls: 'warrior',  realm: 'mares',    skin: 3, hairStyle: 'ponytail', hair: 4, eye: 0, face: 'smile',  outfit: 0, cape: 1, bio: 'Capitã de navio que luta com a mesma alegria com que navega.' },
+  { name: 'Mara Vento-Sul', body: 'f', model: 'Barbarian', hat: false,   cls: 'warrior',  realm: 'mares',    skin: 3, hairStyle: 'ponytail', hair: 4, eye: 0, face: 'smile',  outfit: 0, cape: 1, bio: 'Capitã de navio que luta com a mesma alegria com que navega.' },
 ];
 
 // Converte as escolhas do criador em um herói jogável
@@ -71,6 +71,8 @@ export function buildPlayerHero(c) {
     model, hat: c.hat !== false,
     color: CAPE_COLORS[c.cape % CAPE_COLORS.length], outfit: OUTFIT_COLORS[c.outfit % OUTFIT_COLORS.length],
     skin: SKINS[c.skin % SKINS.length], hairColor: HAIR_COLORS[c.hair % HAIR_COLORS.length],
+    body: c.body === 'f' ? 'f' : 'm', hairStyle: c.hairStyle || 'short', face: c.face || 'calm', acc: c.acc || 'none',
+    eyeColor: EYE_COLORS[(c.eye != null ? c.eye : 1) % EYE_COLORS.length],
     atk: b.atk, rate: b.rate, range: b.range, cost: 0, bio: c.bio || 'O Guardião da Pena.',
   };
 }

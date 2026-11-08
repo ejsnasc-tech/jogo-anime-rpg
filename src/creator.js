@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { makeHero, animateHero, playOnce } from './actors.js';
-import { CLASSES, CLASS_BASE, CLASS_MODELS, REALMS, SKINS, HAIR_COLORS, OUTFIT_COLORS, CAPE_COLORS, ORIGINS, PREMADE, buildPlayerHero } from './data.js';
+import { CLASSES, CLASS_BASE, CLASS_MODELS, REALMS, SKINS, HAIR_COLORS, EYE_COLORS, OUTFIT_COLORS, CAPE_COLORS, ORIGINS, PREMADE, buildPlayerHero } from './data.js';
+import { HAIR_STYLES, FACES, ACCS, BODIES } from './looks.js';
 
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -14,6 +15,7 @@ export function randomLook(name) {
     name: name || '', cls, model: pick(CLASS_MODELS[cls])[0], hat: Math.random() < 0.6, realm: pick(ORIGINS),
     skin: Math.floor(Math.random() * SKINS.length), hair: Math.floor(Math.random() * HAIR_COLORS.length),
     outfit: Math.floor(Math.random() * OUTFIT_COLORS.length), cape: Math.floor(Math.random() * CAPE_COLORS.length),
+    body: pick(['m', 'f']), hairStyle: pick(HAIR_STYLES)[0], face: pick(FACES)[0], eye: Math.floor(Math.random() * EYE_COLORS.length), acc: Math.random() < 0.7 ? 'none' : pick(ACCS)[0],
   };
 }
 
@@ -112,7 +114,7 @@ export function openCreator(opts) {
   }
 
   let tab = 'class', tabBox = null;
-  const TABS = [['class', lockCls ? '🧙 Visual' : '⚔️ Classe'], ['skin', '🧑 Pele'], ['hair', '💇 Cabelo'], ['outfit', '👕 Cores'], ['origin', '🌍 Origem']];
+  const TABS = [['class', lockCls ? '🧙 Visual' : '⚔️ Classe'], ['body', '👤 Corpo'], ['hair', '💇 Cabelo'], ['face', '😊 Rosto'], ['outfit', '👕 Cores'], ['acc', '🎀 Extras'], ['origin', '🌍 Origem']];
 
   function refreshTab() {
     showHero(c);
@@ -125,8 +127,10 @@ export function openCreator(opts) {
       tabBox.appendChild(el('div', 'lbl', 'Elmo / chapéu')); tabBox.appendChild(chips([[true, 'Com'], [false, 'Sem']], c.hat !== false, (v) => { c.hat = v; }));
       const d = el('div', 'desc'); const k = CLASSES[c.cls];
       d.innerHTML = '<b>' + k.icon + ' ' + k.name + ' — ' + k.role + '</b><br>' + CLASS_BASE[c.cls].look + '<br>' + k.desc + '<br><i>ULT: ' + k.ult + '</i>'; tabBox.appendChild(d);
-    } else if (tab === 'skin') tabBox.appendChild(swatches(SKINS, c.skin, (i) => { c.skin = i; }));
-    else if (tab === 'hair') { tabBox.appendChild(el('div', 'lbl', 'Cor do cabelo')); tabBox.appendChild(swatches(HAIR_COLORS, c.hair, (i) => { c.hair = i; })); }
+    } else if (tab === 'body') { tabBox.appendChild(el('div', 'lbl', 'Tipo de corpo')); tabBox.appendChild(chips(BODIES, c.body || 'm', (v) => { c.body = v; })); tabBox.appendChild(el('div', 'lbl', 'Tom de pele')); tabBox.appendChild(swatches(SKINS, c.skin, (i) => { c.skin = i; })); }
+    else if (tab === 'hair') { tabBox.appendChild(el('div', 'lbl', 'Penteado')); tabBox.appendChild(chips(HAIR_STYLES, c.hairStyle || 'short', (v) => { c.hairStyle = v; })); tabBox.appendChild(el('div', 'lbl', 'Cor do cabelo')); tabBox.appendChild(swatches(HAIR_COLORS, c.hair, (i) => { c.hair = i; })); }
+    else if (tab === 'face') { tabBox.appendChild(el('div', 'lbl', 'Expressão')); tabBox.appendChild(chips(FACES, c.face || 'calm', (v) => { c.face = v; })); tabBox.appendChild(el('div', 'lbl', 'Cor dos olhos')); tabBox.appendChild(swatches(EYE_COLORS, c.eye != null ? c.eye : 1, (i) => { c.eye = i; })); }
+    else if (tab === 'acc') { tabBox.appendChild(el('div', 'lbl', 'Acessório (usa a cor da capa)')); tabBox.appendChild(chips(ACCS, c.acc || 'none', (v) => { c.acc = v; })); tabBox.appendChild(el('div', 'desc', 'Dica: com elmo, chapéu ou capuz o penteado fica escondido. Tire o elmo/chapéu na aba Classe (e para Ladino use a aparência "Ladino", sem capuz).')); }
     else if (tab === 'outfit') {
       tabBox.appendChild(el('div', 'lbl', 'Roupa / armadura')); tabBox.appendChild(swatches(OUTFIT_COLORS, c.outfit, (i) => { c.outfit = i; }));
       tabBox.appendChild(el('div', 'lbl', 'Capa e acentos')); tabBox.appendChild(swatches(CAPE_COLORS, c.cape, (i) => { c.cape = i; }));

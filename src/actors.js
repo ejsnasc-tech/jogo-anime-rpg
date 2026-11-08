@@ -5,6 +5,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as skClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { CLASS_MODELS } from './data.js';
 import { makeHeroProcedural } from './models.js';
+import { decorate, addOutline } from './looks.js';
 
 const BASE = (import.meta.env && import.meta.env.BASE_URL) || './';
 const FILES = {
@@ -16,6 +17,19 @@ const FILES = {
 const loaded = {};
 const HERO_HEIGHT = 2.1;
 
+// tamanho/posição da cabeça (no referencial do osso) para encaixar cabelo, rosto e acessórios
+function headInfo(scene) {
+  try {
+    const bone = scene.getObjectByName('head'), hips = scene.getObjectByName('hips'); let hm = null;
+    scene.traverse(o => { if (o.isSkinnedMesh && /head/i.test(o.name) && !hm) hm = o; });
+    if (!bone || !hm) return null;
+    hm.geometry.computeBoundingBox(); const box = hm.geometry.boundingBox.clone().applyMatrix4(hm.matrixWorld), sz = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+    const inv = bone.matrixWorld.clone().invert();
+    const out = { hb: { w: sz.x, h: sz.y, d: sz.z }, headM: inv.multiply(new THREE.Matrix4().makeTranslation(c.x, c.y, c.z)) };
+    if (hips) { out.hipsM = hips.matrixWorld.clone().invert().multiply(new THREE.Matrix4().makeTranslation(hips.getWorldPosition(new THREE.Vector3()).x, hips.getWorldPosition(new THREE.Vector3()).y, hips.getWorldPosition(new THREE.Vector3()).z)); }
+    return out;
+  } catch (e) { return null; }
+}
 export const modelsLoaded = () => Object.keys(loaded).length > 0;
 
 export function preloadModels(onProgress) {
@@ -29,7 +43,7 @@ export function preloadModels(onProgress) {
       const box = new THREE.Box3();
       gltf.scene.traverse(o => { if (o.isSkinnedMesh) { o.geometry.computeBoundingBox(); box.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld)); } });
       const h = box.isEmpty() ? 1.8 : Math.max(0.5, box.max.y - box.min.y);
-      loaded[n] = { scene: gltf.scene, clips: gltf.animations, mat, img: mat && mat.map ? mat.map.image : null, height: h };
+      loaded[n] = { scene: gltf.scene, clips: gltf.animations, mat, img: mat && mat.map ? mat.map.image : null, height: h, head: headInfo(gltf.scene) };
       tick(); res();
     }, undefined, (err) => { console.warn('modelo nao carregou:', n, err); tick(); res(); });
   })));
@@ -113,6 +127,10 @@ export function makeHero(def) {
   root.traverse(o => { if (propSet.includes(o.name)) o.visible = keep.includes(o.name); if (HEADGEAR.includes(o.name)) o.visible = def.hat !== false; });
   const mat = recolorMaterial(key, def);
   root.traverse(o => { if (o.isMesh) { o.material = mat; o.castShadow = true; o.frustumCulled = false; } });
+  if (def.hairStyle !== undefined) {
+    let gear = false; root.traverse(o => { if (HEADGEAR.includes(o.name) && o.visible) gear = true; });
+    try { decorate(root, L, def, gear || key === 'Rogue_Hooded'); addOutline(root); } catch (e) { console.warn('visual anime falhou', e); }
+  }
   g.userData = newUserData(L.clips, ANIM[def.cls] || ANIM.warrior);
   g.userData.mixer = new THREE.AnimationMixer(root);
   if (def.cls === 'paladin') {
