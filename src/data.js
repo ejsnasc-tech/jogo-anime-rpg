@@ -71,7 +71,7 @@ export function buildPlayerHero(c) {
     model, hat: c.hat !== false,
     color: CAPE_COLORS[c.cape % CAPE_COLORS.length], outfit: OUTFIT_COLORS[c.outfit % OUTFIT_COLORS.length],
     skin: SKINS[c.skin % SKINS.length], hairColor: HAIR_COLORS[c.hair % HAIR_COLORS.length],
-    body: c.body === 'f' ? 'f' : 'm', hairStyle: c.hairStyle || 'short', face: c.face || 'calm', acc: c.acc || 'none',
+    body: c.body === 'f' ? 'f' : 'm', build: c.build || 'normal', height: c.height || 'mid', hairStyle: c.hairStyle || 'short', face: c.face || 'calm', acc: c.acc || 'none',
     eyeColor: EYE_COLORS[(c.eye != null ? c.eye : 1) % EYE_COLORS.length],
     atk: b.atk, rate: b.rate, range: b.range, cost: 0, bio: c.bio || 'O Guardião da Pena.',
   };

@@ -25,7 +25,8 @@ function headInfo(scene) {
     if (!bone || !hm) return null;
     hm.geometry.computeBoundingBox(); const box = hm.geometry.boundingBox.clone().applyMatrix4(hm.matrixWorld), sz = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
     const inv = bone.matrixWorld.clone().invert();
-    const out = { hb: { w: sz.x, h: sz.y, d: sz.z }, headM: inv.multiply(new THREE.Matrix4().makeTranslation(c.x, c.y, c.z)) };
+    const rest = {}; scene.traverse(b => { if (b.isBone) rest[b.name] = { inv: b.matrixWorld.clone().invert(), p: b.getWorldPosition(new THREE.Vector3()) }; });
+    const out = { rest, hb: { w: sz.x, h: sz.y, d: sz.z }, headM: inv.multiply(new THREE.Matrix4().makeTranslation(c.x, c.y, c.z)) };
     if (hips) { out.hipsM = hips.matrixWorld.clone().invert().multiply(new THREE.Matrix4().makeTranslation(hips.getWorldPosition(new THREE.Vector3()).x, hips.getWorldPosition(new THREE.Vector3()).y, hips.getWorldPosition(new THREE.Vector3()).z)); }
     return out;
   } catch (e) { return null; }
@@ -129,7 +130,7 @@ export function makeHero(def) {
   root.traverse(o => { if (o.isMesh) { o.material = mat; o.castShadow = true; o.frustumCulled = false; } });
   if (def.hairStyle !== undefined) {
     let gear = false; root.traverse(o => { if (HEADGEAR.includes(o.name) && o.visible) gear = true; });
-    try { decorate(root, L, def, gear || key === 'Rogue_Hooded'); addOutline(root); } catch (e) { console.warn('visual anime falhou', e); }
+    try { decorate(root, L, def, key === 'Rogue_Hooded' ? 'hood' : gear ? 'hat' : null); addOutline(root); } catch (e) { console.warn('visual anime falhou', e); }
   }
   g.userData = newUserData(L.clips, ANIM[def.cls] || ANIM.warrior);
   g.userData.mixer = new THREE.AnimationMixer(root);
