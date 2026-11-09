@@ -15,7 +15,7 @@
   #hud { position:fixed; top:0; left:0; right:0; padding:calc(env(safe-area-inset-top) + 8px) 12px 6px; background:rgba(0,0,0,.45); pointer-events:none; z-index:10; }
   #skills { position:fixed; top:calc(env(safe-area-inset-top) + 86px); left:8px; max-width:70%; display:flex; flex-wrap:wrap; gap:3px; z-index:9; pointer-events:none; font-size:clamp(11px,3vw,14px); }
   #skills .chip { background:rgba(0,0,0,.55); border-radius:8px; padding:1px 6px; color:#fff; }
-  #skillbar { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom) + 96px); display:grid; grid-template-columns:repeat(5,38px); gap:4px; z-index:19; }
+  #skillbar { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom) + 16px); display:grid; grid-template-columns:repeat(5,38px); gap:4px; z-index:19; }
   @media (max-height:560px) { #skillbar { grid-template-columns:repeat(7,38px); } }
   #skillbar .sk { position:relative; width:38px; height:38px; padding:0; border-radius:9px; border:2px solid rgba(255,255,255,.25); background:rgba(10,16,30,.5); opacity:.42; overflow:hidden; cursor:pointer; color:#fff; }
   #skillbar .sk.on { opacity:1; background:rgba(10,16,30,.88); border-color:#8fd3ff; }
@@ -25,21 +25,21 @@
   #skillbar .cd { position:absolute; left:0; right:0; bottom:0; height:0; background:rgba(0,0,0,.65); }
   #topbtns { position:fixed; top:calc(env(safe-area-inset-top) + 96px); right:8px; display:flex; flex-direction:column; flex-wrap:wrap-reverse; align-content:flex-start; max-height:calc(100dvh - 320px); gap:6px; z-index:19; }
   #topbtns button { height:38px; border-radius:19px; border:2px solid #fff; background:rgba(41,128,185,.92); color:#fff; font:inherit; font-size:13px; padding:0 12px; cursor:pointer; }
-  #talk { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom) + 236px); display:none; z-index:21; height:54px; padding:0 22px; border-radius:27px; background:#e67e22; border:3px solid #fff; color:#fff; font:inherit; font-size:17px; cursor:pointer; }
+  #talk { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom) + 150px); display:none; z-index:21; height:54px; padding:0 22px; border-radius:27px; background:#e67e22; border:3px solid #fff; color:#fff; font:inherit; font-size:17px; cursor:pointer; }
   #leftbtns { position:fixed; top:calc(env(safe-area-inset-top) + 96px); left:8px; display:flex; gap:6px; z-index:19; }
   #leftbtns button { height:38px; border-radius:19px; border:2px solid #fff; color:#fff; font:inherit; font-size:13px; padding:0 12px; cursor:pointer; }
   #eqbtn { background:rgba(142,68,173,.92); } #bagbtn { background:rgba(211,84,0,.92); }
   #leftbtns button { box-shadow:0 2px 6px rgba(0,0,0,.4); }
-  #chatlog { position:fixed; left:8px; bottom:calc(env(safe-area-inset-bottom) + 262px); max-width:62%; z-index:8; pointer-events:none; display:flex; flex-direction:column; gap:3px; font:700 12px Arial,sans-serif; }
+  #chatlog { position:fixed; left:8px; bottom:calc(env(safe-area-inset-bottom) + 176px); max-width:62%; z-index:8; pointer-events:none; display:flex; flex-direction:column; gap:3px; font:700 12px Arial,sans-serif; }
   #chatlog .cl { background:rgba(10,16,30,.72); color:#fff; padding:3px 8px; border-radius:8px; word-break:break-word; }
   #chatlog .cl.me { background:rgba(41,128,185,.8); }
-  #chatbar { position:fixed; left:8px; right:8px; bottom:calc(env(safe-area-inset-bottom) + 92px); max-width:520px; margin:0 auto; display:none; gap:6px; z-index:30; }
+  #chatbar { position:fixed; left:8px; right:8px; bottom:calc(env(safe-area-inset-bottom) + 12px); max-width:520px; margin:0 auto; display:none; gap:6px; z-index:30; }
   #chatinp { flex:1; height:44px; border-radius:12px; border:2px solid var(--gold); background:rgba(14,20,38,.95); color:#fff; padding:0 12px; font:700 15px Arial,sans-serif; min-width:0; }
   #chatsend { width:54px; height:44px; border-radius:12px; border:2px solid #fff; background:#27ae60; color:#fff; font-size:20px; cursor:pointer; }
-  #homebar { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom) + 96px); display:none; z-index:21; }
+  #homebar { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom) + 16px); display:none; z-index:21; }
   #homebar { gap:6px; white-space:nowrap; } #homebar button { padding:0 12px !important; font-size:15px !important; }
   #homebar button { height:54px; padding:0 24px; border-radius:27px; background:#e67e22; border:3px solid #fff; color:#fff; font:inherit; font-size:17px; cursor:pointer; }
-  #decor { position:fixed; left:8px; right:8px; bottom:calc(env(safe-area-inset-bottom) + 92px); display:none; z-index:21; max-width:760px; margin:0 auto; background:rgba(14,20,38,.94); border:3px solid var(--gold); border-radius:14px; padding:8px; font-family:Arial,sans-serif; font-weight:700; color:#fff; }
+  #decor { position:fixed; left:8px; right:8px; bottom:calc(env(safe-area-inset-bottom) + 12px); display:none; z-index:21; max-width:760px; margin:0 auto; background:rgba(14,20,38,.94); border:3px solid var(--gold); border-radius:14px; padding:8px; font-family:Arial,sans-serif; font-weight:700; color:#fff; }
   #decctl { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:6px; }
   #decname { flex:1 1 160px; font-size:12px; color:#ffe9a8; }
   #decctl button { height:36px; padding:0 12px; border-radius:10px; border:2px solid #fff; background:#2980b9; color:#fff; font:inherit; font-size:13px; cursor:pointer; }
@@ -126,18 +126,19 @@
   #joy-base { width:120px; height:120px; background:rgba(255,255,255,.15); border:3px solid rgba(255,255,255,.3); }
   #joy-knob { width:56px; height:56px; background:rgba(255,255,255,.45); }
 
-  #menu { position:fixed; left:0; right:0; bottom:0; display:flex; gap:8px; padding:10px 10px calc(env(safe-area-inset-bottom) + 10px); background:rgba(16,25,43,.92); z-index:30; }
-  #menu button { flex:1; height:64px; border-radius:12px; background:var(--blue); border:3px solid var(--gold); color:#fff; font:inherit; font-size:clamp(14px,4vw,20px); cursor:pointer; }
-  #menu button:active { transform:scale(.96); }
+  #menu { position:fixed; left:8px; top:50%; transform:translateY(-8%); display:flex; flex-direction:column; gap:10px; z-index:30; }
+  #menu button { width:58px; height:58px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #3b78c4, #1d3f73); border:3px solid var(--gold); color:#fff; font:inherit; font-size:24px; line-height:1; padding:0; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; box-shadow:0 3px 10px #0009; }
+  #menu button small { font-size:9px; margin-top:1px; letter-spacing:.3px; }
+  #menu button:active { transform:scale(.92); }
 
-  #skill { position:fixed; right:18px; bottom:calc(env(safe-area-inset-bottom) + 100px); width:92px; height:92px; border-radius:50%; background:#e67e22; border:4px solid #fff; color:#fff; font:inherit; font-size:18px; line-height:1.05; z-index:20; cursor:pointer; padding:0; }
+  #skill { position:fixed; right:18px; bottom:calc(env(safe-area-inset-bottom) + 20px); width:92px; height:92px; border-radius:50%; background:#e67e22; border:4px solid #fff; color:#fff; font:inherit; font-size:18px; line-height:1.05; z-index:20; cursor:pointer; padding:0; }
   #fish { position:fixed; right:14px; bottom:calc(env(safe-area-inset-bottom) + 262px); min-width:100px; height:48px; padding:0 10px; border-radius:24px; background:#00897b; border:3px solid #fff; color:#fff; font:inherit; font-size:14px; z-index:20; cursor:pointer; display:none; }
-  #mount { position:fixed; right:14px; bottom:calc(env(safe-area-inset-bottom) + 205px); min-width:100px; height:48px; padding:0 10px; border-radius:24px; background:#2980b9; border:3px solid #fff; color:#fff; font:inherit; font-size:14px; z-index:20; cursor:pointer; }
+  #mount { position:fixed; right:14px; bottom:calc(env(safe-area-inset-bottom) + 124px); min-width:100px; height:48px; padding:0 10px; border-radius:24px; background:#2980b9; border:3px solid #fff; color:#fff; font:inherit; font-size:14px; z-index:20; cursor:pointer; }
 
   #nightov { position:fixed; inset:0; z-index:4; pointer-events:none; background:#16257a; mix-blend-mode:multiply; opacity:0; }
   #emobar { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom) + 112px); display:none; gap:8px; z-index:30; background:rgba(16,25,43,.92); border:2px solid #fff; border-radius:26px; padding:6px 10px; }
   #emobar button { width:44px; height:44px; border-radius:50%; border:0; background:#26334f; font-size:24px; cursor:pointer; }
-  #team { position:fixed; left:10px; bottom:calc(env(safe-area-inset-bottom) + 100px); display:flex; flex-direction:column-reverse; gap:8px; z-index:20; }
+  #team { position:fixed; left:10px; bottom:calc(env(safe-area-inset-bottom) + 20px); display:flex; flex-direction:column-reverse; gap:8px; z-index:20; }
   .tbtn { width:64px; height:64px; border-radius:50%; background:rgba(16,25,43,.92); border:4px solid #fff; color:#fff; font:inherit; font-size:24px; line-height:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0; cursor:pointer; }
   .tbtn small { font-size:10px; margin-top:2px; }
   .tbtn.on { transform:scale(1.16); box-shadow:0 0 14px #fff; }
@@ -242,10 +243,10 @@
 <div id="dialog"><div id="dbox"><div id="dname"></div><div id="dtext"></div><div id="dhint">toque para continuar ▶</div></div></div>
 
 <div id="menu">
-  <button id="b-crew" class="stroke">VOCAÇÃO</button>
-  <button id="b-bag" class="stroke">PERFIL</button>
-  <button id="b-home" class="stroke">HOME</button>
-  <button id="b-index" class="stroke">INDEX</button>
+  <button id="b-crew" class="stroke" title="CLASSE">🧙<small>CLASSE</small></button>
+  <button id="b-bag" class="stroke" title="PERFIL">👤<small>PERFIL</small></button>
+  <button id="b-home" class="stroke" title="HOME">🏠<small>HOME</small></button>
+  <button id="b-index" class="stroke" title="INDEX">📖<small>INDEX</small></button>
 </div>
 
 <div id="creator"></div>
