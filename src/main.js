@@ -511,7 +511,7 @@ function switchHero(i) {
 // ===================== HUD =====================
 function refreshHud() {
   { const pu = portraitUrl(hero.model); const hn = $('hname'); hn.innerHTML = ''; if (pu) { const im = document.createElement('img'); im.src = pu; im.style.cssText = 'width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid #ffc933;vertical-align:middle;margin-right:6px'; hn.appendChild(im); } hn.appendChild(document.createTextNode(CLASSES[hero.cls].icon + ' Nv.' + state.level + ' ' + hero.name.split(' ')[0] + (state.meta && state.meta.title ? ' «' + state.meta.title + '»' : ''))); }
-  { const n = questsClaimable(); $('questbtn').textContent = '📜 MISSÕES' + (n ? ' ❗' + n : ''); }
+  { const n = questsClaimable(); setBtn('questbtn', '📜', 'MISSÕES', n); }
   $('hgems').textContent = '💎' + state.gems; $('hgold').textContent = '🪙' + state.gold; $('hcash').textContent = '💵' + state.cash;
   const a = curAct();
   $('stage').textContent = dg ? '🏰 MASMORRA — andar ' + dg.floor + '/5' + (dg.floor < 5 ? '  (' + dg.kills + '/' + dg.need + ')' : ' — CHEFE') : wb ? '🐉 CHEFE MUNDIAL — derrotem juntos!' : inHome ? '\u{1F3E0} ' + (homeVisit ? 'Visitando a casa de ' + homeVisit.name : inHome.name + ' \u2014 ' + ROOMS[inHome.kind].label) : inCity ? '🏰 Cidade de Aurora — fale com os moradores' : state.endless ? '♾ Aventura Infinita • abates ' + state.stageKills + (rmN > 1 ? '  👥 ' + rmN + ' jogadores (monstros ×' + rmN + ')' : '')
@@ -1554,7 +1554,7 @@ function setCityMode(on) {
   }
   setZoom(on ? 1.6 : 1); zoom = zoomT;
   pet.position.copy(player.position); camera.position.copy(player.position).add(_co.copy(CAM_OFFSET).multiplyScalar(zoom));
-  $('citybtn').textContent = on ? '🌲 SAIR' : '🏰 CIDADE'; refreshHud();
+  if (on) setBtn('citybtn', '🌲', 'SAIR'); else setBtn('citybtn', '🏰', 'CIDADE'); refreshHud();
 }
 
 function doUpgrade(it) {
@@ -1765,7 +1765,7 @@ function enterHome(p, visit) {
   player.position.set(0, 0, homeRoom.hd - 1.8); facing = Math.PI;
   setZoom(1.7 + (homeRoom.hw > 9 ? 0.4 : 0)); zoom = zoomT; syncCam(); showFloor(0, true);
   document.body.classList.add('inhome'); $('minimap').style.display = 'none'; $('decor').style.display = 'none'; updateHomeUi();
-  $('citybtn').textContent = '🚪 SAIR'; refreshHud(); toast(visit ? '👀 Visitando a casa de ' + visit.name : '🏠 ' + p.name + ' — toque em DECORAR para mobiliar');
+  setBtn('citybtn', '🚪', 'SAIR'); refreshHud(); toast(visit ? '👀 Visitando a casa de ' + visit.name : '🏠 ' + p.name + ' — toque em DECORAR para mobiliar');
 }
 function cleanupHome() {
   if (homeRoom) scene.remove(homeRoom.group);
@@ -2094,7 +2094,8 @@ function chatLine(name, text, mine) {
   d.textContent = name + ': ' + text; log.appendChild(d); while (log.children.length > 6) log.removeChild(log.firstChild);
   setTimeout(() => d.remove(), 14000);
 }
-function refreshNet() { $('netbtn').textContent = (net && net.connected ? '🟢 ' + (remotes.size + 1) : '🔴 offline'); }
+function setBtn(id, icon, label, badge) { $(id).innerHTML = '<span class="i">' + icon + '</span><small>' + label + '</small>' + (badge ? '<b class="bdg">' + badge + '</b>' : ''); }
+function refreshNet() { if (net && net.connected) setBtn('netbtn', '🟢', 'ONLINE', remotes.size + 1); else setBtn('netbtn', '🔴', 'OFFLINE'); }
 function syncHomes() {
   Object.keys(owners).forEach(id => { if (owners[id].oid === myOid && !state.homes[id]) { state.homes[id] = { furn: [] }; recover.add(id); net && net.send({ t: 'visit', plot: id }); } });
   Object.keys(state.homes).forEach(id => {
