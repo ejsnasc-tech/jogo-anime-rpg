@@ -1,6 +1,6 @@
 // Cidade de Aurora: portão ao sul, avenida até a praça com a fonte, feira com os NPCs em arco ao norte e o Grande Salão no fundo.
 import * as THREE from 'three';
-import { PREMADE, buildPlayerHero } from './data.js';
+import { PREMADE, buildPlayerHero, BASE } from './data.js';
 import { makeHero, animateHero } from './actors.js';
 
 export const CITY_R = 56;
@@ -57,16 +57,22 @@ export function buildCity() {
   const mat = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.95, flatShading: true }, o));
   const add = (geo, m, x, y, z, parent) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; (parent || group).add(o); return o; };
   const flat = (geo, c, y) => { const o = add(geo, mat(c), 0, y, 0); o.rotation.x = -Math.PI / 2; o.castShadow = false; return o; };
+  // textura pintada (Unirall): material com a cor de antes até a imagem carregar
+  const texMat = (c, name, rx, ry) => {
+    const m = mat(c, { flatShading: false }), im = new Image();
+    im.onload = () => { const t = new THREE.Texture(im); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true; m.map = t; m.color.setHex(0xffffff); m.needsUpdate = true; };
+    im.src = BASE + 'img/city/' + name + '.webp'; return m;
+  };
   const stone = mat(0xa9afb8), darkStone = mat(0x7d8591), wood = mat(0x8a5a2b), darkWood = mat(0x5a3b1e);
 
   // ---- chão: calçada, anéis da praça e avenida ----
-  flat(new THREE.CircleGeometry(CITY_R + 2, 96), 0x9fcf7a, 0.04);          // grama dentro da muralha
-  flat(new THREE.CircleGeometry(17.5, 56), 0xcbbfa8, 0.06);                 // praça
+  { const o = add(new THREE.CircleGeometry(CITY_R + 2, 96), texMat(0x9fcf7a, 'grama', 44, 44), 0, 0.04, 0); o.rotation.x = -Math.PI / 2; o.castShadow = false; }   // grama dentro da muralha
+  { const o = add(new THREE.CircleGeometry(17.5, 56), texMat(0xcbbfa8, 'praca', 9, 9), 0, 0.06, 0); o.rotation.x = -Math.PI / 2; o.castShadow = false; }   // praça
   flat(new THREE.RingGeometry(9.5, 10.2, 56), 0x8e8470, 0.07);
   flat(new THREE.RingGeometry(16.6, 17.5, 56), 0x8e8470, 0.07);
   flat(new THREE.CircleGeometry(9.5, 48), 0xe1d8c5, 0.075);
   const AL = CITY_R + 1 - 17, AZ = (17 + CITY_R + 1) / 2;
-  const ave = add(new THREE.PlaneGeometry(6.4, AL), mat(0xc9b48a), 0, 0.08, AZ); ave.rotation.x = -Math.PI / 2; ave.castShadow = false;
+  const ave = add(new THREE.PlaneGeometry(6.4, AL), texMat(0xc9b48a, 'rua', 5, AL / 1.3), 0, 0.08, AZ); ave.rotation.x = -Math.PI / 2; ave.castShadow = false;
   [-3.4, 3.4].forEach(x => { const e = add(new THREE.PlaneGeometry(0.5, AL), mat(0x8e8470), x, 0.085, AZ); e.rotation.x = -Math.PI / 2; e.castShadow = false; });
   flat(new THREE.RingGeometry(21.8, 24.2, 80), 0xc9b48a, 0.065);              // ruas dos bairros
   flat(new THREE.RingGeometry(33.3, 35.7, 96), 0xc9b48a, 0.065);
@@ -153,6 +159,17 @@ export function buildCity() {
     add(new THREE.BoxGeometry(0.15, 3, 1.6), mat(sd > 0 ? 0xf5c542 : 0x2e86c1), x, 8.5, z + 2.1);
   });
   add(new THREE.BoxGeometry(10.4, 1.2, 1.6), stone, 0, 8.6, CITY_R + 1.5);   // arco do portão
+
+  // ---- horizonte pintado ao redor (Unirall): some no céu, dá profundidade fora da muralha ----
+  { const im = new Image(); im.onload = () => {
+      const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const g = c.getContext('2d');
+      g.drawImage(im, 0, 0); g.globalCompositeOperation = 'destination-in';
+      const gr = g.createLinearGradient(0, 0, 0, c.height); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.32, 'rgba(0,0,0,0.9)'); gr.addColorStop(1, 'rgba(0,0,0,1)'); g.fillStyle = gr; g.fillRect(0, 0, c.width, c.height);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.repeat.set(3, 1);
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(150, 150, 70, 48, 1, true), new THREE.MeshBasicMaterial({ map: t, side: THREE.BackSide, transparent: true, depthWrite: false, fog: true }));
+      m.position.y = 28; m.renderOrder = -1; m.userData.noOutline = true; group.add(m);
+    };
+    im.src = BASE + 'img/city/horizonte.webp'; }
 
   // ---- árvores fora e dentro da muralha ----
   const tt = new THREE.CylinderGeometry(0.25, 0.35, 1.4, 6), tl = new THREE.ConeGeometry(1.5, 3.2, 7), tm = mat(0x6b4423), lm = [mat(0x2f7d32), mat(0x3c9a3f)];

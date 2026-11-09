@@ -224,3 +224,7 @@ export const ACTS = [
     ],
   },
 ];
+
+export const PORTRAITS = { UnirallArqueira: 'mira', UnirallAssassino: 'kuro', UnirallDruida: 'brenn', UnirallFeiticeira: 'lilith', UnirallGuerreira: 'rubi', UnirallMago: 'aster', UnirallPaladino: 'seren', Unirall1: 'kael', Unirall2: 'dante' };
+export const BASE = (import.meta.env && import.meta.env.BASE_URL) || './';
+export const portraitUrl = (model) => PORTRAITS[model] ? BASE + 'img/portraits/' + PORTRAITS[model] + '.webp' : null;

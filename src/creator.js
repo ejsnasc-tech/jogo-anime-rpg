@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import { makeHero, animateHero, playOnce } from './actors.js';
-import { CLASSES, CLASS_BASE, CLASS_MODELS, REALMS, SKINS, HAIR_COLORS, EYE_COLORS, OUTFIT_COLORS, CAPE_COLORS, ORIGINS, PREMADE, buildPlayerHero } from './data.js';
+import { CLASSES, CLASS_BASE, CLASS_MODELS, REALMS, SKINS, HAIR_COLORS, EYE_COLORS, OUTFIT_COLORS, CAPE_COLORS, ORIGINS, PREMADE, buildPlayerHero, PORTRAITS } from './data.js';
 import { HAIR_STYLES, FACES, ACCS, SEXES, BUILDS, HEIGHTS, OUTFIT_STYLES, MALE_HAIR, FEMALE_HAIR, MALE_FACES, FEMALE_FACES, MALE_ACCS, FEMALE_ACCS } from './looks.js';
-const PORTRAITS = { UnirallArqueira: 'mira', UnirallAssassino: 'kuro', UnirallDruida: 'brenn', UnirallFeiticeira: 'lilith', UnirallGuerreira: 'rubi', UnirallMago: 'aster', UnirallPaladino: 'seren', Unirall1: 'kael', Unirall2: 'dante' };
 function applySex(c, v) { c.body = v; const bad = v === 'm' ? FEMALE_HAIR : MALE_HAIR; if (bad.includes(c.hairStyle || 'short')) c.hairStyle = v === 'm' ? 'short' : 'long'; c.outfitStyle = 'auto'; if (!(v === 'm' ? MALE_FACES : FEMALE_FACES).includes(c.face)) c.face = 'calm'; if (!(v === 'm' ? MALE_ACCS : FEMALE_ACCS).includes(c.acc || 'none')) c.acc = 'none'; }
 const rndOutfit = (sex) => OUTFIT_STYLES.filter(x => sex === 'f' || x[0] !== 'dress')[Math.floor(Math.random() * (OUTFIT_STYLES.length - (sex === 'f' ? 0 : 1)))][0];
 

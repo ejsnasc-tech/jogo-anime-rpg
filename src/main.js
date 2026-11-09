@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CLASSES, CLASS_MODELS, REALMS, RARITY, HEROES, ACTS, INTRO, ENDING, PREMADE, buildPlayerHero } from './data.js';
+import { CLASSES, CLASS_MODELS, REALMS, RARITY, HEROES, ACTS, INTRO, ENDING, PREMADE, buildPlayerHero, portraitUrl, BASE } from './data.js';
 import { std, metal, glow, shadowAll } from './models.js';
 import { makeHero, makeSkeleton, animateHero, playOnce, preloadModels } from './actors.js';
 import { openCreator, CLASS_LIST } from './creator.js';
@@ -510,7 +510,7 @@ function switchHero(i) {
 
 // ===================== HUD =====================
 function refreshHud() {
-  $('hname').textContent = CLASSES[hero.cls].icon + ' Nv.' + state.level + ' ' + hero.name.split(' ')[0] + (state.meta && state.meta.title ? ' «' + state.meta.title + '»' : '');
+  { const pu = portraitUrl(hero.model); const hn = $('hname'); hn.innerHTML = ''; if (pu) { const im = document.createElement('img'); im.src = pu; im.style.cssText = 'width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid #ffc933;vertical-align:middle;margin-right:6px'; hn.appendChild(im); } hn.appendChild(document.createTextNode(CLASSES[hero.cls].icon + ' Nv.' + state.level + ' ' + hero.name.split(' ')[0] + (state.meta && state.meta.title ? ' «' + state.meta.title + '»' : ''))); }
   { const n = questsClaimable(); $('questbtn').textContent = '📜 MISSÕES' + (n ? ' ❗' + n : ''); }
   $('hgems').textContent = '💎' + state.gems; $('hgold').textContent = '🪙' + state.gold; $('hcash').textContent = '💵' + state.cash;
   const a = curAct();
@@ -525,7 +525,7 @@ function refreshTeam() {
     b.className = 'tbtn' + (i === activeIdx ? ' on' : ''); b.style.cursor = 'default'; b.style.pointerEvents = 'none';
     if (i !== activeIdx) { b.style.width = b.style.height = '48px'; b.style.opacity = '0.85'; }
     b.style.borderColor = '#' + h.color.toString(16).padStart(6, '0');
-    b.innerHTML = CLASSES[h.cls].icon + '<small>' + (i === activeIdx ? 'VOCÊ' : h.name.split(' ')[0]) + '</small>';
+    { const pu = portraitUrl(h.model); b.innerHTML = (pu ? '<img src="' + pu + '" style="width:70%;height:70%;border-radius:50%;object-fit:cover">' : CLASSES[h.cls].icon) + '<small>' + (i === activeIdx ? 'VOCÊ' : h.name.split(' ')[0]) + '</small>'; }
     box.appendChild(b);
   });
   syncAllies();
@@ -1042,7 +1042,7 @@ function spawnProxy(r) {
     mesh.traverse(o => { if (o.isMesh && o.material) { if (o.material.emissive) o.material.emissive.setHex(0x664400); if (o.material.color) o.material.color.setHex(0xffd36b); } });
   }
   enemies.push(e);
-  if (boss) { bossRef = e; $('bossname').textContent = '👑 ' + (state.endless ? 'Eco do Apagador' : info.name); $('bossfill').style.width = '100%'; $('bossbar').style.display = 'block'; }
+  if (boss) { { const bi = $('bossimg'); bi.src = BASE + 'img/monsters/' + curAct().realm + '.webp'; bi.style.display = 'block'; } bossRef = e; $('bossname').textContent = '👑 ' + (state.endless ? 'Eco do Apagador' : info.name); $('bossfill').style.width = '100%'; $('bossbar').style.display = 'block'; }
   return e;
 }
 function applySnap(d) {
