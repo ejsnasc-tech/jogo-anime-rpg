@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { makeHero, animateHero, playOnce } from './actors.js';
 import { CLASSES, CLASS_BASE, CLASS_MODELS, REALMS, SKINS, HAIR_COLORS, EYE_COLORS, OUTFIT_COLORS, CAPE_COLORS, ORIGINS, PREMADE, buildPlayerHero } from './data.js';
-import { HAIR_STYLES, FACES, ACCS, SEXES, BUILDS, HEIGHTS } from './looks.js';
+import { HAIR_STYLES, FACES, ACCS, SEXES, BUILDS, HEIGHTS, OUTFIT_STYLES, MALE_HAIR, FEMALE_HAIR } from './looks.js';
+function applySex(c, v) { c.body = v; const bad = v === 'm' ? FEMALE_HAIR : MALE_HAIR; if (bad.includes(c.hairStyle || 'short')) c.hairStyle = v === 'm' ? 'short' : 'long'; c.outfitStyle = 'auto'; if (v === 'm' && c.acc === 'flower') c.acc = 'none'; }
+const rndOutfit = (sex) => OUTFIT_STYLES.filter(x => sex === 'f' || x[0] !== 'dress')[Math.floor(Math.random() * (OUTFIT_STYLES.length - (sex === 'f' ? 0 : 1)))][0];
 
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -15,7 +17,7 @@ export function randomLook(name) {
     name: name || '', cls, model: pick(CLASS_MODELS[cls])[0], hat: Math.random() < 0.25, realm: pick(ORIGINS),
     skin: Math.floor(Math.random() * SKINS.length), hair: Math.floor(Math.random() * HAIR_COLORS.length),
     outfit: Math.floor(Math.random() * OUTFIT_COLORS.length), cape: Math.floor(Math.random() * CAPE_COLORS.length),
-    body: pick(['m', 'f']), build: pick(['slim', 'normal', 'normal', 'strong', 'chubby']), height: pick(['short', 'mid', 'mid', 'tall']), hairStyle: pick(HAIR_STYLES)[0], face: pick(FACES)[0], eye: Math.floor(Math.random() * EYE_COLORS.length), acc: Math.random() < 0.7 ? 'none' : pick(ACCS)[0],
+    body: 'm', build: pick(['slim', 'normal', 'normal', 'strong', 'chubby']), height: pick(['short', 'mid', 'mid', 'tall']), hairStyle: 'short', outfitStyle: 'auto', face: pick(FACES)[0], eye: Math.floor(Math.random() * EYE_COLORS.length), acc: Math.random() < 0.7 ? 'none' : pick(ACCS)[0],
   };
 }
 
@@ -94,12 +96,12 @@ export function openCreator(opts) {
   function viewMode() {
     body.innerHTML = '';
     body.append(el('h2', null, 'Olá, ' + account + '!'), el('p', 'sub', 'Seu herói é...'));
-    const sx = el('div', 'row'); SEXES.forEach(([k, lab]) => { const b = el('button', 'chip' + ((c.body || 'm') === k ? ' sel' : ''), lab); b.onclick = () => { c.body = k; viewMode(); }; sx.appendChild(b); }); body.append(sx, el('p', 'sub', 'Como você quer criar?'));
+    const sx = el('div', 'row'); SEXES.forEach(([k, lab]) => { const b = el('button', 'chip' + ((c.body || 'm') === k ? ' sel' : ''), lab); b.onclick = () => { applySex(c, k); viewMode(); }; sx.appendChild(b); }); body.append(sx, el('p', 'sub', 'Como você quer criar?'));
     const a = el('button', 'card', ''); a.innerHTML = '<b>🎨 Criar do zero</b><span>Escolha classe, aparência, pele, cabelo e roupas.</span>'; a.onclick = () => viewCustom();
-    const b = el('button', 'card', ''); b.innerHTML = '<b>⭐ Personagens prontos</b><span>Escolha entre 8 heróis já montados.</span>'; b.onclick = () => viewPremade();
+    const b = el('button', 'card', ''); b.innerHTML = '<b>⭐ Heróis prontos (modelos 3D de IA)</b><span>Visual pintado e bonito, já com arma. Recomendado!</span>'; b.onclick = () => viewPremade();
     const r = el('button', 'card', ''); r.innerHTML = '<b>🎲 Surpreenda-me</b><span>Um herói aleatório (dá para ajustar depois).</span>';
-    r.onclick = () => { const sex = c.body; c = randomLook(c.name || account); c.body = sex || c.body; viewCustom(); };
-    body.append(a, b, r);
+    r.onclick = () => { const sex = c.body || 'm'; c = randomLook(c.name || account); applySex(c, sex); c.hairStyle = pick(sex === 'm' ? MALE_HAIR : FEMALE_HAIR); c.outfitStyle = rndOutfit(sex); viewCustom(); };
+    body.append(b, a, r);
     if (opts.canCancel) { const cn = el('button', 'sec', '✖ Cancelar'); cn.onclick = () => { close(); opts.onDone(null); }; body.append(cn); }
     showHero(Object.assign({}, c));
   }
@@ -116,7 +118,7 @@ export function openCreator(opts) {
   }
 
   let tab = 'class', tabBox = null;
-  const TABS = [['class', lockCls ? '🧙 Visual' : '⚔️ Classe'], ['body', '💪 Corpo'], ['hair', '💇 Cabelo'], ['face', '😊 Rosto'], ['outfit', '👕 Cores'], ['acc', '🎀 Extras'], ['origin', '🌍 Origem']];
+  const TABS = [['class', lockCls ? '🧙 Visual' : '⚔️ Classe'], ['body', '💪 Corpo'], ['hair', '💇 Cabelo'], ['face', '😊 Rosto'], ['outfit', '👕 Roupa'], ['acc', '🎀 Extras'], ['origin', '🌍 Origem']];
 
   function refreshTab() {
     showHero(c);
@@ -134,7 +136,8 @@ export function openCreator(opts) {
     else if (tab === 'face') { tabBox.appendChild(el('div', 'lbl', 'Expressão')); tabBox.appendChild(chips(FACES, c.face || 'calm', (v) => { c.face = v; })); tabBox.appendChild(el('div', 'lbl', 'Cor dos olhos')); tabBox.appendChild(swatches(EYE_COLORS, c.eye != null ? c.eye : 1, (i) => { c.eye = i; })); }
     else if (tab === 'acc') { tabBox.appendChild(el('div', 'lbl', 'Acessório (usa a cor da capa)')); tabBox.appendChild(chips(ACCS, c.acc || 'none', (v) => { c.acc = v; })); tabBox.appendChild(el('div', 'desc', 'Dica: com elmo, chapéu ou capuz o penteado fica escondido. Tire o elmo/chapéu na aba Classe (e para Ladino use a aparência "Ladino", sem capuz).')); }
     else if (tab === 'outfit') {
-      tabBox.appendChild(el('div', 'lbl', 'Roupa / armadura')); tabBox.appendChild(swatches(OUTFIT_COLORS, c.outfit, (i) => { c.outfit = i; }));
+      tabBox.appendChild(el('div', 'lbl', 'Estilo da roupa')); tabBox.appendChild(chips(OUTFIT_STYLES.filter(x => (c.body || 'm') === 'f' || x[0] !== 'dress'), c.outfitStyle || 'auto', (v) => { c.outfitStyle = v; }));
+      tabBox.appendChild(el('div', 'lbl', 'Cor da roupa')); tabBox.appendChild(swatches(OUTFIT_COLORS, c.outfit, (i) => { c.outfit = i; }));
       tabBox.appendChild(el('div', 'lbl', 'Capa e acentos')); tabBox.appendChild(swatches(CAPE_COLORS, c.cape, (i) => { c.cape = i; }));
     } else if (tab === 'origin') {
       tabBox.appendChild(chips(ORIGINS.map(k => [k, REALMS[k].icon + ' ' + REALMS[k].name]), c.realm, (v) => { c.realm = v; }));
@@ -147,13 +150,13 @@ export function openCreator(opts) {
     body.innerHTML = '';
     fixModel();
     const nm = el('input'); nm.type = 'text'; nm.maxLength = 16; nm.placeholder = 'Nome do personagem'; nm.value = c.name || ''; nm.oninput = () => { c.name = nm.value.trim(); };
-    const sxr = chips(SEXES, c.body || 'm', (v) => { c.body = v; });
+    const sxr = chips(SEXES, c.body || 'm', (v) => { applySex(c, v); });
     const tabs = el('div', 'tabs');
     TABS.forEach(([k, lab]) => { const b = el('button', 'tab' + (k === tab ? ' sel' : ''), lab); b.onclick = () => { tab = k; viewCustom(); }; tabs.appendChild(b); });
     tabBox = el('div', 'tabbox');
     const foot = el('div', 'foot');
     const back = el('button', 'sec', lockCls ? '✖ Cancelar' : '◀ Voltar'); back.onclick = lockCls ? () => { close(); opts.onDone(null); } : viewMode;
-    const rnd = el('button', 'sec', '🎲'); rnd.onclick = () => { c = Object.assign(randomLook(c.name), { name: c.name, body: c.body }); if (lockCls) c.cls = lockCls; viewCustom(); };
+    const rnd = el('button', 'sec', '🎲'); rnd.onclick = () => { { const sex = c.body || 'm'; c = Object.assign(randomLook(c.name), { name: c.name }); applySex(c, sex); c.hairStyle = pick(sex === 'm' ? MALE_HAIR : FEMALE_HAIR); c.outfitStyle = rndOutfit(sex); } if (lockCls) c.cls = lockCls; viewCustom(); };
     const ok = el('button', 'big', 'Confirmar'); ok.onclick = () => { if (!c.name) c.name = account; finish(c); };
     foot.append(back, rnd, ok);
     body.append(nm, sxr, tabs, tabBox, foot);

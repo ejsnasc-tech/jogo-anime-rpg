@@ -11,7 +11,8 @@ const BASE = (import.meta.env && import.meta.env.BASE_URL) || './';
 const FILES = {
   Knight: 'models/chars/Knight.glb', Barbarian: 'models/chars/Barbarian.glb', Mage: 'models/chars/Mage.glb',
   Rogue: 'models/chars/Rogue.glb', Rogue_Hooded: 'models/chars/Rogue_Hooded.glb',
-  Unirall1: 'models/chars/Unirall1.glb', Unirall2: 'models/chars/Unirall2.glb',   // heróis gerados por IA (Unirall), textura própria
+  Unirall1: 'models/chars/Unirall1.glb', Unirall2: 'models/chars/Unirall2.glb',
+  UnirallArqueira: 'models/chars/UnirallArqueira.glb', UnirallAssassino: 'models/chars/UnirallAssassino.glb', UnirallDruida: 'models/chars/UnirallDruida.glb', UnirallFeiticeira: 'models/chars/UnirallFeiticeira.glb', UnirallGuerreira: 'models/chars/UnirallGuerreira.glb', UnirallMago: 'models/chars/UnirallMago.glb', UnirallPaladino: 'models/chars/UnirallPaladino.glb',   // heróis gerados por IA (Unirall), textura própria
   Skeleton_Minion: 'models/enemies/Skeleton_Minion.glb', Skeleton_Warrior: 'models/enemies/Skeleton_Warrior.glb',
   Skeleton_Mage: 'models/enemies/Skeleton_Mage.glb', Skeleton_Rogue: 'models/enemies/Skeleton_Rogue.glb',
 };

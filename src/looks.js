@@ -9,6 +9,9 @@ export const HAIR_STYLES = [['short', 'Curto'], ['spiky', 'Espetado'], ['long', 
 export const FACES = [['calm', 'Calmo'], ['smile', 'Sorriso'], ['fierce', 'Feroz'], ['happy', 'Alegre'], ['sleepy', 'Sonolento']];
 export const ACCS = [['none', 'Nenhum'], ['catears', 'Orelhas de gato'], ['horns', 'Chifrinhos'], ['glasses', 'Óculos'], ['flower', 'Flor'], ['band', 'Faixa']];
 export const BODIES = SEXES;
+export const OUTFIT_STYLES = [['auto', 'Da classe'], ['tunic', 'Túnica'], ['armor', 'Armadura'], ['robe', 'Manto longo'], ['coat', 'Casaco'], ['vest', 'Colete'], ['dress', 'Vestido'], ['ninja', 'Traje ninja']];
+const autoStyle = (cls, female) => ({ warrior: 'armor', paladin: 'armor', assassin: 'ninja', archer: 'vest', mage: female ? 'robe' : 'coat', sorcerer: female ? 'dress' : 'coat', druid: 'robe' }[cls] || 'tunic');
+export const MALE_HAIR = ['short', 'spiky', 'mohawk', 'bald'], FEMALE_HAIR = ['long', 'ponytail', 'twin', 'bob', 'bun', 'braid'];
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const Y = V(0, 1, 0);
@@ -17,7 +20,7 @@ const shade = (n, k) => '#' + new THREE.Color(n).multiplyScalar(k).getHexString(
 
 // ---- material "toon" (3 tons, como desenho) ----
 let gradMap = null;
-const grad = () => gradMap || (gradMap = (() => { const t = new THREE.DataTexture(new Uint8Array([95, 170, 255]), 3, 1, THREE.RedFormat); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })());
+const grad = () => gradMap || (gradMap = (() => { const t = new THREE.DataTexture(new Uint8Array([70, 120, 170, 215, 255]), 5, 1, THREE.RedFormat); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })());
 const toon = (c, o) => new THREE.MeshToonMaterial(Object.assign({ color: c, gradientMap: grad() }, o));
 
 // ---- rosto: decalque curvo (só os traços, sem "máscara") ----
@@ -155,36 +158,50 @@ function buildBody(root, L, def) {
   place(root, L, 'spine', lathe(up, outM, 0.78));
   place(root, L, 'hips', lathe([[0.001, 0.36], [0.2 * tw, 0.38], [0.27 * tw, 0.5], [0.26 * tw, 0.63], [0.001, 0.63]], pantM, 0.8));
   const belt = new THREE.Mesh(new THREE.TorusGeometry(0.255 * tw, 0.03, 8, 24), beltM); belt.rotation.x = Math.PI / 2; belt.position.y = 0.62; belt.scale.set(1, 0.8, 1); place(root, L, 'spine', belt);
-  // braços (manga até o cotovelo, antebraço de pele, mãos)
+  const style = (def.outfitStyle && def.outfitStyle !== 'auto') ? def.outfitStyle : autoStyle(cls, female);
+  const capeC = def.color != null ? def.color : 0x8e44ad, trimM = toon(capeC), dbl = { side: THREE.DoubleSide };
+  const sleeves = { tunic: 'short', armor: 'armor', robe: 'wide', coat: 'long', vest: 'none', dress: 'none', ninja: 'long' }[style] || 'short';
+  // bracos
   ['l', 'r'].forEach((sd) => {
     const sh = rp('upperarm' + sd), el = rp('lowerarm' + sd), wr = rp('wrist' + sd), hd = rp('hand' + sd);
     if (!sh || !el || !wr || !hd) return;
     const r1 = 0.105 * K.l, r2 = 0.085 * K.l;
-    place(root, L, 'upperarm' + sd, capsuleBetween(sh, el, r1, outM));
-    place(root, L, 'upperarm' + sd, ball(0.135 * K.l, outM, sh.x, sh.y, sh.z));
-    place(root, L, 'lowerarm' + sd, capsuleBetween(el, wr, r2, skinM));
-    place(root, L, 'hand' + sd, ball(0.115, skinM, hd.x, hd.y, hd.z));
+    const upM = sleeves === 'none' ? skinM : (sleeves === 'armor' ? metalM : outM), loM = (sleeves === 'long' || sleeves === 'wide') ? outM : (sleeves === 'armor' ? metalM : skinM);
+    place(root, L, 'upperarm' + sd, capsuleBetween(sh, el, r1 * (sleeves === 'wide' ? 1.25 : 1), upM));
+    place(root, L, 'upperarm' + sd, ball(0.135 * K.l, sleeves === 'none' ? outM : upM, sh.x, sh.y, sh.z));
+    place(root, L, 'lowerarm' + sd, capsuleBetween(el, wr, r2 * (sleeves === 'wide' ? 1.55 : 1), loM));
+    if (sleeves === 'long' || sleeves === 'wide') place(root, L, 'lowerarm' + sd, ball(0.1 * K.l * (sleeves === 'wide' ? 1.5 : 1), trimM, wr.x, wr.y, wr.z, 1, 0.5, 1));
+    place(root, L, 'hand' + sd, ball(0.115, sleeves === 'armor' ? metalM : skinM, hd.x, hd.y, hd.z));
   });
   // pernas e botas
   ['l', 'r'].forEach((sd) => {
     const hp = rp('upperleg' + sd), kn = rp('lowerleg' + sd), ft = rp('foot' + sd), to = rp('toes' + sd);
     if (!hp || !kn || !ft) return;
     place(root, L, 'upperleg' + sd, capsuleBetween(hp, kn, 0.125 * K.l, pantM));
-    place(root, L, 'lowerleg' + sd, capsuleBetween(kn, ft, 0.108 * K.l, pantM));
+    place(root, L, 'lowerleg' + sd, capsuleBetween(kn, ft, 0.108 * K.l, style === 'armor' ? metalM : pantM));
+    if (style === 'armor') place(root, L, 'lowerleg' + sd, ball(0.13 * K.l, metalM, kn.x, kn.y, kn.z + 0.04, 1, 0.8, 1));
     place(root, L, 'foot' + sd, ball(1, bootM, ft.x, 0.085, (ft.z + (to ? to.z : 0.1)) / 2 + 0.03, 0.135, 0.095, 0.21));
   });
-  // roupa por classe
-  const skirt = (r0, r1, y0, y1, mat) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r0 * tw, r1 * tw, y0 - y1, 22, 1, true), mat); m.position.y = (y0 + y1) / 2; m.scale.z = 0.85; return m; };
-  const dbl = { side: THREE.DoubleSide };
-  if (cls === 'mage' || cls === 'sorcerer' || cls === 'druid') place(root, L, 'hips', skirt(0.27, 0.5, 0.62, 0.16, toon(outfit, dbl)));
-  else if (female) place(root, L, 'hips', skirt(0.27, 0.42, 0.62, 0.36, toon(outfit, dbl)));
-  else if (cls === 'archer') place(root, L, 'hips', skirt(0.27, 0.36, 0.62, 0.4, toon(0x5a7a3a, dbl)));
-  if (cls === 'warrior' || cls === 'paladin') {
-    place(root, L, 'spine', ball(1, metalM, 0, 0.93, 0.15, 0.27 * tw, 0.2, 0.13));
-    ['l', 'r'].forEach(sd => { const sh = rp('upperarm' + sd); if (sh) place(root, L, 'upperarm' + sd, ball(0.19 * K.l, metalM, sh.x * 1.1, sh.y + 0.04, sh.z, 1, 0.75, 1)); });
+  // pecas da roupa
+  const skirt = (r0, r1, y0, y1, mat, th0, thLen) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r0 * tw, r1 * tw, y0 - y1, 24, 1, true, th0 || 0, thLen || Math.PI * 2), mat); m.position.y = (y0 + y1) / 2; m.scale.z = 0.85; return m; };
+  const band = (r, y, mat, t) => { const m = new THREE.Mesh(new THREE.TorusGeometry(r * tw, t || 0.025, 8, 28), mat); m.rotation.x = Math.PI / 2; m.position.y = y; m.scale.y = 0.85; return m; };
+  if (style === 'tunic') { place(root, L, 'hips', skirt(0.27, female ? 0.42 : 0.34, 0.62, female ? 0.36 : 0.4, toon(outfit, dbl))); place(root, L, 'hips', band(female ? 0.42 : 0.34, female ? 0.37 : 0.41, trimM)); }
+  else if (style === 'armor') {
+    place(root, L, 'spine', ball(1, metalM, 0, 0.93, 0.15, 0.27 * tw, 0.2, 0.13)); place(root, L, 'spine', ball(1, metalM, 0, 0.9, -0.14, 0.26 * tw, 0.2, 0.1));
+    ['l', 'r'].forEach(sd => { const sh = rp('upperarm' + sd); if (sh) place(root, L, 'upperarm' + sd, ball(0.2 * K.l, metalM, sh.x * 1.1, sh.y + 0.04, sh.z, 1, 0.75, 1)); });
+    place(root, L, 'hips', skirt(0.27, 0.36, 0.62, 0.42, toon(0x8a93a0, dbl)));
+  } else if (style === 'robe') { place(root, L, 'hips', skirt(0.27, 0.5, 0.62, 0.14, toon(outfit, dbl))); place(root, L, 'hips', band(0.5, 0.16, trimM, 0.03)); place(root, L, 'spine', band(0.26, 0.64, trimM, 0.035)); }
+  else if (style === 'coat') {
+    place(root, L, 'hips', skirt(0.27, 0.44, 0.62, 0.2, toon(outfit, dbl), Math.PI * 0.62, Math.PI * 1.76));
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.14, 18, 1, true), toon(capeC, dbl)); col.position.y = 1.15; col.scale.z = 0.85; place(root, L, 'spine', col);
+    place(root, L, 'spine', band(0.3, 0.98, trimM, 0.02));
+  } else if (style === 'vest') { place(root, L, 'spine', band(0.3, 0.98, trimM, 0.025)); place(root, L, 'spine', band(0.31, 1.06, trimM, 0.02)); if (female || cls === 'archer') place(root, L, 'hips', skirt(0.27, 0.36, 0.62, 0.4, toon(0x5a7a3a, dbl))); }
+  else if (style === 'dress') { place(root, L, 'hips', skirt(0.25, 0.46, 0.64, 0.24, toon(outfit, dbl))); place(root, L, 'hips', band(0.46, 0.26, trimM, 0.025)); place(root, L, 'spine', ball(0.07, trimM, 0, 0.7, -0.22, 1.6, 1, 0.7)); }
+  else if (style === 'ninja') {
+    const sc = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.065, 8, 20), trimM); sc.rotation.x = Math.PI / 2; sc.position.y = 1.16; sc.scale.y = 0.8; place(root, L, 'spine', sc);
+    place(root, L, 'spine', band(0.29, 0.72, trimM, 0.06)); place(root, L, 'hips', skirt(0.27, 0.3, 0.62, 0.5, toon(outfit, dbl)));
   }
-  if (cls === 'assassin') { const sc = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.065, 8, 20), toon(def.color != null ? def.color : 0x8e44ad)); sc.rotation.x = Math.PI / 2; sc.position.y = 1.16; sc.scale.y = 0.8; place(root, L, 'spine', sc); }
-  if (cls === 'druid') { const mt = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.4, 0.2, 14, 1, true), toon(0x5a7a3a, dbl)); mt.position.y = 1.07; place(root, L, 'spine', mt); }
+  if (cls === 'druid' && style !== 'armor') { const mt = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.4, 0.2, 14, 1, true), toon(0x5a7a3a, dbl)); mt.position.y = 1.07; place(root, L, 'spine', mt); }
   // some o corpo quadrado original (armas, capa e elmo continuam)
   root.traverse(o => { if (o.isSkinnedMesh && /(_Body|_Head|_Arm|_Leg)/.test(o.name)) o.visible = false; });
 }
