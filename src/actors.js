@@ -119,6 +119,14 @@ function recolorMaterial(key, def) {
 
 const newUserData = (clips, anim, extra) => Object.assign({ glb: true, mixer: null, clips, actions: {}, cur: null, curAction: null, shot: null, shotEnd: 0, t: 0, dead: false, anim }, extra || {});
 
+// Heróis de IA não trazem arma: copia a da classe dos modelos KayKit (mesmo esqueleto, mesmo encaixe nos ossos handslot)
+function giveProps(root, cls) {
+  const by = PROPS[cls] || PROPS.warrior, src = Object.keys(by).find(k => loaded[k]); if (!src) return;
+  by[src].forEach(nm => {
+    const n = loaded[src].scene.getObjectByName(nm), slot = n && n.parent && root.getObjectByName(n.parent.name); if (!slot) return;
+    const c = n.clone(true); c.traverse(o => { o.visible = true; if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } }); slot.add(c);
+  });
+}
 // ---- heróis ----
 export function makeHero(def) {
   const wanted = def.model && loaded[def.model] ? def.model : (CLASS_MODELS[def.cls] || CLASS_MODELS.warrior)[0][0];
@@ -129,6 +137,7 @@ export function makeHero(def) {
   const keep = (PROPS[def.cls] && PROPS[def.cls][key]) || [], propSet = PROP_NODES[key] || [];
   root.traverse(o => { if (propSet.includes(o.name)) o.visible = keep.includes(o.name); if (HEADGEAR.includes(o.name)) o.visible = def.hat !== false; });
   if (isAI(key)) {
+    giveProps(root, def.cls);
     root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
     try { addOutline(root); } catch (e) { console.warn(e); }
   } else {
@@ -139,7 +148,7 @@ export function makeHero(def) {
     let gear = false; root.traverse(o => { if (HEADGEAR.includes(o.name) && o.visible) gear = true; });
     try { decorate(root, L, def, key === 'Rogue_Hooded' ? 'hood' : gear ? 'hat' : null); addOutline(root); } catch (e) { console.warn('visual anime falhou', e); }
   }
-  g.userData = newUserData(L.clips, ANIM[def.cls] || ANIM.warrior);
+  g.userData = newUserData(isAI(key) ? (loaded.Knight || loaded.Mage).clips : L.clips, ANIM[def.cls] || ANIM.warrior);   // IA: sem animações próprias, usa as do KayKit (mesmo esqueleto)
   g.userData.mixer = new THREE.AnimationMixer(root);
   if (def.cls === 'paladin') {
     const halo = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.035, 8, 28), new THREE.MeshStandardMaterial({ color: 0xffe08a, emissive: 0xffd166, emissiveIntensity: 1 }));

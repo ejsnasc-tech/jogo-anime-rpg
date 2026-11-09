@@ -26,7 +26,12 @@ export function groundTex(realm) {
   g.fillStyle = P[0]; g.fillRect(0, 0, 128, 128);
   for (let i = 0; i < 300; i++) { g.fillStyle = P[1][i % P[1].length]; g.fillRect(Math.random() * 128, Math.random() * 128, P[2], P[3]); }
   if (realm === 'vazio') { g.strokeStyle = 'rgba(160,90,255,.55)'; g.lineWidth = 1.2; for (let i = 0; i < 6; i++) { g.beginPath(); let x = Math.random() * 128, y = Math.random() * 128; g.moveTo(x, y); for (let k = 0; k < 4; k++) { x += (Math.random() - 0.5) * 40; y += (Math.random() - 0.5) * 40; g.lineTo(x, y); } g.stroke(); } }
-  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(235, 235); t.colorSpace = THREE.SRGBColorSpace;
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(420, 420); t.colorSpace = THREE.SRGBColorSpace;
+  // textura pintada gerada no Unirall (sem emenda); troca a de rabisco assim que carregar
+  try {
+    const im = new Image(); im.onload = () => { t.image = im; t.anisotropy = 8; t.needsUpdate = true; };
+    im.src = ((import.meta.env && import.meta.env.BASE_URL) || './') + 'img/tex/' + realm + '.webp';
+  } catch (e) { /* fica a textura de rabisco */ }
   return (texCache[realm] = t);
 }
 

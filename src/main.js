@@ -12,6 +12,7 @@ import { buildCity, CITY_R, CITY_SPAWN, PLOTS } from './city.js';
 import { createNet, nameTag, NET_URL } from './net.js';
 import { makeBiome, groundTex, BIOME_INFO } from './biomes.js';
 import { EXTRA_PETS } from './pets.js';
+import { createAmbient } from './ambient.js';
 const IMG = ((import.meta.env && import.meta.env.BASE_URL) || './') + 'img/';
 import { QUESTS, ACH, LOGIN_DAYS, ensureMeta, loginState, claimLogin, loginReward, questReward, offlineGain } from './meta.js';
 import { initSocial } from './social.js';
@@ -80,8 +81,10 @@ if (sess && sess.cid) {
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.3;   // cores de cinema, sem estourar o branco
 $('game').appendChild(renderer.domElement);
+{ const v = document.createElement('div'); v.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:1;background:radial-gradient(ellipse at 50% 46%,rgba(0,0,0,0) 58%,rgba(10,8,30,.38) 100%)'; $('game').appendChild(v); }   // vinheta suave
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xcfe9ff, 35, 140);
@@ -93,10 +96,11 @@ const CAM_DECOR = new THREE.Vector3(0, 13, 5.2);
 
 const hemi = new THREE.HemisphereLight(0xffffff, 0x4a7a3a, 0.85); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff2d6, 1.1);
-sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03; sun.shadow.radius = 3;
 Object.assign(sun.shadow.camera, { left: -22, right: 22, top: 22, bottom: -22, near: 1, far: 60 });
 scene.add(sun, sun.target);
 
+const ambient = createAmbient(scene);
 function setSky(colors) {
   const c = document.createElement('canvas'); c.width = 2; c.height = 256;
   const g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 256);
@@ -146,11 +150,15 @@ const terrain = (() => {
 ground.visible = false;   // começa no campo; o chão plano só aparece na cidade
 
 // ---- cenários por setor (cada reino tem o seu bioma) ----
+let trailMat = null; const TRAIL = { mares: 0xd9b77a, sombras: 0x5d5070, arcana: 0x6c68a8, planalto: 0xcfa468, primeva: 0x8a6c48, vazio: 0x3c3150 };
 const biomes = {}; let biomeNotify = false, curBiome = null, biomeFar = 140, baseTrees = [], baseRock = null, mtnMat = null, capMat = null, cloudMat = null;
 function applyAct() {
   const key = ACTS[state.act].realm, r = REALMS[key], bi = BIOME_INFO[key];
   setSky(r.sky); scene.fog.color.set(r.fog);
-  ground.material.map = groundTex(key); ground.material.color.set(0xffffff); ground.material.needsUpdate = true;
+  ambient.setRealm(key);
+  skyGlow.material.color.setHex(SUN[key] || 0xfff1c0);
+  if (trailMat) trailMat.color.setHex(TRAIL[key] || 0xd9b77a);
+  ground.material.map = groundTex(key); ground.material.color.set(key === 'arcana' ? 0xaeb4d8 : key === 'vazio' ? 0xc8c0d8 : 0xe8e8e8); ground.material.needsUpdate = true;
   hemi.groundColor.set(bi.hemi); scene.fog.near = bi.fog[0]; biomeFar = bi.fog[1];
   if (mtnMat) { mtnMat.color.set(bi.mtn); capMat.color.set(bi.cap); cloudMat.color.set(bi.cloud); }
   baseTrees.forEach(m => { m.visible = key === 'primeva'; }); if (baseRock) baseRock.visible = key !== 'mares';
@@ -204,6 +212,16 @@ const fieldGroup = new THREE.Group(); scene.add(fieldGroup);
 
 // Cenário: montanhas, nuvens, torres, rio, trilha e flores
 const farGroup = new THREE.Group(); scene.add(farGroup);
+// sol/lua com halo suave no céu (cor por reino); fica longe e acompanha o herói
+const skyGlow = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.18, 'rgba(255,255,255,.9)'); gr.addColorStop(0.22, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, color: 0xfff1c0, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, opacity: 0.9 }));
+  sp.scale.setScalar(70); sp.position.set(-110, 62, -170); sp.renderOrder = -1; farGroup.add(sp); return sp;
+})();
+const SUN = { mares: 0xfff1c0, sombras: 0xb9a6ff, arcana: 0xd8c6ff, planalto: 0xffc46a, primeva: 0xeaffb0, vazio: 0x9a5cff };
 let waterTex = null;
 const RUINS = [], chestMeshes = [];
 (function scenery() {
@@ -292,7 +310,14 @@ const RUINS = [], chestMeshes = [];
       chestMeshes.push({ g, lid, gem, i, x: r.x, z: r.z });
     });
   }
-  const dirt = mat(0xd9b77a, { flatShading: false }), dg = new THREE.CircleGeometry(1.5, 14);
+  const dirt = (() => {   // trilha: terra com grão e borda macia (some no chão pintado), cor muda por reino
+    const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+    const gr = g.createRadialGradient(32, 32, 6, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.6, 'rgba(255,255,255,.9)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64); g.globalCompositeOperation = 'source-atop';
+    for (let i = 0; i < 160; i++) { g.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,.14)' : 'rgba(255,255,255,.12)'; g.fillRect(Math.random() * 64, Math.random() * 64, 2, 2); }
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    return (trailMat = new THREE.MeshStandardMaterial({ map: t, color: 0xd9b77a, roughness: 1, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+  })(), dg = new THREE.CircleGeometry(1.7, 14);
   for (let z = 190; z > -190; z -= 1.6) {
     const d = new THREE.Mesh(dg, dirt); d.rotation.x = -Math.PI / 2; const tx = trailX(z); if (riverDepth(tx, z) > 0.02) continue; d.position.set(tx, groundH(tx, z) + 0.04, z); d.scale.set(1 + Math.random() * 0.3, 1, 1); fieldGroup.add(d);
   }
@@ -2327,6 +2352,7 @@ function frame() {
   if (shake > 0) { shake -= dt; camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake; }
   camera.lookAt(cx, dcm ? 0 : 0.8, cz);
   farGroup.position.set(p.x, 0, p.z);
+  ambient.setVisible(!inCity && !decor.on); if (!inCity) ambient.update(dt, p);
   sun.position.set(p.x + 10, 18, p.z + 7); sun.target.position.copy(p);
   renderer.render(scene, camera);
 }
