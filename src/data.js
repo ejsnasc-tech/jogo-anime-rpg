@@ -59,13 +59,15 @@ export const PREMADE = [
   { name: 'Orin Estelar', model: 'Mage', hat: true,     cls: 'mage',     realm: 'arcana',   skin: 1, hairStyle: 'long',     hair: 5, eye: 1, face: 'calm',   outfit: 3, cape: 4, bio: 'Mago sereno que lê as estrelas como livros.' },
   { name: 'Vexa Ruína', body: 'f', model: 'Mage', hat: false,       cls: 'sorcerer', realm: 'sombras',  skin: 0, hairStyle: 'mohawk',   hair: 7, eye: 5, face: 'fierce', outfit: 6, cape: 9, bio: 'Feiticeira de poder instável e sorriso perigoso.' },
   { name: 'Bram Raiz-Velha', model: 'Mage', hat: false,  cls: 'druid',    realm: 'primeva',  skin: 4, hairStyle: 'long',     hair: 1, eye: 3, face: 'smile',  outfit: 5, cape: 2, bio: 'Druida gentil que fala com árvores e animais.' },
+  { name: 'Kael Brasa (IA)', model: 'Unirall1', cls: 'warrior', realm: 'planalto', skin: 1, hairStyle: 'spiky', hair: 1, eye: 1, face: 'smile', outfit: 2, cape: 0, bio: 'Herói gerado por IA no Unirall: personagem 3D com textura própria (sem arma por enquanto).' },
+  { name: 'Dante Casaco (IA)', model: 'Unirall2', cls: 'assassin', realm: 'sombras', skin: 1, hairStyle: 'short', hair: 0, eye: 4, face: 'calm', outfit: 1, cape: 4, bio: 'Herói gerado por IA no Unirall: casaco longo, mãos ainda coladas às mangas.' },
   { name: 'Mara Vento-Sul', body: 'f', model: 'Barbarian', hat: false,   cls: 'warrior',  realm: 'mares',    skin: 3, hairStyle: 'ponytail', hair: 4, eye: 0, face: 'smile',  outfit: 0, cape: 1, bio: 'Capitã de navio que luta com a mesma alegria com que navega.' },
 ];
 
 // Converte as escolhas do criador em um herói jogável
 export function buildPlayerHero(c) {
   const b = CLASS_BASE[c.cls] || CLASS_BASE.warrior, allowed = CLASS_MODELS[c.cls] || CLASS_MODELS.warrior;
-  const model = allowed.some(m => m[0] === c.model) ? c.model : allowed[0][0];
+  const model = (/^Unirall/.test(c.model || '') || allowed.some(m => m[0] === c.model)) ? c.model : allowed[0][0];
   return {
     id: 'player', name: c.name || 'Aventureiro', realm: c.realm || 'mares', cls: c.cls, rar: 'E',
     model, hat: c.hat !== false,

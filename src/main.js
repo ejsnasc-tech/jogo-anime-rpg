@@ -2413,7 +2413,7 @@ function startGame() {
   else if (state.stage === 5 && !state.endless && !bossRef) spawnBoss();
 }
 
-if (qs.has('nocreator') && !state.custom) { state.account = 'Teste'; applyCustom(Object.assign({}, PREMADE[Number(qs.get('nocreator')) || 0])); setHero(); }
+if (qs.has('nocreator') && !state.custom) { state.account = 'Teste'; applyCustom(Object.assign({}, PREMADE[Number(qs.get('nocreator')) || 0], qs.get('ai') ? { model: qs.get('ai') } : {})); setHero(); }
 
 function legacySave() {
   try { const raw = localStorage.getItem('acrpg'); if (!raw) return null; const o = JSON.parse(raw); if (!o.custom) return null; return { raw, name: o.custom.name || 'Herói', cls: o.custom.cls, level: o.level || 1, pid: /^[a-f0-9]{32}$/.test(o.pid || '') ? o.pid : '' }; } catch (e) { return null; }

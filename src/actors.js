@@ -11,6 +11,7 @@ const BASE = (import.meta.env && import.meta.env.BASE_URL) || './';
 const FILES = {
   Knight: 'models/chars/Knight.glb', Barbarian: 'models/chars/Barbarian.glb', Mage: 'models/chars/Mage.glb',
   Rogue: 'models/chars/Rogue.glb', Rogue_Hooded: 'models/chars/Rogue_Hooded.glb',
+  Unirall1: 'models/chars/Unirall1.glb', Unirall2: 'models/chars/Unirall2.glb',   // heróis gerados por IA (Unirall), textura própria
   Skeleton_Minion: 'models/enemies/Skeleton_Minion.glb', Skeleton_Warrior: 'models/enemies/Skeleton_Warrior.glb',
   Skeleton_Mage: 'models/enemies/Skeleton_Mage.glb', Skeleton_Rogue: 'models/enemies/Skeleton_Rogue.glb',
 };
@@ -58,6 +59,7 @@ const CELLS = {
   Rogue:        { skin: [[0, 0]],         hair: [[1, 0]], outfit: [[0, 1]],                 cape: [[1, 1]] },
   Rogue_Hooded: { skin: [[0, 0]],         hair: [[1, 0]], outfit: [[0, 1]],                 cape: [[1, 1]] },
 };
+const isAI = (k) => /^Unirall/.test(k);
 const PROP_NODES = {
   Knight: ['1H_Sword_Offhand', 'Badge_Shield', 'Rectangle_Shield', 'Round_Shield', 'Spike_Shield', '1H_Sword', '2H_Sword'],
   Barbarian: ['1H_Axe_Offhand', 'Barbarian_Round_Shield', '1H_Axe', '2H_Axe', 'Mug'],
@@ -126,9 +128,14 @@ export function makeHero(def) {
   g.add(root); root.scale.setScalar(HERO_HEIGHT / L.height);
   const keep = (PROPS[def.cls] && PROPS[def.cls][key]) || [], propSet = PROP_NODES[key] || [];
   root.traverse(o => { if (propSet.includes(o.name)) o.visible = keep.includes(o.name); if (HEADGEAR.includes(o.name)) o.visible = def.hat !== false; });
-  const mat = recolorMaterial(key, def);
-  root.traverse(o => { if (o.isMesh) { o.material = mat; o.castShadow = true; o.frustumCulled = false; } });
-  if (def.hairStyle !== undefined) {
+  if (isAI(key)) {
+    root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+    try { addOutline(root); } catch (e) { console.warn(e); }
+  } else {
+    const mat = recolorMaterial(key, def);
+    root.traverse(o => { if (o.isMesh) { o.material = mat; o.castShadow = true; o.frustumCulled = false; } });
+  }
+  if (!isAI(key) && def.hairStyle !== undefined) {
     let gear = false; root.traverse(o => { if (HEADGEAR.includes(o.name) && o.visible) gear = true; });
     try { decorate(root, L, def, key === 'Rogue_Hooded' ? 'hood' : gear ? 'hat' : null); addOutline(root); } catch (e) { console.warn('visual anime falhou', e); }
   }
