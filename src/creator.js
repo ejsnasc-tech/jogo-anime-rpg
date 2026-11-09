@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { makeHero, animateHero, playOnce } from './actors.js';
 import { CLASSES, CLASS_BASE, CLASS_MODELS, REALMS, SKINS, HAIR_COLORS, EYE_COLORS, OUTFIT_COLORS, CAPE_COLORS, ORIGINS, PREMADE, buildPlayerHero } from './data.js';
-import { HAIR_STYLES, FACES, ACCS, SEXES, BUILDS, HEIGHTS, OUTFIT_STYLES, MALE_HAIR, FEMALE_HAIR } from './looks.js';
-function applySex(c, v) { c.body = v; const bad = v === 'm' ? FEMALE_HAIR : MALE_HAIR; if (bad.includes(c.hairStyle || 'short')) c.hairStyle = v === 'm' ? 'short' : 'long'; c.outfitStyle = 'auto'; if (v === 'm' && c.acc === 'flower') c.acc = 'none'; }
+import { HAIR_STYLES, FACES, ACCS, SEXES, BUILDS, HEIGHTS, OUTFIT_STYLES, MALE_HAIR, FEMALE_HAIR, MALE_FACES, FEMALE_FACES, MALE_ACCS, FEMALE_ACCS } from './looks.js';
+const PORTRAITS = { UnirallArqueira: 'mira', UnirallAssassino: 'kuro', UnirallDruida: 'brenn', UnirallFeiticeira: 'lilith', UnirallGuerreira: 'rubi', UnirallMago: 'aster', UnirallPaladino: 'seren', Unirall1: 'kael', Unirall2: 'dante' };
+function applySex(c, v) { c.body = v; const bad = v === 'm' ? FEMALE_HAIR : MALE_HAIR; if (bad.includes(c.hairStyle || 'short')) c.hairStyle = v === 'm' ? 'short' : 'long'; c.outfitStyle = 'auto'; if (!(v === 'm' ? MALE_FACES : FEMALE_FACES).includes(c.face)) c.face = 'calm'; if (!(v === 'm' ? MALE_ACCS : FEMALE_ACCS).includes(c.acc || 'none')) c.acc = 'none'; }
 const rndOutfit = (sex) => OUTFIT_STYLES.filter(x => sex === 'f' || x[0] !== 'dress')[Math.floor(Math.random() * (OUTFIT_STYLES.length - (sex === 'f' ? 0 : 1)))][0];
 
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
@@ -17,7 +18,7 @@ export function randomLook(name) {
     name: name || '', cls, model: pick(CLASS_MODELS[cls])[0], hat: Math.random() < 0.25, realm: pick(ORIGINS),
     skin: Math.floor(Math.random() * SKINS.length), hair: Math.floor(Math.random() * HAIR_COLORS.length),
     outfit: Math.floor(Math.random() * OUTFIT_COLORS.length), cape: Math.floor(Math.random() * CAPE_COLORS.length),
-    body: 'm', build: pick(['slim', 'normal', 'normal', 'strong', 'chubby']), height: pick(['short', 'mid', 'mid', 'tall']), hairStyle: 'short', outfitStyle: 'auto', face: pick(FACES)[0], eye: Math.floor(Math.random() * EYE_COLORS.length), acc: Math.random() < 0.7 ? 'none' : pick(ACCS)[0],
+    body: 'm', build: pick(['slim', 'normal', 'normal', 'strong', 'chubby']), height: pick(['short', 'mid', 'mid', 'tall']), hairStyle: 'short', outfitStyle: 'auto', face: pick(FACES.filter(x => MALE_FACES.includes(x[0])))[0], eye: Math.floor(Math.random() * EYE_COLORS.length), acc: Math.random() < 0.7 ? 'none' : pick(ACCS.filter(x => MALE_ACCS.includes(x[0])))[0],
   };
 }
 
@@ -132,9 +133,9 @@ export function openCreator(opts) {
       const d = el('div', 'desc'); const k = CLASSES[c.cls];
       d.innerHTML = '<b>' + k.icon + ' ' + k.name + ' — ' + k.role + '</b><br>' + CLASS_BASE[c.cls].look + '<br>' + k.desc + '<br><i>ULT: ' + k.ult + '</i>'; tabBox.appendChild(d);
     } else if (tab === 'body') { tabBox.appendChild(el('div', 'lbl', 'Porte físico')); tabBox.appendChild(chips(BUILDS, c.build || 'normal', (v) => { c.build = v; })); tabBox.appendChild(el('div', 'lbl', 'Altura')); tabBox.appendChild(chips(HEIGHTS, c.height || 'mid', (v) => { c.height = v; })); tabBox.appendChild(el('div', 'lbl', 'Tom de pele')); tabBox.appendChild(swatches(SKINS, c.skin, (i) => { c.skin = i; })); }
-    else if (tab === 'hair') { tabBox.appendChild(el('div', 'lbl', 'Penteado')); tabBox.appendChild(chips(HAIR_STYLES, c.hairStyle || 'short', (v) => { c.hairStyle = v; })); tabBox.appendChild(el('div', 'lbl', 'Cor do cabelo')); tabBox.appendChild(swatches(HAIR_COLORS, c.hair, (i) => { c.hair = i; })); }
-    else if (tab === 'face') { tabBox.appendChild(el('div', 'lbl', 'Expressão')); tabBox.appendChild(chips(FACES, c.face || 'calm', (v) => { c.face = v; })); tabBox.appendChild(el('div', 'lbl', 'Cor dos olhos')); tabBox.appendChild(swatches(EYE_COLORS, c.eye != null ? c.eye : 1, (i) => { c.eye = i; })); }
-    else if (tab === 'acc') { tabBox.appendChild(el('div', 'lbl', 'Acessório (usa a cor da capa)')); tabBox.appendChild(chips(ACCS, c.acc || 'none', (v) => { c.acc = v; })); tabBox.appendChild(el('div', 'desc', 'Dica: com elmo, chapéu ou capuz o penteado fica escondido. Tire o elmo/chapéu na aba Classe (e para Ladino use a aparência "Ladino", sem capuz).')); }
+    else if (tab === 'hair') { tabBox.appendChild(el('div', 'lbl', 'Penteado')); tabBox.appendChild(chips(HAIR_STYLES.filter(x => ((c.body || 'm') === 'm' ? MALE_HAIR : FEMALE_HAIR).includes(x[0])), c.hairStyle || 'short', (v) => { c.hairStyle = v; })); tabBox.appendChild(el('div', 'lbl', 'Cor do cabelo')); tabBox.appendChild(swatches(HAIR_COLORS, c.hair, (i) => { c.hair = i; })); }
+    else if (tab === 'face') { tabBox.appendChild(el('div', 'lbl', 'Expressão')); tabBox.appendChild(chips(FACES.filter(x => ((c.body || 'm') === 'm' ? MALE_FACES : FEMALE_FACES).includes(x[0])), c.face || 'calm', (v) => { c.face = v; })); tabBox.appendChild(el('div', 'lbl', 'Cor dos olhos')); tabBox.appendChild(swatches(EYE_COLORS, c.eye != null ? c.eye : 1, (i) => { c.eye = i; })); }
+    else if (tab === 'acc') { tabBox.appendChild(el('div', 'lbl', 'Acessório (usa a cor da capa)')); tabBox.appendChild(chips(ACCS.filter(x => ((c.body || 'm') === 'm' ? MALE_ACCS : FEMALE_ACCS).includes(x[0])), c.acc || 'none', (v) => { c.acc = v; })); tabBox.appendChild(el('div', 'desc', 'Dica: com elmo, chapéu ou capuz o penteado fica escondido. Tire o elmo/chapéu na aba Classe (e para Ladino use a aparência "Ladino", sem capuz).')); }
     else if (tab === 'outfit') {
       tabBox.appendChild(el('div', 'lbl', 'Estilo da roupa')); tabBox.appendChild(chips(OUTFIT_STYLES.filter(x => (c.body || 'm') === 'f' || x[0] !== 'dress'), c.outfitStyle || 'auto', (v) => { c.outfitStyle = v; }));
       tabBox.appendChild(el('div', 'lbl', 'Cor da roupa')); tabBox.appendChild(swatches(OUTFIT_COLORS, c.outfit, (i) => { c.outfit = i; }));
@@ -173,6 +174,8 @@ export function openCreator(opts) {
     const l = el('button', 'sec', '◀'); l.onclick = () => { pre = (pre + list.length - 1) % list.length; viewPremade(); };
     const rr = el('button', 'sec', '▶'); rr.onclick = () => { pre = (pre + 1) % list.length; viewPremade(); };
     const info = el('div', 'info'); info.innerHTML = '<b>' + p.name + '</b><br>' + k.icon + ' ' + k.name + ' • ' + r.icon + ' ' + r.name + '<br><span>' + p.bio + '</span><br><small>' + (pre + 1) + ' / ' + list.length + '  •  toque no boneco para ver um golpe</small>';
+    const pid = PORTRAITS[p.model];
+    if (pid) { const im = document.createElement('img'); im.src = import.meta.env.BASE_URL + 'img/portraits/' + pid + '.webp'; im.alt = p.name; im.style.cssText = 'width:140px;height:140px;object-fit:cover;border-radius:16px;border:3px solid #ffc933;box-shadow:0 4px 14px #0008;flex:none'; info.style.display = 'flex'; info.style.gap = '10px'; info.style.alignItems = 'center'; const tx = el('div'); tx.innerHTML = info.innerHTML; info.innerHTML = ''; info.append(im, tx); }
     nav.append(l, info, rr);
     const foot = el('div', 'foot');
     const back = el('button', 'sec', '◀ Voltar'); back.onclick = viewMode;
