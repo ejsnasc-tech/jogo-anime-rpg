@@ -6,7 +6,7 @@ import { clone as skClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { CLASS_MODELS } from './data.js';
 import { makeHeroProcedural } from './models.js';
 import { decorate, addOutline } from './looks.js';
-import { loadVrm, retargetClips, attachProp } from './vrmhero.js';
+import { parseVrm, retargetClips, attachProp } from './vrmhero.js';
 
 const BASE = (import.meta.env && import.meta.env.BASE_URL) || './';
 const FILES = {
@@ -18,9 +18,8 @@ const FILES = {
   Skeleton_Mage: 'models/enemies/Skeleton_Mage.glb', Skeleton_Rogue: 'models/enemies/Skeleton_Rogue.glb',
 };
 const loaded = {};
-const VRM_FILES = { VRM_Vivi: 'models/chars/VRM_Vivi.vrm', VRM_Vita: 'models/chars/VRM_Vita.vrm', VRM_Victoria: 'models/chars/VRM_Victoria.vrm' };
-const vrmLoaded = {};
-const VRM_TEST = (typeof location !== 'undefined' && new URLSearchParams(location.search).get('vrm')) || null;   // teste: ?vrm=Vivi
+const vrmInfo = {};   // por modelo: animacoes ja convertidas
+export const isVrm = (k) => /^VRM_/.test(k || '');
 const HERO_HEIGHT = 2.1;
 
 // tamanho/posição da cabeça (no referencial do osso) para encaixar cabelo, rosto e acessórios
@@ -42,8 +41,7 @@ export const modelsLoaded = () => Object.keys(loaded).length > 0;
 export function preloadModels(onProgress) {
   const loader = new GLTFLoader(), names = Object.keys(FILES); let done = 0;
   const tick = () => { done++; if (onProgress) onProgress(done / names.length); };
-  const vrmJobs = VRM_TEST ? Object.keys(VRM_FILES).filter(k => k === 'VRM_' + VRM_TEST).map(k => loadVrm(BASE + VRM_FILES[k]).then(r => { vrmLoaded[k] = r; }).catch(e => console.warn('VRM nao carregou', k, e))) : [];
-  return Promise.all([...vrmJobs, ...names.map(n => new Promise((res) => {
+  return Promise.all(names.map(n => new Promise((res) => {
     loader.load(BASE + FILES[n], (gltf) => {
       let mat = null;
       gltf.scene.traverse(o => { if (o.isMesh && !mat) mat = o.material; });
@@ -54,7 +52,7 @@ export function preloadModels(onProgress) {
       loaded[n] = { scene: gltf.scene, clips: gltf.animations, mat, img: mat && mat.map ? mat.map.image : null, height: h, head: headInfo(gltf.scene) };
       tick(); res();
     }, undefined, (err) => { console.warn('modelo nao carregou:', n, err); tick(); res(); });
-  }))]);
+  })));
 }
 
 // ---- recolor pela paleta (cada parte do modelo aponta para quadradinhos de cor da textura) ----
@@ -135,20 +133,23 @@ function giveProps(root, cls) {
 }
 // ---- heróis ----
 function makeVrmHero(key, def) {
-  const V = vrmLoaded[key]; V.used = true;
-  const ref = loaded.Knight.scene, g = new THREE.Group(), sv = 2.0 / V.height;
-  g.add(V.vrm.scene); V.vrm.scene.scale.setScalar(sv);
-  if (!V.clips) V.clips = retargetClips(ref, loaded.Knight.clips, V.vrm, V.v0);
-  const by = PROPS[def.cls] || PROPS.warrior, src = Object.keys(by).find(k => loaded[k]);
-  if (src) by[src].forEach(nm => { const n = loaded[src].scene.getObjectByName(nm); if (n) attachProp(loaded[src].scene, V.vrm, V.v0, n, HERO_HEIGHT / loaded[src].height, sv); });
-  g.userData = newUserData(V.clips, ANIM[def.cls] || ANIM.warrior, { vrm: V.vrm });
-  g.userData.mixer = new THREE.AnimationMixer(V.vrm.scene);
-  setLoco(g.userData, 'idle', 1);
+  const g = new THREE.Group();
+  g.userData = newUserData([], ANIM[def.cls] || ANIM.warrior, { pending: true });
+  const ref = loaded.Knight.scene, file = BASE + 'models/chars/' + key + '.vrm';
+  parseVrm(file, BASE).then((V) => {
+    const sv = 2.0 / V.height; g.add(V.vrm.scene); V.vrm.scene.scale.setScalar(sv); V.vrm.scene.position.y = -V.minY * sv;
+    if (!vrmInfo[key]) vrmInfo[key] = retargetClips(ref, loaded.Knight.clips, V.vrm, V.v0);
+    const u = g.userData; u.clips = vrmInfo[key]; u.vrm = V.vrm; u.mixer = new THREE.AnimationMixer(V.vrm.scene);
+    setLoco(u, 'idle', 1); u.mixer.update(0); V.vrm.update(0); g.updateMatrixWorld(true); V.vrm.scene.traverse(o => { if (o.isSkinnedMesh) o.skeleton.update(); });   // pose de repouso: apoia os pes no chao
+    const bb = new THREE.Box3().setFromObject(V.vrm.scene, true); V.vrm.scene.position.y -= (bb.min.y - g.getWorldPosition(new THREE.Vector3()).y);
+    const by = PROPS[def.cls] || PROPS.warrior, src = Object.keys(by).find(k => loaded[k]);
+    if (src) by[src].forEach(nm => { const n = loaded[src].scene.getObjectByName(nm); if (n) attachProp(loaded[src].scene, V.vrm, V.v0, n, HERO_HEIGHT / loaded[src].height, sv); });
+    u.pending = false;
+  }).catch((e) => console.warn('VRM nao carregou', key, e));
   return g;
 }
-export function makeHero(def, wantVrm) {
-  const vk = VRM_TEST && 'VRM_' + VRM_TEST;
-  if (wantVrm && vk && vrmLoaded[vk] && loaded.Knight) return makeVrmHero(vk, def);
+export function makeHero(def) {
+  if (isVrm(def.model) && loaded.Knight) return makeVrmHero(def.model, def);
   const wanted = def.model && loaded[def.model] ? def.model : (CLASS_MODELS[def.cls] || CLASS_MODELS.warrior)[0][0];
   const L = loaded[wanted];
   if (!L) return makeHeroProcedural(def);
@@ -215,6 +216,7 @@ function setLoco(u, want, spd) {
 // o: { moving, mounted, spd }
 export function animateHero(g, dt, o) {
   const u = g.userData; o = o || {};
+  if (u.pending) return;
   if (!u.glb) return animateProcedural(g, dt, o);
   if (u.dead) { u.mixer.update(dt); return; }
   u.t += dt;
@@ -231,6 +233,7 @@ export function animateHero(g, dt, o) {
 // which: 'atk' | 'ult' | 'hit' | 'death' | nome de clipe; dur = duração desejada em segundos
 export function playOnce(g, which, dur) {
   const u = g.userData;
+  if (u.pending) return;
   if (!u.glb) { if (which === 'atk') g.scale.set(1.12, 0.92, 1.12); return; }
   if (u.dead || (which === 'hit' && u.shot)) return;
   const name = which === 'atk' ? u.anim.atk : which === 'ult' ? u.anim.ult : which === 'hit' ? 'Hit_A' : which === 'death' ? 'Death_A' : which;

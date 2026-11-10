@@ -71,7 +71,9 @@ export function openCreator(opts) {
   let account = opts.account || '';
   let c = opts.initial ? Object.assign({}, opts.initial) : randomLook('');
   let pre = 0;
-  const fixModel = () => { if (!CLASS_MODELS[c.cls].some(m => m[0] === c.model)) c.model = CLASS_MODELS[c.cls][0][0]; };
+  const isV = (m) => /^VRM_/.test(m || '');
+  const VRMS = PREMADE.filter(x => isV(x.model));
+  const fixModel = () => { if (!isV(c.model) && !CLASS_MODELS[c.cls].some(m => m[0] === c.model)) c.model = CLASS_MODELS[c.cls][0][0]; };
   const showHero = (look) => { fixModel(); setModel(buildPlayerHero(look)); };
 
   function finish(look) {
@@ -98,7 +100,7 @@ export function openCreator(opts) {
     body.append(el('h2', null, 'Olá, ' + account + '!'), el('p', 'sub', 'Seu herói é...'));
     const sx = el('div', 'row'); SEXES.forEach(([k, lab]) => { const b = el('button', 'chip' + ((c.body || 'm') === k ? ' sel' : ''), lab); b.onclick = () => { applySex(c, k); viewMode(); }; sx.appendChild(b); }); body.append(sx, el('p', 'sub', 'Como você quer criar?'));
     const a = el('button', 'card', ''); a.innerHTML = '<b>🎨 Criar do zero</b><span>Escolha classe, aparência, pele, cabelo e roupas.</span>'; a.onclick = () => viewCustom();
-    const b = el('button', 'card', ''); b.innerHTML = '<b>⭐ Heróis prontos (modelos 3D de IA)</b><span>Visual pintado e bonito, já com arma. Recomendado!</span>'; b.onclick = () => viewPremade();
+    const b = el('button', 'card', ''); b.innerHTML = '<b>⭐ Heróis anime prontos</b><span>Personagens de anime bonitos, já com arma. Recomendado!</span>'; b.onclick = () => viewPremade();
     const r = el('button', 'card', ''); r.innerHTML = '<b>🎲 Surpreenda-me</b><span>Um herói aleatório (dá para ajustar depois).</span>';
     r.onclick = () => { const sex = c.body || 'm'; c = randomLook(c.name || account); applySex(c, sex); c.hairStyle = pick(sex === 'm' ? MALE_HAIR : FEMALE_HAIR); c.outfitStyle = rndOutfit(sex); viewCustom(); };
     body.append(b, a, r);
@@ -126,7 +128,7 @@ export function openCreator(opts) {
     if (tab === 'class') {
       if (lockCls) tabBox.appendChild(el('div', 'desc', '🔒 A classe é escolhida uma vez só. Para jogar com outra classe, crie um personagem novo.'));
       else tabBox.appendChild(chips(CLASS_LIST.map(k => [k, CLASSES[k].icon + ' ' + CLASSES[k].name]), c.cls, (v) => { c.cls = v; }));
-      const models = CLASS_MODELS[c.cls];
+      const models = CLASS_MODELS[c.cls].concat(VRMS.filter(x => (x.body || 'm') === (c.body || 'm')).map(x => [x.model, '✨ ' + x.name.split(' ')[0]]));
       if (models.length > 1) { tabBox.appendChild(el('div', 'lbl', 'Aparência')); tabBox.appendChild(chips(models, c.model, (v) => { c.model = v; })); }
       tabBox.appendChild(el('div', 'lbl', 'Elmo / chapéu')); tabBox.appendChild(chips([[true, 'Com'], [false, 'Sem']], c.hat !== false, (v) => { c.hat = v; }));
       const d = el('div', 'desc'); const k = CLASSES[c.cls];
@@ -152,7 +154,7 @@ export function openCreator(opts) {
     const nm = el('input'); nm.type = 'text'; nm.maxLength = 16; nm.placeholder = 'Nome do personagem'; nm.value = c.name || ''; nm.oninput = () => { c.name = nm.value.trim(); };
     const sxr = chips(SEXES, c.body || 'm', (v) => { applySex(c, v); });
     const tabs = el('div', 'tabs');
-    TABS.forEach(([k, lab]) => { const b = el('button', 'tab' + (k === tab ? ' sel' : ''), lab); b.onclick = () => { tab = k; viewCustom(); }; tabs.appendChild(b); });
+    TABS.filter(t => !isV(c.model) || t[0] === 'class' || t[0] === 'origin').forEach(([k, lab]) => { const b = el('button', 'tab' + (k === tab ? ' sel' : ''), lab); b.onclick = () => { tab = k; viewCustom(); }; tabs.appendChild(b); });
     tabBox = el('div', 'tabbox');
     const foot = el('div', 'foot');
     const back = el('button', 'sec', lockCls ? '✖ Cancelar' : '◀ Voltar'); back.onclick = lockCls ? () => { close(); opts.onDone(null); } : viewMode;
@@ -165,7 +167,7 @@ export function openCreator(opts) {
 
   function viewPremade() {
     body.innerHTML = '';
-    const PL = PREMADE.filter(x => (x.body || 'm') === (c.body || 'm')); const list = PL.length ? PL : PREMADE; pre = pre % list.length;
+    const PL = PREMADE.filter(x => (x.body || 'm') === (c.body || 'm')).sort((a, b) => (isV(b.model) ? 1 : 0) - (isV(a.model) ? 1 : 0)); const list = PL.length ? PL : PREMADE; pre = pre % list.length;
     const p = list[pre], look = Object.assign({}, p, { name: p.name });
     const k = CLASSES[p.cls], r = REALMS[p.realm];
     showHero(look);

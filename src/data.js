@@ -70,12 +70,22 @@ export const PREMADE = [
   { name: 'Vexa Ruína', body: 'f', model: 'Mage', hat: false,       cls: 'sorcerer', realm: 'sombras',  skin: 0, hairStyle: 'mohawk',   hair: 7, eye: 5, face: 'fierce', outfit: 6, cape: 9, bio: 'Feiticeira de poder instável e sorriso perigoso.' },
   { name: 'Bram Raiz-Velha', model: 'Mage', hat: false,  cls: 'druid',    realm: 'primeva',  skin: 4, hairStyle: 'long',     hair: 1, eye: 3, face: 'smile',  outfit: 5, cape: 2, bio: 'Druida gentil que fala com árvores e animais.' },
   { name: 'Mara Vento-Sul', body: 'f', model: 'Barbarian', hat: false,   cls: 'warrior',  realm: 'mares',    skin: 3, hairStyle: 'ponytail', hair: 4, eye: 0, face: 'smile',  outfit: 0, cape: 1, bio: 'Capitã de navio que luta com a mesma alegria com que navega.' },
+  // heróis anime (modelos VRoid VRM, CC0): visual de anime de verdade; cor/penteado não mudam
+  { name: 'Vivi Campo-Verde', body: 'f', model: 'VRM_Vivi', cls: 'archer', realm: 'primeva', skin: 0, hair: 2, eye: 3, face: 'smile', outfit: 4, cape: 2, bio: 'Arqueira de vila, doce e cheia de coragem.' },
+  { name: 'Vita Cristalina', body: 'f', model: 'VRM_Vita', cls: 'sorcerer', realm: 'arcana', skin: 0, hair: 5, eye: 1, face: 'calm', outfit: 3, cape: 6, bio: 'Feiticeira de cabelo prateado e magia de cristal.' },
+  { name: 'Victoria Aurora', body: 'f', model: 'VRM_Victoria', cls: 'paladin', realm: 'planalto', skin: 0, hair: 3, eye: 2, face: 'smile', outfit: 0, cape: 9, bio: 'Princesa guerreira que protege o reino com luz.' },
+  { name: 'Shino Véu-Negro', body: 'f', model: 'VRM_Shino', cls: 'assassin', realm: 'sombras', skin: 0, hair: 0, eye: 4, face: 'cool', outfit: 1, cape: 4, bio: 'Assassina silenciosa das sombras.' },
+  { name: 'Shibu Lâmina-Clara', body: 'f', model: 'VRM_Shibu', cls: 'warrior', realm: 'planalto', skin: 0, hair: 1, eye: 3, face: 'fierce', outfit: 2, cape: 0, bio: 'Espadachim de honra e vontade de ferro.' },
+  { name: 'Darkness Noturna', body: 'f', model: 'VRM_Darkness', cls: 'mage', realm: 'arcana', skin: 0, hair: 7, eye: 5, face: 'calm', outfit: 6, cape: 4, bio: 'Maga da noite, de olhar frio e feitiços roxos.' },
+  { name: 'Haruto Capuz', model: 'VRM_Haruto', cls: 'warrior', realm: 'mares', skin: 0, hair: 0, eye: 1, face: 'smile', outfit: 0, cape: 1, bio: 'Jovem guerreiro de moletom; leal e sem medo.' },
+  { name: 'Fumiriya Sakura', model: 'VRM_Fumiriya', cls: 'mage', realm: 'arcana', skin: 0, hair: 0, eye: 1, face: 'calm', outfit: 3, cape: 1, bio: 'Mago estudioso que fala pouco e acerta muito.' },
+  { name: 'Seed Folha-Nova', model: 'VRM_Seed', cls: 'druid', realm: 'primeva', skin: 0, hair: 0, eye: 2, face: 'smile', outfit: 4, cape: 2, bio: 'Druida jovem, de passos leves e olhar curioso.' }
 ];
 
 // Converte as escolhas do criador em um herói jogável
 export function buildPlayerHero(c) {
   const b = CLASS_BASE[c.cls] || CLASS_BASE.warrior, allowed = CLASS_MODELS[c.cls] || CLASS_MODELS.warrior;
-  const model = (/^Unirall/.test(c.model || '') || allowed.some(m => m[0] === c.model)) ? c.model : allowed[0][0];
+  const model = (/^(Unirall|VRM_)/.test(c.model || '') || allowed.some(m => m[0] === c.model)) ? c.model : allowed[0][0];
   return {
     id: 'player', name: c.name || 'Aventureiro', realm: c.realm || 'mares', cls: c.cls, rar: 'E',
     model, hat: c.hat !== false,

@@ -489,7 +489,7 @@ function setHero() {
   hero = HEROES.find(h => h.id === state.team[activeIdx]) || HEROES[0];
   const pos = player ? player.position.clone() : new THREE.Vector3(0, 0, 0);
   if (player) scene.remove(player);
-  player = makeHero(lookFor(hero), true); player.position.copy(pos); scene.add(player); lookSig = lookSignature();
+  player = makeHero(lookFor(hero)); player.position.copy(pos); scene.add(player); lookSig = lookSignature();
   overload = 0; bearUntil = 0;
   refreshHud(); refreshTeam(); updateSkillLabel(true);
 }
@@ -875,7 +875,7 @@ function changeProf(cls) {
   state.profs[mainCls()] = profNow();
   const t = state.profs[cls] || PROF_NEW(); delete state.profs[cls];
   state.level = t.level; state.xp = t.xp; state.skillPts = t.skillPts; state.skills = t.skills; state.equip = t.equip; state.upgrades = t.upgrades;
-  state.custom = Object.assign({}, state.custom, { cls, model: undefined }); upsertPlayer(state.custom);
+  state.custom = Object.assign({}, state.custom, { cls, model: /^VRM_/.test((state.custom || {}).model || '') ? state.custom.model : undefined }); upsertPlayer(state.custom);
   skillReady.player = 0; clearEnemies(); setHero(); recalcHp(); hp = maxHp; renderSkillChips(); refreshHud();
   save(state); ringFx(player.position, hero.color, 4, 0.6); toast(CLASSES[cls].icon + ' Agora você é ' + CLASSES[cls].name + ' Nv.' + state.level);
 }

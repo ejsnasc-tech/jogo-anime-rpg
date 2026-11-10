@@ -7,26 +7,29 @@ const MAP = { hips: 'hips', spine: 'spine', chest: 'chest', head: 'head', 'upper
   'upperleg.l': 'leftUpperLeg', 'lowerleg.l': 'leftLowerLeg', 'foot.l': 'leftFoot', 'toes.l': 'leftToes', 'upperleg.r': 'rightUpperLeg', 'lowerleg.r': 'rightLowerLeg', 'foot.r': 'rightFoot', 'toes.r': 'rightToes' };
 const SAN = (n) => n.replace(/\./g, '');   // o GLTFLoader tira os pontos dos nomes de osso nas trilhas
 for (const k of Object.keys(MAP)) { MAP[SAN(k)] = MAP[k]; }
-const SLOT = { 'handslot.l': 'leftHand', 'handslot.r': 'rightHand' };
+const SLOT = { 'handslotl': 'leftHand', 'handslotr': 'rightHand' };   // nomes ja sem ponto (GLTFLoader)
 
-export function loadVrm(url) {
+const bufs = {};
+export const fetchVrm = (url) => bufs[url] || (bufs[url] = fetch(url).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); }));
+// cada heroi na tela precisa da propria copia (ossos proprios): le o mesmo arquivo em cache de novo
+export async function parseVrm(url, base) {
+  const buf = await fetchVrm(url);
   const ld = new GLTFLoader(); ld.register((p) => new VRMLoaderPlugin(p));
-  return new Promise((res, rej) => ld.load(url, (g) => {
-    const vrm = g.userData.vrm; if (!vrm) return rej(new Error('sem VRM'));
-    VRMUtils.removeUnnecessaryVertices(g.scene); VRMUtils.combineSkeletons(g.scene);
-    const v0 = vrm.meta && vrm.meta.metaVersion === '0'; if (v0) VRMUtils.rotateVRM0(vrm);
-    vrm.scene.traverse(o => { o.frustumCulled = false; if (o.isMesh) o.castShadow = true; });
-    const nr = vrm.humanoid.normalizedHumanBonesRoot; if (nr && !nr.parent) vrm.scene.add(nr);
-    const box = new THREE.Box3().setFromObject(vrm.scene);
-    res({ vrm, v0, height: box.max.y - box.min.y });
-  }, undefined, rej));
+  const g = await new Promise((res, rej) => ld.parse(buf.slice(0), base || '', res, rej));
+  const vrm = g.userData.vrm; if (!vrm) throw new Error('sem VRM');
+  VRMUtils.removeUnnecessaryVertices(g.scene); VRMUtils.combineSkeletons(g.scene);
+  const v0 = vrm.meta && vrm.meta.metaVersion === '0'; if (v0) VRMUtils.rotateVRM0(vrm);
+  vrm.scene.traverse(o => { o.frustumCulled = false; if (o.isMesh) o.castShadow = true; });
+  const nr = vrm.humanoid.normalizedHumanBonesRoot; if (nr && !nr.parent) vrm.scene.add(nr);
+  const box = new THREE.Box3().setFromObject(vrm.scene);
+  return { vrm, v0, height: box.max.y - box.min.y, minY: box.min.y };
 }
 
 // converte os clipes do KayKit (ref = cena do KayKit em repouso) para ossos normalizados do VRM
 export function retargetClips(ref, clips, vrm, v0) {
   ref.updateMatrixWorld(true);
   const restQ = {}, parQ = {}; ref.traverse(o => { if (o.isBone) { restQ[SAN(o.name)] = o.getWorldQuaternion(new THREE.Quaternion()); parQ[SAN(o.name)] = o.parent ? o.parent.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion(); } });
-  const hipsK = ref.getObjectByName('hips'), kh = hipsK ? hipsK.getWorldPosition(new THREE.Vector3()).y : 1;
+  const hipsK = ref.getObjectByName('hips'), kh = hipsK ? Math.abs(hipsK.position.y) || 1 : 1;   // altura local do quadril em repouso (mesma unidade das trilhas)
   const vh = vrm.humanoid.getNormalizedBoneNode('hips').getWorldPosition(new THREE.Vector3()).y, sc = vh / kh;
   const out = [], q = new THREE.Quaternion();
   clips.forEach(c => {
@@ -57,7 +60,7 @@ export function attachProp(ref, vrm, v0, node, scaleK, scaleV) {
   const slot = node.parent && SLOT[node.parent.name]; if (!slot) return;
   const hand = vrm.humanoid.getNormalizedBoneNode(slot); if (!hand) return;
   ref.updateMatrixWorld(true);
-  const hk = ref.getObjectByName(node.parent.name.startsWith('handslot.l') ? 'hand.l' : 'hand.r'), k = scaleK / scaleV;
+  const hk = ref.getObjectByName(node.parent.name === 'handslotl' ? 'handl' : 'handr'), k = scaleK / scaleV;
   const p = node.getWorldPosition(new THREE.Vector3()).sub(hk.getWorldPosition(new THREE.Vector3())).multiplyScalar(k), r = node.getWorldQuaternion(new THREE.Quaternion());
   if (v0) { p.x = -p.x; p.z = -p.z; r.x = -r.x; r.z = -r.z; }
   const c = node.clone(true); c.position.copy(p); c.quaternion.copy(r); c.scale.setScalar(k); c.visible = true;
