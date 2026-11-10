@@ -95,7 +95,7 @@ const setZoom = (f) => { zoomT = Math.min(decor.on ? 7 : inCity ? 4.2 : 2.8, Mat
 const CAM_DECOR = new THREE.Vector3(0, 13, 5.2);
 // camera imersiva: baixa, atras do heroi, com horizonte (alternativa a visao de cima). Gira com [ ] ou pelos botoes.
 const CAM_LOW = new THREE.Vector3(0, 3.9, 10.5), LOW_LOOK = new THREE.Vector3(0, 2.6, -4);
-let camMode = 'top', camYaw = 0, camYawT = 0;
+let camGy = 0, camMode = 'top', camYaw = 0, camYawT = 0;
 try { camMode = localStorage.getItem('cammode') === 'low' ? 'low' : 'top'; } catch (e) {}
 const lowCam = () => camMode === 'low' && !decor.on && !inHome;
 const yawNow = () => (lowCam() ? camYaw : 0);
@@ -140,7 +140,14 @@ function riverDepth(x, z) {
   const b = 1 - sstep(LAKE.r * 0.45, LAKE.r, Math.hypot(x - LAKE.x, z - LAKE.z));
   return Math.max(a, b);
 }
-const hillH = (x, z) => 0.8 * (0.5 + 0.5 * (Math.sin(x * 0.031 + 0.5) * Math.sin(z * 0.027) + 0.5 * Math.sin(x * 0.07 + z * 0.05)) / 1.5);
+const hillH = (x, z) => {   // morros grandes e vales: o campo tem relevo de verdade (comeco e rio ficam calmos)
+  const d = Math.hypot(x, z), rz = Math.abs(z - riverZ(x));
+  const calm = sstep(16, 60, d) * sstep(7, 24, rz) * (1 - 0.8 * (1 - sstep(LAKE.r, LAKE.r + 20, Math.hypot(x - LAKE.x, z - LAKE.z))));
+  const big = Math.sin(x * 0.019 + 1.3) * Math.cos(z * 0.022 - 0.4) + 0.6 * Math.sin((x + z) * 0.013 + 2);
+  const mid = Math.sin(x * 0.047 + z * 0.031) * Math.sin(z * 0.052 - x * 0.021);
+  const small = Math.sin(x * 0.13 + 1) * Math.sin(z * 0.11);
+  return 0.5 + calm * (3.6 * big + 1.5 * mid + 0.35 * small + 2.2);
+};
 function groundH(x, z) { const d = riverDepth(x, z); return hillH(x, z) * (1 - d) - d * 1.25; }
 const BR = (() => { let z = -30, x = 0; for (let i = 0; i < 8; i++) { x = trailX(z); z = riverZ(x); } return { x, z, len: riverHW(x) + 5.5 }; })();
 function walkY(x, z) { if (Math.abs(x - BR.x) < 2.6 && Math.abs(z - BR.z) < BR.len) return 0.45; return groundH(x, z); }
@@ -173,7 +180,7 @@ function applyAct() {
   Object.keys(biomes).forEach(k => { biomes[k].visible = k === key; });
   if (!biomes[key]) { biomes[key] = makeBiome(key, { groundH, riverDepth, trailX, WORLD }); fieldGroup.add(biomes[key]); }
   biomes[key].visible = true;
-  if (curBiome && curBiome !== key && biomeNotify) toast(r.icon + ' Novo setor: ' + bi.title + ' — ' + bi.sub);
+  if (curBiome && curBiome !== key && biomeNotify) toast(r.icon + ' Novo setor: ' + bi.title + ' — ' + bi.sub + '\n⚔ Horda: ' + HORDES[key].name + ' (' + HORDES[key].sub + ')');
   curBiome = key;
 }
 
@@ -1019,7 +1026,7 @@ function explode(pos, radius, dmg, color, exclude) {
 }
 
 // ===================== Inimigos / combate =====================
-function clearEnemies() { if (ev) { ev = null; nextEvT = T + 90; } eshots.forEach(s => { scene.remove(s.mesh); s.mesh.material.dispose(); }); eshots.length = 0; enemies.forEach(e => scene.remove(e.mesh)); enemies.length = 0; dying.forEach(d => scene.remove(d.mesh)); dying.length = 0; bossRef = null; $('bossbar').style.display = 'none'; }
+function clearEnemies() { clearDangers(); if (ev) { ev = null; nextEvT = T + 90; } eshots.forEach(s => { scene.remove(s.mesh); s.mesh.material.dispose(); }); eshots.length = 0; enemies.forEach(e => scene.remove(e.mesh)); enemies.length = 0; dying.forEach(d => scene.remove(d.mesh)); dying.length = 0; bossRef = null; $('bossbar').style.display = 'none'; }
 
 // ---- monstros compartilhados (sala = floresta + estagio) ----
 function roomAnchor() {
@@ -1106,20 +1113,37 @@ const ETYPES = {
   brute: { name: 'Bruto', model: 'Skeleton_Warrior', loot: 'brute', hp: 3.2, dmg: 1.6, spd: 0.7, size: 2.7, r: 1.1, tint: 0xff9a8a, res: { p: 0.7, m: 1.3 } },
   archer: { name: 'Arqueiro', model: 'Skeleton_Rogue', loot: 'Skeleton_Rogue', hp: 0.75, dmg: 0.9, spd: 0.9, size: 1.7, r: 0.7, res: { p: 1.1, m: 0.9 }, ranged: { range: 11, keep: 7, cd: 2.2, speed: 11, color: 0xffe28a, arrow: true }, atk: '2H_Ranged_Shoot' },
   mage: { name: 'Mago', model: 'Skeleton_Mage', loot: 'Skeleton_Mage', hp: 0.8, dmg: 1.25, spd: 0.8, size: 1.7, r: 0.7, res: { p: 1.3, m: 0.7 }, ranged: { range: 13, keep: 9, cd: 3.0, speed: 7.5, color: 0xc17bff, size: 1.9, splash: 1.8 }, atk: 'Spellcast_Shoot' },
+  // hordas especiais: cada uma ataca de um jeito proprio (ver behave)
+  swarm: { name: 'Enxame', model: 'Skeleton_Minion', loot: 'runner', hp: 0.3, dmg: 0.55, spd: 1.55, size: 1.1, r: 0.5, tint: 0x7fd8ff, run: 'Running_A', beh: 'swarm' },
+  stalker: { name: 'Espreitador', model: 'Skeleton_Rogue', loot: 'Skeleton_Rogue', hp: 0.7, dmg: 1.5, spd: 1.2, size: 1.7, r: 0.65, tint: 0x7a46b8, run: 'Running_A', beh: 'stalker' },
+  charger: { name: 'Investida', model: 'Skeleton_Warrior', loot: 'brute', hp: 1.7, dmg: 1.8, spd: 0.85, size: 2.3, r: 0.95, tint: 0xff7a3a, beh: 'charger' },
+  bomber: { name: 'Explosivo', model: 'Skeleton_Minion', loot: 'runner', hp: 0.5, dmg: 2.2, spd: 1.45, size: 1.5, r: 0.6, tint: 0xff4a3a, run: 'Running_A', beh: 'bomber' },
+  summoner: { name: 'Invocador', model: 'Skeleton_Mage', loot: 'Skeleton_Mage', hp: 1.1, dmg: 0.8, spd: 0.7, size: 2.1, r: 0.8, tint: 0xa66bff, beh: 'summoner', atk: 'Spellcast_Shoot' },
+  nova: { name: 'Mago da Nova', model: 'Skeleton_Mage', loot: 'Skeleton_Mage', hp: 0.9, dmg: 1.5, spd: 0.75, size: 1.8, r: 0.7, tint: 0x4fc3ff, beh: 'nova', atk: 'Spellcast_Shoot' },
+  spitter: { name: 'Cuspidor', model: 'Skeleton_Rogue', loot: 'Skeleton_Rogue', hp: 0.8, dmg: 0.9, spd: 0.8, size: 1.7, r: 0.7, tint: 0x86d94a, beh: 'spitter', atk: 'Spellcast_Shoot' },
+};
+// cada floresta tem a sua horda (classe de monstros) com ataques diferentes
+const HORDES = {
+  mares: { name: 'Afogados', sub: 'enxames que cercam e cuspidores de poças', w: (st) => ({ swarm: 40, minion: 24, spitter: st >= 2 ? 18 : 0, archer: st >= 3 ? 8 : 0, brute: st >= 4 ? 5 : 0 }) },
+  sombras: { name: 'Clã das Sombras', sub: 'espreitadores que surgem atrás de você', w: (st) => ({ stalker: 34, runner: 16, minion: 14, archer: st >= 2 ? 18 : 0, mage: st >= 4 ? 8 : 0 }) },
+  arcana: { name: 'Magos Arcanos', sub: 'novas explosivas e invocadores', w: (st) => ({ nova: 28, mage: 20, summoner: st >= 2 ? 16 : 0, minion: 18, warrior: 8 }) },
+  planalto: { name: 'Guerreiros do Planalto', sub: 'investidas em linha reta e brutos', w: (st) => ({ charger: 34, warrior: 22, archer: 14, minion: 10, brute: st >= 2 ? 14 : 0 }) },
+  primeva: { name: 'Bestas da Floresta', sub: 'explosivos, enxames e veneno', w: (st) => ({ bomber: 28, swarm: 22, spitter: 20, minion: 12, brute: st >= 3 ? 8 : 0 }) },
+  vazio: { name: 'Eco do Vazio', sub: 'tudo ao mesmo tempo', w: () => ({ stalker: 14, nova: 14, charger: 14, bomber: 12, summoner: 10, swarm: 14, spitter: 10, brute: 8 }) },
 };
 // quanto mais avançado o ato / estágio, mais variedade e mais atiradores
 function pickEType() {
-  const act = state.act, st = state.endless ? 5 : state.stage;
-  const w = { minion: Math.max(18, 60 - act * 8 - st * 4), warrior: act > 0 ? 16 + act * 2 : 6, runner: st >= 2 || act > 0 ? 14 : 0, archer: st >= 2 || act > 0 ? 16 + act * 3 : 0, mage: act >= 1 || st >= 4 ? 8 + act * 4 : 0, brute: act >= 1 || st >= 4 ? 4 + act * 3 : 0 };
-  if (night > 0.55) { w.mage += 10; w.archer += 8; w.runner += 6; }
+  const act = state.act, st = state.endless ? 5 : state.stage, H = HORDES[ACTS[act].realm];
+  const w = H ? H.w(st) : { minion: 60 };
+  if (night > 0.55) { w.runner = (w.runner || 0) + 6; w.stalker = (w.stalker || 0) + 8; }
   let r = Math.random() * Object.values(w).reduce((a, b) => a + b, 0);
   for (const k in w) { r -= w[k]; if (r <= 0) return k; }
   return 'minion';
 }
 
-function spawnEnemy(boss, info, forceType) {
+function spawnEnemy(boss, info, forceType, at) {
   const a = Math.random() * Math.PI * 2, d = boss ? 16 : 20, anc = roomAnchor();
-  const x = THREE.MathUtils.clamp(anc.x + Math.cos(a) * d, -WORLD, WORLD), z = THREE.MathUtils.clamp(anc.z + Math.sin(a) * d, -WORLD, WORLD);
+  const x = THREE.MathUtils.clamp(at ? at.x : anc.x + Math.cos(a) * d, -WORLD, WORLD), z = THREE.MathUtils.clamp(at ? at.z : anc.z + Math.sin(a) * d, -WORLD, WORLD);
   const realm = REALMS[curAct().realm];
   const tk = boss ? 'warrior' : (forceType || pickEType()), T0 = ETYPES[tk];
   const tintBase = boss ? info.color : (T0.tint != null ? T0.tint : realm.enemy);
@@ -1133,7 +1157,7 @@ function spawnEnemy(boss, info, forceType) {
   const base = (18 + lv * 7) * (1 + state.act * 0.3) * 2.4 * catchup;
   const hpv = boss ? base * 14 * (state.endless ? 1.5 : 1) * 1.3 * rmN : base * T0.hp;
   const dmgBase = ((6 + lv * 0.8) * (1 + state.act * 0.12)) * 1.6 * catchD;
-  const e = { nid: ++nidSeq, mesh, hp: hpv, maxHp: hpv, speed: boss ? 1.5 : (1.9 + Math.random() * 1.0) * T0.spd, boss: !!boss, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? 1.4 : T0.r, t: Math.random() * 10, dmg: dmgBase * (boss ? 1.6 : T0.dmg), stun: 0, slow: 0, flash: 0, ranged: boss ? null : T0.ranged || null, res: boss ? null : T0.res || null, shotAt: T + 1 + Math.random() * 2 };
+  const e = { nid: ++nidSeq, mesh, hp: hpv, maxHp: hpv, speed: boss ? 1.5 : (1.9 + Math.random() * 1.0) * T0.spd, boss: !!boss, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? 1.4 : T0.r, t: Math.random() * 10, dmg: dmgBase * (boss ? 1.6 : T0.dmg), stun: 0, slow: 0, flash: 0, ranged: boss ? null : T0.ranged || null, res: boss ? null : T0.res || null, shotAt: T + 1 + Math.random() * 2, beh: boss ? null : T0.beh || null, cdAt: T + 1 + Math.random() * 3 };
   if (dg) { e.hp = e.maxHp = e.hp * 1.35; e.dmg *= 1.3; }
   if (!boss && !forceType && Math.random() < 0.04 + state.act * 0.01 + (night > 0.55 ? 0.03 : 0) + (dg ? 0.12 : 0)) {
     e.elite = true; e.hp = e.maxHp = e.hp * 4; e.dmg *= 1.4; e.radius *= 1.3; mesh.scale.multiplyScalar(1.35);
@@ -1141,6 +1165,7 @@ function spawnEnemy(boss, info, forceType) {
     ftAt(mesh.position, '★ ELITE', '#ffd166', 3);
   }
   enemies.push(e);
+  if (tk === 'swarm' && !at && !forceType) for (let i = 0; i < 4; i++) spawnEnemy(false, null, 'swarm', { x: x + (Math.random() - 0.5) * 5, z: z + (Math.random() - 0.5) * 5 });
   if (boss) {
     bossRef = e; $('bossname').textContent = '👑 ' + info.name; $('bossfill').style.width = '100%'; $('bossbar').style.display = 'block';
     ftAt(player.position, '⚠ CHEFE!', '#ff4757', 2.8);
@@ -1268,6 +1293,74 @@ function bossDefeated() {
       state.endless = true; state.storyDone = true; state.stageKills = 0; save(state); refreshHud(); showDialog(ENDING);
     }
   });
+}
+
+// ---- ataques especiais das hordas ----
+const dangers = [];
+function addDanger(x, z, r, delay, dmg, color, linger) {
+  const m = new THREE.Mesh(new THREE.CircleGeometry(r, 28), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.position.set(x, walkY(x, z) + 0.15, z); scene.add(m);
+  dangers.push({ x, z, r, at: T + delay, dmg, color, linger: linger || 0, mesh: m, fired: false, next: 0, until: 0 });
+}
+function dropDanger(i) { const d = dangers[i]; scene.remove(d.mesh); d.mesh.geometry.dispose(); d.mesh.material.dispose(); dangers.splice(i, 1); }
+function updateDangers() {
+  const p = player.position;
+  for (let i = dangers.length - 1; i >= 0; i--) {
+    const d = dangers[i], inside = Math.hypot(p.x - d.x, p.z - d.z) < d.r;
+    if (!d.fired) {
+      d.mesh.material.opacity = 0.25 + 0.2 * Math.abs(Math.sin(T * 12));
+      if (T >= d.at) {
+        d.fired = true; ringFx({ x: d.x, z: d.z }, d.color, d.r * 0.5, 0.45);
+        if (d.linger) { d.until = T + d.linger; d.mesh.material.opacity = 0.35; }
+        else { if (inside) hitPlayer({ dmg: d.dmg }); dropDanger(i); }
+      }
+    } else if (T >= d.until) dropDanger(i);
+    else if (inside && T >= d.next) { d.next = T + 0.6; hitPlayer({ dmg: d.dmg }); }
+  }
+}
+function glowEnemy(e, hex) { e.mesh.traverse(o => { if (o.isMesh && o.material && o.material.emissive) o.material.emissive.setHex(hex); }); }
+function clearDangers() { while (dangers.length) dropDanger(dangers.length - 1); enemies.forEach(e => { if (e.tele) { scene.remove(e.tele); e.tele = null; } }); }
+// devolve { mv, spd, melee, dir }: como o monstro se move e se pode bater de perto neste instante
+function behave(e, tg, vx, vz, d) {
+  const o = { mv: 1, spd: 1, melee: true, dir: null }, ep = e.mesh.position, b = e.beh, p = player.position;
+  const keep = (lo, hi) => { o.melee = false; o.mv = d > hi ? 1 : d < lo ? -0.8 : 0; };
+  if (b === 'swarm') {   // enxame: cerca o jogador em vez de ir direto
+    const a = d > 4 ? Math.sin(T * 1.2 + e.nid * 1.7) * 0.9 : 0, c = Math.cos(a), s = Math.sin(a);
+    o.dir = { x: (vx * c - vz * s) / d, z: (vx * s + vz * c) / d };
+  } else if (b === 'charger') {   // avisa, investe em linha reta e descansa
+    e.st = e.st || 'chase';
+    if (e.st === 'chase') {
+      if (d < 11 && d > 3 && T >= e.cdAt) {
+        e.st = 'wind'; e.stAt = T + 0.95; e.dx = vx / d; e.dz = vz / d; glowEnemy(e, 0xff2200);
+        const t = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 12), new THREE.MeshBasicMaterial({ color: 0xff3300, transparent: true, opacity: 0.32, side: THREE.DoubleSide, depthWrite: false }));
+        t.rotation.x = -Math.PI / 2; t.rotation.z = Math.atan2(e.dx, e.dz) + Math.PI; t.position.set(ep.x + e.dx * 6, walkY(ep.x, ep.z) + 0.15, ep.z + e.dz * 6); scene.add(t); e.tele = t;
+      }
+    } else if (e.st === 'wind') { o.mv = 0; o.melee = false; if (T >= e.stAt) { e.st = 'dash'; e.stAt = T + 0.6; if (e.tele) { scene.remove(e.tele); e.tele = null; } } }
+    else if (e.st === 'dash') { o.dir = { x: e.dx, z: e.dz }; o.spd = 5.2; o.melee = false; if (d < e.radius + 0.9) hitPlayer(e); if (T >= e.stAt) { e.st = 'rest'; e.stAt = T + 1.1; glowEnemy(e, e.elite ? 0x664400 : 0); } }
+    else { o.mv = 0; o.melee = false; if (T >= e.stAt) { e.st = 'chase'; e.cdAt = T + 2.5 + Math.random() * 1.5; } }
+  } else if (b === 'stalker') {   // some e reaparece atras do jogador
+    o.spd = 1.15;
+    if (T >= e.cdAt && d > 6) {
+      e.cdAt = T + 5 + Math.random() * 2; ringFx(ep, 0x9b59ff, 2, 0.4);
+      ep.x = p.x - Math.sin(facing) * 2.6; ep.z = p.z - Math.cos(facing) * 2.6; ringFx(ep, 0x9b59ff, 2, 0.4);
+    }
+  } else if (b === 'bomber') {   // corre e explode
+    if (!e.fuse && d < 2.8) e.fuse = T + 0.8;
+    if (e.fuse) {
+      o.mv = 0; o.melee = false; glowEnemy(e, Math.sin(T * 30) > 0 ? 0xff2200 : 0xffcc00);
+      if (T >= e.fuse) { ringFx({ x: ep.x, z: ep.z }, 0xff7a2a, 4, 0.5); shake = 0.3; if (Math.hypot(p.x - ep.x, p.z - ep.z) < 3.8) hitPlayer(e); e.fuse = 0; damageEnemy(e, e.maxHp * 10); }
+    }
+  } else if (b === 'summoner') {   // invoca esqueletos
+    keep(9, 13);
+    if (T >= e.cdAt && enemies.length < 34) { e.cdAt = T + 8; ringFx(ep, 0xa66bff, 3, 0.6); for (let i = 0; i < 2; i++) spawnEnemy(false, null, 'minion', { x: ep.x + (i ? 1.8 : -1.8), z: ep.z + 1.2 }); if (e.mesh.userData.glb) playOnce(e.mesh, 'atk', 0.6); }
+  } else if (b === 'nova') {   // marca uma area no chao: saia de la
+    keep(8, 12);
+    if (T >= e.cdAt) { e.cdAt = T + 4.2 + Math.random(); addDanger(p.x, p.z, 3.4, 1.1, e.dmg * 1.3, 0x4fc3ff); if (e.mesh.userData.glb) playOnce(e.mesh, 'atk', 0.6); }
+  } else if (b === 'spitter') {   // cospe uma poca que fica queimando
+    keep(7, 11);
+    if (T >= e.cdAt) { e.cdAt = T + 3.6 + Math.random(); addDanger(p.x, p.z, 2.6, 0.7, e.dmg * 0.4, 0x7bdc3a, 4.5); if (e.mesh.userData.glb) playOnce(e.mesh, 'atk', 0.6); }
+  }
+  return o;
 }
 
 function hitPlayer(e) {
@@ -2286,14 +2379,17 @@ function update(dt) {
       if (d > e.ranged.range) mv = 1; else if (d < e.ranged.keep) mv = -0.8; else mv = 0;
       if (sm > 0 && d < e.ranged.range + 2 && T > e.shotAt) { e.shotAt = T + e.ranged.cd * (0.85 + Math.random() * 0.3); enemyShoot(e, tg); }
     }
-    ep.x = THREE.MathUtils.clamp(ep.x + vx / d * e.speed * sm * mv * dt, -WORLD, WORLD); ep.z = THREE.MathUtils.clamp(ep.z + vz / d * e.speed * sm * mv * dt, -WORLD, WORLD);
+    let melee = !e.ranged, ux = vx / d, uz = vz / d, sp = 1;
+    if (e.beh && sm > 0) { const o = behave(e, tg, vx, vz, d); mv = o.mv; melee = o.melee; sp = o.spd; if (o.dir) { ux = o.dir.x; uz = o.dir.z; } }
+    ep.x = THREE.MathUtils.clamp(ep.x + ux * e.speed * sm * mv * sp * dt, -WORLD, WORLD); ep.z = THREE.MathUtils.clamp(ep.z + uz * e.speed * sm * mv * sp * dt, -WORLD, WORLD);
     e.t += dt * 6;
     if (e.mesh.userData.glb) { ep.y = gE; animateHero(e.mesh, dt, { moving: sm > 0 && mv !== 0 && (mv < 0 || d > e.radius + 0.4), spd: sm }); }
     else ep.y = gE + Math.abs(Math.sin(e.t)) * 0.25;
     e.mesh.rotation.y = Math.atan2(vx, vz);
     if (e.flash > 0) { e.flash -= dt; const on = e.flash > 0; e.mesh.traverse(o => { if (o.isMesh && o.material.emissive) o.material.emissive.setHex(on ? 0xffffff : (e.elite ? 0x664400 : 0x000000)); }); }
-    if (!e.ranged && d < e.radius + 0.5) { if (tg.id) hurtRemote(e, tg.id); else hitPlayer(e); if (e.mesh.userData.glb && T > (e.atkAt || 0)) { e.atkAt = T + 1.0; playOnce(e.mesh, 'atk', 0.6); } }
+    if (melee && d < e.radius + 0.5) { if (tg.id) hurtRemote(e, tg.id); else hitPlayer(e); if (e.mesh.userData.glb && T > (e.atkAt || 0)) { e.atkAt = T + 1.0; playOnce(e.mesh, 'atk', 0.6); } }
   });
+  updateDangers();
   for (let i = dying.length - 1; i >= 0; i--) { const dd = dying[i]; animateHero(dd.mesh, dt, {}); if (T >= dd.until) { scene.remove(dd.mesh); dying.splice(i, 1); } }
 
   // ataque automático
@@ -2376,11 +2472,13 @@ function frame() {
   const p = player.position;
   zoom += (zoomT - zoom) * Math.min(1, dt * 8);
   const dcm = decor.on && homeRoom, cx = dcm ? 0 : p.x, cz = dcm ? 1.2 : p.z;
-  camera.position.lerp(new THREE.Vector3(cx, 0, cz).add((dcm ? _co.copy(CAM_DECOR) : camOffset()).multiplyScalar(zoom)), Math.min(1, dt * (dcm ? 9 : 6)));
+  camGy += ((dcm || inCity || inHome ? 0 : walkY(p.x, p.z)) - camGy) * Math.min(1, dt * 5);
+  camera.position.lerp(new THREE.Vector3(cx, camGy, cz).add((dcm ? _co.copy(CAM_DECOR) : camOffset()).multiplyScalar(zoom)), Math.min(1, dt * (dcm ? 9 : 6)));
   if (shake > 0) { shake -= dt; camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake; }
   { const lc = lowCam(); camYaw += (camYawT - camYaw) * Math.min(1, dt * 8);
     const f = lc ? 62 : 50; if (Math.abs(camera.fov - f) > 0.05) { camera.fov += (f - camera.fov) * Math.min(1, dt * 5); camera.updateProjectionMatrix(); }
-    if (lc) { const l = rotY(_co.copy(LOW_LOOK), camYaw); camera.lookAt(cx + l.x, l.y, cz + l.z); } else camera.lookAt(cx, dcm ? 0 : 0.8, cz);
+    if (lc) { const l = rotY(_co.copy(LOW_LOOK), camYaw); camera.lookAt(cx + l.x, camGy + l.y, cz + l.z); } else camera.lookAt(cx, camGy + (dcm ? 0 : 0.8), cz);
+    if (!inCity && !inHome && !dcm) { const gc = groundH(camera.position.x, camera.position.z) + 1.4; if (camera.position.y < gc) camera.position.y = gc; }
     const rb = $('camrot'); if (rb) rb.style.display = lc ? 'flex' : 'none'; }
   farGroup.position.set(p.x, 0, p.z);
   ambient.setVisible(!inCity && !decor.on); if (!inCity) ambient.update(dt, p);
@@ -2407,7 +2505,7 @@ if (qs.has('city')) setCityMode(true);
 if (qs.has('at')) { const [ax, az] = qs.get('at').split(',').map(Number); if (!qs.has('city')) setCityMode(true); player.position.set(ax, 0, az); syncCam(); }
 if (qs.has('night')) dayT = +qs.get('night') || 0;
 if (qs.has('quests')) setTimeout(() => openQuests(), 1500);
-if (qs.has('dbg')) window.__g = { social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
+if (qs.has('dbg')) window.__g = { spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
 if (qs.get('pos')) { const iv = setInterval(() => { if (!gameStarted) return; clearInterval(iv); setTimeout(() => { const [px, pz] = qs.get('pos').split(',').map(Number); if (inCity) setCityMode(false); player.position.set(px || 0, 0, pz || 0); playerGy = walkY(px || 0, pz || 0); }, 600); }, 300); }
 if (qs.get('cam') === 'low') { camMode = 'low'; $('camb').querySelector('small').textContent = 'IMERSIVA'; }
 if (qs.has('yaw')) { camYaw = camYawT = +qs.get('yaw'); }
