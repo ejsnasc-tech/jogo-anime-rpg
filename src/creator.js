@@ -128,9 +128,10 @@ export function openCreator(opts) {
     if (tab === 'class') {
       if (lockCls) tabBox.appendChild(el('div', 'desc', '🔒 A classe é escolhida uma vez só. Para jogar com outra classe, crie um personagem novo.'));
       else tabBox.appendChild(chips(CLASS_LIST.map(k => [k, CLASSES[k].icon + ' ' + CLASSES[k].name]), c.cls, (v) => { c.cls = v; }));
-      const models = CLASS_MODELS[c.cls].concat(VRMS.filter(x => (x.body || 'm') === (c.body || 'm')).map(x => [x.model, '✨ ' + x.name.split(' ')[0]]));
-      if (models.length > 1) { tabBox.appendChild(el('div', 'lbl', 'Aparência')); tabBox.appendChild(chips(models, c.model, (v) => { c.model = v; })); }
-      tabBox.appendChild(el('div', 'lbl', 'Elmo / chapéu')); tabBox.appendChild(chips([[true, 'Com'], [false, 'Sem']], c.hat !== false, (v) => { c.hat = v; }));
+      const models = CLASS_MODELS[c.cls], anime = VRMS.filter(x => (x.body || 'm') === (c.body || 'm')).map(x => [x.model, x.name.split(' ')[0]]);
+      tabBox.appendChild(el('div', 'lbl', '✨ Heróis anime (modelos novos)')); tabBox.appendChild(chips(anime, c.model, (v) => { c.model = v; if (isV(v) && tab !== 'class' && tab !== 'origin') tab = 'class'; queueMicrotask(viewCustom); }));
+      if (models.length > 1) { tabBox.appendChild(el('div', 'lbl', 'Aparência clássica')); tabBox.appendChild(chips(models, c.model, (v) => { c.model = v; queueMicrotask(viewCustom); })); }
+      if (!isV(c.model)) { tabBox.appendChild(el('div', 'lbl', 'Elmo / chapéu')); tabBox.appendChild(chips([[true, 'Com'], [false, 'Sem']], c.hat !== false, (v) => { c.hat = v; })); }
       const d = el('div', 'desc'); const k = CLASSES[c.cls];
       d.innerHTML = '<b>' + k.icon + ' ' + k.name + ' — ' + k.role + '</b><br>' + CLASS_BASE[c.cls].look + '<br>' + k.desc + '<br><i>ULT: ' + k.ult + '</i>'; tabBox.appendChild(d);
     } else if (tab === 'body') { tabBox.appendChild(el('div', 'lbl', 'Porte físico')); tabBox.appendChild(chips(BUILDS, c.build || 'normal', (v) => { c.build = v; })); tabBox.appendChild(el('div', 'lbl', 'Altura')); tabBox.appendChild(chips(HEIGHTS, c.height || 'mid', (v) => { c.height = v; })); tabBox.appendChild(el('div', 'lbl', 'Tom de pele')); tabBox.appendChild(swatches(SKINS, c.skin, (i) => { c.skin = i; })); }
@@ -152,7 +153,7 @@ export function openCreator(opts) {
     body.innerHTML = '';
     fixModel();
     const nm = el('input'); nm.type = 'text'; nm.maxLength = 16; nm.placeholder = 'Nome do personagem'; nm.value = c.name || ''; nm.oninput = () => { c.name = nm.value.trim(); };
-    const sxr = chips(SEXES, c.body || 'm', (v) => { applySex(c, v); });
+    const sxr = chips(SEXES, c.body || 'm', (v) => { applySex(c, v); if (isV(c.model)) { const m = VRMS.find(x => (x.body || 'm') === v); if (m) c.model = m.model; } });
     const tabs = el('div', 'tabs');
     TABS.filter(t => !isV(c.model) || t[0] === 'class' || t[0] === 'origin').forEach(([k, lab]) => { const b = el('button', 'tab' + (k === tab ? ' sel' : ''), lab); b.onclick = () => { tab = k; viewCustom(); }; tabs.appendChild(b); });
     tabBox = el('div', 'tabbox');

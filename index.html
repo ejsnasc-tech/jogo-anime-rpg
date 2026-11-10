@@ -184,7 +184,9 @@
   #cbody .tabs { scrollbar-width:none; }
   #cbody .tabs::-webkit-scrollbar { display:none; }
   #cbody .foot { display:flex; gap:8px; margin-top:auto; }
-  #cbody .tabs { display:flex; gap:6px; overflow-x:auto; flex:none; padding-bottom:2px; }
+  #cbody > * { flex-shrink:0; }
+  #cbody .tabs { display:flex; gap:6px; flex-wrap:wrap; flex:none; padding-bottom:2px; }
+  #cbody .tab, #cbody .chip { min-height:40px; line-height:1.15; }
   #cbody .tab, #cbody .chip { flex:none; padding:8px 12px; border-radius:10px; border:3px solid transparent; background:var(--blue); font-size:13px; }
   #cbody .tab.sel, #cbody .chip.sel { border-color:var(--gold); background:#33508a; }
   #cbody .row { display:flex; flex-wrap:wrap; gap:8px; }
