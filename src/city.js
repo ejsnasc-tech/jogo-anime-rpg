@@ -80,13 +80,13 @@ export const PLOTS = (() => {
 export const NPC_DEFS = [
   { role: 'smith', icon: '🔨', color: '#ff8a65', title: 'Gorim, o Ferreiro', pos: [42, -6], ry: 0, premade: 0, talk: 'Armas fortes vencem qualquer floresta! Traga ouro e materiais e eu deixo sua lâmina afiada.' },
   { role: 'armor', icon: '🛡️', color: '#4fc3f7', title: 'Mara, a Armeira', pos: [56, -6], ry: 0, premade: 7, talk: 'Uma boa armadura salva vidas. Já vi muito herói bonito cair por economizar no peitoral.' },
-  { role: 'map', icon: '🗺️', color: '#ffd54f', title: 'Shiro, Guia dos Mapas', pos: [-8, 147], ry: 0, premade: 2, talk: 'Cada floresta tem seus perigos e seus tesouros. Eu conheço todas. Para onde vamos, viajante?' },
+  { role: 'map', icon: '🗺️', color: '#ffd54f', title: 'Shiro, Guia dos Mapas', pos: [99, 6], ry: Math.PI, premade: 2, talk: 'Cada floresta tem seus perigos e seus tesouros. Eu conheço todas. Para onde vamos, viajante?' },
   { role: 'merchant', icon: '💰', color: '#81c784', title: 'Ilyra, Mercadora', pos: [49, 6], ry: Math.PI, premade: 3, talk: 'Amuletos raros e bons preços! E compro tudo o que você coletou nas florestas.' },
-  { role: 'deco', icon: '\u{1FA91}', color: '#ffb74d', title: 'Lia, a Decoradora', pos: [-90, 5], ry: Math.PI, premade: 5, talk: 'Casa bonita é casa feliz! Compre os móveis aqui e depois coloque onde quiser dentro da sua casa.' },
+  { role: 'deco', icon: '\u{1FA91}', color: '#ffb74d', title: 'Lia, a Decoradora', pos: [38, 6], ry: Math.PI, premade: 5, talk: 'Casa bonita é casa feliz! Compre os móveis aqui e depois coloque onde quiser dentro da sua casa.' },
   { role: 'market', icon: '🏪', color: '#4db6ac', title: 'Bento, o Negociante', pos: [63, 6], ry: Math.PI, premade: 1, talk: 'Aqui os aventureiros negociam entre si! Compre equipamentos de outros jogadores ou ponha os seus à venda.' },
-  { role: 'herald', icon: '📯', color: '#e57373', title: 'Vênia, a Arauta', pos: [-18, -122], ry: 0, premade: 6, talk: 'Ouçam, ouçam! Rankings, o Chefe Mundial, guildas e as missões do dia. Tudo começa comigo!' },
+  { role: 'herald', icon: '📯', color: '#e57373', title: 'Vênia, a Arauta', pos: [98, -6], ry: 0, premade: 6, talk: 'Ouçam, ouçam! Rankings, o Chefe Mundial, guildas e as missões do dia. Tudo começa comigo!' },
   { role: 'craft', icon: '⚒️', color: '#a1887f', title: 'Tessa, a Artesã', pos: [82, -6], ry: 0, premade: 3, talk: 'Forjo armas do zero e lapido gemas que fazem seu equipamento brilhar. Traga materiais!' },
-  { role: 'summoner', icon: '🔮', color: '#ba68c8', title: 'Orin, o Mestre das Vocações', pos: [-30, -67], ry: 0, premade: 4, talk: 'Todo aventureiro pode dominar muitas vocações. Cada uma evolui no seu ritmo. Quer aprender uma nova?' },
+  { role: 'summoner', icon: '🔮', color: '#ba68c8', title: 'Orin, o Mestre das Vocações', pos: [86, 6], ry: Math.PI, premade: 4, talk: 'Todo aventureiro pode dominar muitas vocações. Cada uma evolui no seu ritmo. Quer aprender uma nova?' },
 ];
 
 // bairros (para o aviso ao entrar e para o mapa)
@@ -275,6 +275,10 @@ function shopProps(B, role) {
     for (let k = 0; k < 3; k++) B.cyl(0.14, 0.14, 1.1, 6, 1.4 + k * 0.3, 0.1, 5.6 + k * 0.2, 0xe8d6a8, 0, 0, 1.5708);
     B.cyl(0.1, 0.1, 3.8, 5, 5, 0, 5.5, TIM); [[3.4, 0.3, 0xe74c3c], [2.8, -0.3, 0x3498db], [2.2, 0.15, 0x2ecc71]].forEach(([y, r, c]) => B.box(1.7, 0.4, 0.1, 5.8, y, 5.5, c, r));
     B.cyl(1.7, 1.7, 0.04, 14, 0, 0.1, 6.4, gold); B.cyl(0.15, 0.15, 0.06, 6, 0, 0.12, 6.4, 0xc0392b);
+  } else if (role === 'summoner') {
+    B.cyl(1.2, 1.2, 0.2, 10, 0, 0.02, 6.4, 0x7b4fd6); B.k = 'l'; B.sph(0.5, 0, 1.6, 6.4, 0xc9a7ff, 1, 6); B.k = 'm'; B.cyl(0.25, 0.4, 1.0, 6, 0, 0.2, 6.4, DSTONE);
+    [-1, 1].forEach(s => { B.cyl(0.1, 0.1, 5.5, 5, s * 5.2, 0, 4.4, TIM); B.box(1.5, 2.6, 0.1, s * 5.2 + s * 0.8, 3.4, 4.4, 0x7b4fd6); });
+    B.box(2.8, 0.9, 1.1, 3.2, 0, 5.4, WOOD); [0xff4f7a, 0x4fc3f7, 0x66e08a].forEach((c, k) => B.cyl(0.2, 0.2, 0.5, 6, 2.4 + k * 0.8, 0.9, 5.4, c));
   } else if (role === 'herald') {
     [-1, 1].forEach(s => { B.cyl(0.1, 0.1, 6.5, 5, s * 5.2, 0, 4.2, TIM); B.box(1.7, 3, 0.1, s * 5.2 + s * 0.9, 3.4, 4.2, s > 0 ? 0xc0392b : 0xf5c542); });
     B.box(4.2, 2.6, 0.2, -2.2, 0.9, 5.2, TIM); for (let k = 0; k < 6; k++) B.box(0.9, 1.0, 0.05, -3.8 + (k % 3) * 1.4, 1.2 + Math.floor(k / 3) * 1.2, 5.34, [0xfff3b0, 0xffd9d9, 0xd9f0ff][k % 3], k * 0.05);
@@ -470,8 +474,8 @@ export function buildCity() {
 
   // ---- Mercado Real: barracas, lojas, lanternas e cargas ----
   const stallCols = ['#ff8a65', '#4fc3f7', '#a1887f', '#81c784', '#4db6ac'];
-  NPC_DEFS.forEach(d => { if (d.role === 'smith' || d.role === 'armor' || d.role === 'craft' || d.role === 'merchant' || d.role === 'market' || d.role === 'map' || d.role === 'deco' || d.role === 'herald') { const c = new THREE.Color(d.color).getHex(); stall(B, d.pos[0] - Math.sin(d.ry) * 2.4, d.pos[1] - Math.cos(d.ry) * 2.4, d.ry, c); } });
-  [[96, -8.3, 0, 0xffb74d], [92, 8.3, Math.PI, 0xe57373], [105, 8.3, Math.PI, 0x4db6ac], [38, 8.3, Math.PI, 0xba68c8], [70, -8.4, 0, 0xffd54f]].forEach(([x, z, ry, c]) => { if (Math.abs(x - 70) < 4 && z > 0) return; stall(B, x, z, ry, c); barrel(B, x + 2.6, z + (z > 0 ? -1 : 1)); crate(B, x - 2.7, z + (z > 0 ? -1.2 : 1.2), 0.3); });
+  NPC_DEFS.forEach(d => { if (d.role === 'smith' || d.role === 'armor' || d.role === 'craft' || d.role === 'merchant' || d.role === 'market' || d.role === 'map' || d.role === 'deco' || d.role === 'herald' || d.role === 'summoner') { const c = new THREE.Color(d.color).getHex(); stall(B, d.pos[0] - Math.sin(d.ry) * 2.4, d.pos[1] - Math.cos(d.ry) * 2.4, d.ry, c); } });
+  [[92, 8.3, Math.PI, 0xe57373], [105, 8.3, Math.PI, 0x4db6ac], [70, -8.4, 0, 0xffd54f]].forEach(([x, z, ry, c]) => { if (Math.abs(x - 70) < 4 && z > 0) return; stall(B, x, z, ry, c); barrel(B, x + 2.6, z + (z > 0 ? -1 : 1)); crate(B, x - 2.7, z + (z > 0 ? -1.2 : 1.2), 0.3); });
   // cada comerciante tem a sua loja atras da barraca, com as coisas que vende na frente e uma placa dizendo o que oferece
   const signs = [];
   const sign = (x, y, z, t, sb, bd) => { const sp = signLabel(t, sb, bd); sp.position.set(x, y, z); sp.userData.noOutline = true; signs.push(sp); };
@@ -481,12 +485,12 @@ export function buildCity() {
     craft: { x: 82, z: -17.5, ry: 0, ac: 0xa1887f, rf: 0x6a4c93, t: '⚒️ Ateliê da Tessa', s: 'Forja de armas • Gemas', y: 16.6 },
     merchant: { x: 49, z: 17.5, ry: PI, ac: 0x81c784, rf: 0x2a9d8f, t: '💰 Empório da Ilyra', s: 'Amuletos • Compra e venda', y: 14.2 },
     market: { x: 60, z: 17.5, ry: PI, ac: 0x4db6ac, rf: 0xd9822b, t: '🏪 Bazar do Bento', s: 'Troca entre jogadores', y: 14.2 },
-    map: { x: -10, z: 137, ry: 0, ac: 0xffd54f, rf: 0x8b5a2b, t: '🗺️ Cartografia do Shiro', s: 'Viagem entre as florestas', y: 14.2 },
-    deco: { x: -90, z: 17.5, ry: PI, ac: 0xffb74d, rf: 0xc0392b, t: '🪑 Móveis da Lia', s: 'Decoração para sua casa', y: 14.2 },
-    herald: { x: -18, z: -135, ry: 0, ac: 0xe57373, rf: 0x8e3b2a, t: '📯 Arautos de Aurora', s: 'Rankings • Chefe • Missões', y: 14.2 },
+    map: { x: 99, z: 17.5, ry: PI, ac: 0xffd54f, rf: 0x8b5a2b, t: '🗺️ Cartografia do Shiro', s: 'Viagem entre as florestas', y: 14.2 },
+    deco: { x: 38, z: 17.5, ry: PI, ac: 0xffb74d, rf: 0xc0392b, t: '🪑 Móveis da Lia', s: 'Decoração para sua casa', y: 14.2 },
+    summoner: { x: 86, z: 17.5, ry: PI, ac: 0xba68c8, rf: 0x2e5d9a, t: '🔮 Torre das Vocações', s: 'Aprenda novas vocações', y: 14.2 },
+    herald: { x: 98, z: -17.5, ry: 0, ac: 0xe57373, rf: 0x8e3b2a, t: '📯 Arautos de Aurora', s: 'Rankings • Chefe • Missões', y: 14.2 },
   };
   Object.entries(ROLE_SHOP).forEach(([role, o], k) => { B.frame(o.x, o.z, o.ry); shop(B, k, o.ac, o.rf); shopProps(B, role); sign(o.x, o.y, o.z, o.t, o.s); });
-  [[98, -17.5, 0, 0xffb74d, 0x8b5a2b, '🥖 Padaria Doce Pão', 'Pães e bolos quentinhos'], [86, 17.5, PI, 0xba68c8, 0x2e5d9a, '🧪 Alquimia da Vovó', 'Poções e ervas'], [99, 17.5, PI, 0x4fc3f7, 0x2a9d8f, '🎣 Peixaria do Porto', 'Peixe fresquinho']].forEach(([x, z, ry, ac, rf, t, sb], k) => { B.frame(x, z, ry); shop(B, k + 8, ac, rf); sign(x, 14.2, z, t, sb, '#9ad0ff'); });
   LAND.forEach(l => { B.frame(l.x, l.z, Math.atan2(-l.x, -l.z)); ({ tavern, chapel, clock: clocktower, guild })[l.k](B); sign(l.x, { tavern: 13.8, chapel: 25.5, clock: 32, guild: 14.8 }[l.k], l.z, l.t, l.s, '#c9a7ff'); });
   signs.forEach(sp => group.add(sp));
   B.frame(0, 0, 0);
