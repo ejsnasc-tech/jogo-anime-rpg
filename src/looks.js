@@ -23,7 +23,27 @@ const shade = (n, k) => '#' + new THREE.Color(n).multiplyScalar(k).getHexString(
 // ---- material "toon" (3 tons, como desenho) ----
 let gradMap = null;
 const grad = () => gradMap || (gradMap = (() => { const t = new THREE.DataTexture(new Uint8Array([70, 120, 170, 215, 255]), 5, 1, THREE.RedFormat); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })());
-const toon = (c, o) => new THREE.MeshToonMaterial(Object.assign({ color: c, gradientMap: grad() }, o));
+const toon = (c, o) => {
+  const m = new THREE.MeshToonMaterial(Object.assign({ color: c, gradientMap: grad() }, o));
+  // luz de contorno (rim): borda do corpo brilha levemente, dá volume e cara de anime
+  m.onBeforeCompile = (s) => { s.fragmentShader = s.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight += vec3(0.85,0.92,1.0) * pow(1.0 - saturate(dot(normalize(vNormal), normalize(vViewPosition))), 3.2) * 0.22;' + String.fromCharCode(10) + '#include <opaque_fragment>'); };
+  return m;
+};
+// cabelo de anime: gradiente + faixa de brilho ("anel de anjo") + mechas finas
+const hairTexCache = new Map();
+function hairTex(color) {
+  const key = new THREE.Color(color).getHexString();
+  if (hairTexCache.has(key)) return hairTexCache.get(key);
+  const c = document.createElement('canvas'); c.width = 128; c.height = 256; const g = c.getContext('2d');
+  const base = new THREE.Color(color), at = (k) => '#' + base.clone().multiplyScalar(k).getHexString(), lite = '#' + base.clone().lerp(new THREE.Color(0xffffff), 0.5).getHexString();
+  const gr = g.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, at(0.7)); gr.addColorStop(0.3, at(1)); gr.addColorStop(1, at(0.62));
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 256);
+  const hl = g.createLinearGradient(0, 70, 0, 130); hl.addColorStop(0, 'rgba(255,255,255,0)'); hl.addColorStop(0.5, lite); hl.addColorStop(1, 'rgba(255,255,255,0)');
+  g.globalAlpha = 0.85; g.fillStyle = hl; g.fillRect(0, 70, 128, 60); g.globalAlpha = 1;
+  g.globalAlpha = 0.16; g.fillStyle = at(0.5); for (let x = 0; x < 128; x += 9) g.fillRect(x + (x * 7 % 5), 0, 2, 256);   // fios
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.anisotropy = 4; hairTexCache.set(key, t); return t;
+}
+const hairToon = (color) => toon(0xffffff, { map: hairTex(color) });
 
 // ---- rosto: decalque curvo (só os traços, sem "máscara") ----
 const faceCache = new Map();
@@ -91,7 +111,7 @@ function fringe(hb, mat, n, spread) {
 }
 // mode: 'free' | 'hat' (chapéu/elmo cobre o topo: só aparece o que sai por baixo)
 export function buildHair(style, hb, color, mode) {
-  const g = new THREE.Group(), mat = toon(color), w = hb.w, h = hb.h, d = hb.d, hat = mode === 'hat';
+  const g = new THREE.Group(), mat = hairToon(color), w = hb.w, h = hb.h, d = hb.d, hat = mode === 'hat';
   if (style === 'bald') return g;
   if (!hat) { g.add(dome(hb, mat, 1.06, true, style === 'bob' ? 0.82 : 0.7)); g.add(dome(hb, mat, 1.07, false, 0.34)); if (!['mohawk', 'slick', 'topknot', 'afro'].includes(style)) g.add(fringe(hb, mat, style === 'spiky' ? 7 : (style === 'undercut' ? 3 : (style === 'shaggy' ? 8 : 5)), style === 'spiky' ? 1.9 : 1.4)); }
   else {   // com chapéu/elmo: aparece só o cabelo que sai por baixo (nuca e laterais)
