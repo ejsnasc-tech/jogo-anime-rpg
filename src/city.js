@@ -10,7 +10,7 @@ export const CITY_SPAWN = [0, CITY_R - 5];
 const D2R = Math.PI / 180, INNER = 28;
 const SPOKES = [[0, 9, 176], [90, 11, 180], [180, 9, 176], [270, 11, 131], [45, 6, 165], [135, 6, 165], [225, 6, 165]];   // [angulo, largura, ate que raio]
 const RINGS = [[70, 6], [112, 6]];
-const MARKET = { x0: 31, x1: 112, hw: 8 };                  // Rua do Mercado ao longo do eixo leste
+const MARKET = { x0: 31, x1: 112, hw: 15 };                  // Rua do Mercado ao longo do eixo leste
 const LAKE = { x: 63.6, z: -63.6, r: 18 };
 const ACAD = { x: -30, z: -92 };
 const DECO_SQ = { x: -90, z: 0 };
@@ -18,6 +18,7 @@ const GATE_SQ = { x: 0, z: 150 };
 const COURT = { x: 0, z: -128 };
 const CASTLE = { x: 0, z: -160 };
 const FARM = { x: 148, z: 78 };
+const LAND = [{ k: 'tavern', x: 21, z: 41, r: 12, t: '🍺 Taverna do Dragão', s: 'Comida • Música • Boatos' }, { k: 'chapel', x: -44.5, z: 18, r: 11, t: '⛪ Capela de Aurora', s: 'Paz e bênçãos' }, { k: 'clock', x: -13, z: -40, r: 6, t: '🕰️ Torre do Relógio', s: 'Hora oficial da cidade' }, { k: 'guild', x: 29, z: -43, r: 11, t: '🏛️ Guilda dos Aventureiros', s: 'Reunião de heróis' }];
 const rnd = (() => { let a = 20240611; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; })();
 const P1 = (v) => Math.round(v * 10) / 10;
 
@@ -44,24 +45,29 @@ function blocked(x, z, pad = 0) {
   if (Math.hypot(x - ACAD.x, z - ACAD.z) < 20 + pad) return true;
   if (Math.hypot(x - DECO_SQ.x, z - DECO_SQ.z) < 16 + pad) return true;
   if (Math.hypot(x - FARM.x, z - FARM.z) < 34 + pad) return true;
+  if (LAND.some(l => Math.hypot(x - l.x, z - l.z) < l.r + 4 + pad)) return true;
   return false;
 }
 
 // ---- terrenos: casas a oeste, predios a sudeste, em quatro fileiras que acompanham as ruas em anel ----
 export const PLOTS = (() => {
   const H = [], A = [];
-  const rows = [[62, 1], [78, -1], [104, 1], [120, -1]];   // [raio, +1 = frente para fora / -1 = frente para dentro]
-  const lay = (list, kind, a0, a1, sp, w, d, price) => rows.forEach(([r, dir]) => {
-    const n = Math.floor((a1 - a0) * D2R * r / sp);
+  const rows = [[70, 1], [70, -1], [112, 1], [112, -1]];   // [raio da rua em anel, +1 = casa por dentro da rua olhando para fora / -1 = por fora olhando para dentro]
+  const hh = (n) => { const v = Math.sin(n * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
+  const HT = [{ w: 6, d: 5.5, fl: 1, v: 0 }, { w: 9, d: 6, fl: 1, v: 1 }, { w: 6.5, d: 9, fl: 1, v: 2 }, { w: 8, d: 7, fl: 2, v: 3 }, { w: 5.6, d: 5.6, fl: 3, v: 0 }, { w: 10, d: 7, fl: 2, v: 4 }, { w: 7, d: 6.5, fl: 2, v: 2 }];
+  const AT = [{ w: 7, d: 6, fl: 4 }, { w: 12, d: 7, fl: 3 }, { w: 9, d: 7, fl: 4 }, { w: 8, d: 8, fl: 5 }, { w: 10.5, d: 6.5, fl: 3 }];
+  const lay = (list, kind, a0, a1, sp, T, base) => rows.forEach(([R, dir]) => {
+    const rr = R - dir * 8, n = Math.floor((a1 - a0) * D2R * rr / sp);
     for (let i = 0; i < n; i++) {
+      const t = T[Math.floor(hh(list.length * 1.7 + R * 0.31 + dir + (kind === 'apt' ? 50 : 0)) * T.length)], off = 4.5 + t.d / 2, r = R - dir * off;
       const a = (a0 + (i + 0.5) * (a1 - a0) / n) * D2R, x = r * Math.cos(a), z = r * Math.sin(a);
-      if (spokeDist(x, z) < 6.2 || blocked(x, z, -2)) continue;
-      const fx = dir * Math.cos(a), fz = dir * Math.sin(a);
-      list.push({ kind, x: P1(x), z: P1(z), w, d, price, ry: Math.atan2(fx, fz), door: [P1(x + fx * (d / 2 + 2.4)), P1(z + fz * (d / 2 + 2.4))] });
+      if (spokeDist(x, z) < 7.5 || blocked(x, z, -2)) continue;
+      const fx = dir * Math.cos(a), fz = dir * Math.sin(a), big = kind === 'house' ? (t.fl > 1 && t.w * t.d >= 56) : t.w * t.d * t.fl >= 190;
+      list.push({ kind, top: kind === 'house' ? 0.7 + t.fl * 3.1 + Math.min(4.4, (t.d + 1.7) * 0.42) + 2.4 : 1.7 + t.fl * 3.3 + 5.5, x: P1(x), z: P1(z), w: t.w, d: t.d, fl: t.fl, v: t.v || 0, price: base + (big ? Math.round(base * 0.5) : 0), ry: Math.atan2(fx, fz), door: [P1(x + fx * (t.d / 2 + 2.4)), P1(z + fz * (t.d / 2 + 2.4))] });
     }
   });
-  lay(H, 'house', 100, 226, 9.6, 7, 6, 3000);
-  lay(A, 'apt', 14, 86, 11.8, 9, 7, 1200);
+  lay(H, 'house', 100, 226, 14.5, HT, 3000);
+  lay(A, 'apt', 12, 87, 17.5, AT, 1200);
   const byDist = (a, b) => Math.hypot(a.x, a.z - 40) - Math.hypot(b.x, b.z - 40);
   H.sort(byDist); A.sort(byDist);
   // os 22 primeiros ids mantem o tipo antigo (8 casas e 14 apartamentos) para nao quebrar quem ja comprou
@@ -78,7 +84,7 @@ export const NPC_DEFS = [
   { role: 'merchant', icon: '💰', color: '#81c784', title: 'Ilyra, Mercadora', pos: [49, 6], ry: Math.PI, premade: 3, talk: 'Amuletos raros e bons preços! E compro tudo o que você coletou nas florestas.' },
   { role: 'deco', icon: '\u{1FA91}', color: '#ffb74d', title: 'Lia, a Decoradora', pos: [-90, 5], ry: Math.PI, premade: 5, talk: 'Casa bonita é casa feliz! Compre os móveis aqui e depois coloque onde quiser dentro da sua casa.' },
   { role: 'market', icon: '🏪', color: '#4db6ac', title: 'Bento, o Negociante', pos: [63, 6], ry: Math.PI, premade: 1, talk: 'Aqui os aventureiros negociam entre si! Compre equipamentos de outros jogadores ou ponha os seus à venda.' },
-  { role: 'herald', icon: '📯', color: '#e57373', title: 'Vênia, a Arauta', pos: [-9, -121], ry: 0, premade: 6, talk: 'Ouçam, ouçam! Rankings, o Chefe Mundial, guildas e as missões do dia. Tudo começa comigo!' },
+  { role: 'herald', icon: '📯', color: '#e57373', title: 'Vênia, a Arauta', pos: [-18, -122], ry: 0, premade: 6, talk: 'Ouçam, ouçam! Rankings, o Chefe Mundial, guildas e as missões do dia. Tudo começa comigo!' },
   { role: 'craft', icon: '⚒️', color: '#a1887f', title: 'Tessa, a Artesã', pos: [82, -6], ry: 0, premade: 3, talk: 'Forjo armas do zero e lapido gemas que fazem seu equipamento brilhar. Traga materiais!' },
   { role: 'summoner', icon: '🔮', color: '#ba68c8', title: 'Orin, o Mestre das Vocações', pos: [-30, -67], ry: 0, premade: 4, talk: 'Todo aventureiro pode dominar muitas vocações. Cada uma evolui no seu ritmo. Quer aprender uma nova?' },
 ];
@@ -164,52 +170,157 @@ function flowerBox(B, x, y, z, w) {
   B.box(w, 0.32, 0.45, x, y, z, WOOD);
   for (let i = 0; i < 4; i++) B.sph(0.17, x - w / 2 + 0.2 + i * (w - 0.4) / 3, y + 0.42, z, [0xff7f9f, 0xffd166, 0xffffff, 0xb28dff][i], 1, 5);
 }
-function house(B, i) {
-  const wc = WALL[i % 5], rc = ROOF[(i * 3 + 1) % 5], v = i % 3, h1 = v === 1 ? 3.1 : 3.7, shut = [0x2e86c1, 0x2a9d8f, 0xc0392b, 0x6a4c93][i % 4];
-  B.box(7.5, 0.7, 6.5, 0, 0, 0, STONE);
-  B.box(7, h1, 6, 0, 0.7, 0, wc);
-  [[-3.5, 3], [3.5, 3], [-3.5, -3], [3.5, -3]].forEach(([x, z]) => B.box(0.4, h1, 0.4, x, 0.7, z, TIM));
-  B.box(7.2, 0.3, 0.25, 0, 0.7 + h1 - 0.35, 3.05, TIM);
-  let top = 0.7 + h1;
-  if (v === 1) { B.box(7.7, 2.5, 6.7, 0, top, 0, wc); [[-3.8, 3.3], [3.8, 3.3], [-3.8, -3.3], [3.8, -3.3]].forEach(([x, z]) => B.box(0.4, 2.5, 0.4, x, top, z, TIM)); B.box(7.8, 0.28, 6.8, 0, top - 0.05, 0, TIM); win(B, -2.2, top + 1.4, 3.37, 1.1, 1.1, shut); win(B, 2.2, top + 1.4, 3.37, 1.1, 1.1, shut); flowerBox(B, 0, top + 0.55, 3.45, 1.8); top += 2.5; }
-  B.gable(8.2 + (v === 1 ? 0.6 : 0), 7.6 + (v === 1 ? 0.7 : 0), 3.1, 0, top, 0, rc);
-  B.box(8.3, 0.25, 0.25, 0, top + 3.1, 0, DSTONE);
-  B.box(0.95, 2.4, 0.95, 2.3, top + 1.5, -1.3, DSTONE); B.box(1.15, 0.22, 1.15, 2.3, top + 3.7, -1.3, STONE);
-  if (v === 2) { B.gable(2.6, 2.6, 1.7, -1.6, top + 1.45, 2.3, rc, 1.5708); B.box(1, 0.9, 0.2, -1.6, top + 1.2, 3.55, GLASS); }
-  B.box(1.45, 2.5, 0.25, 0, 0.7, 3.05, 0x6b4423); B.box(1.9, 0.28, 0.4, 0, 3.2, 3.15, TIM);
-  B.sph(0.09, 0.45, 1.8, 3.2, 0xffd54f, 1, 4);
-  B.box(2.2, 0.28, 1.3, 0, 0.7, 3.8, STONE); B.box(2.6, 0.22, 1.7, 0, 0.5, 3.9, DSTONE);
-  win(B, -2.3, 2.5, 3.05, 1.2, 1.2, shut); win(B, 2.3, 2.5, 3.05, 1.2, 1.2, shut);
-  flowerBox(B, -2.3, 1.55, 3.2, 1.5); flowerBox(B, 2.3, 1.55, 3.2, 1.5);
-  [-1, 1].forEach(s => { B.box(0.2, 1.2, 1.2, s * 3.55, 2.3, 0, GLASS); });
-  [-1, 1].forEach(s => { B.sph(0.55, s * 3.5, 0.7, 3.7, 0x3a8a3a, 0.9, 6); B.sph(0.15, s * 3.7, 1.1, 3.9, 0xff8fb0, 1, 4); });
+function house(B, i, p) {
+  const { w, d, fl, v } = p, fh = 3.1;
+  const wc = WALL[i % 5], wc2 = WALL[(i + 2) % 5], rc = ROOF[(i * 3 + 1) % 5], shut = [0x2e86c1, 0x2a9d8f, 0xc0392b, 0x6a4c93][i % 4];
+  B.box(w + 0.5, 0.7, d + 0.5, 0, 0, 0, STONE);
+  for (let f = 0; f < fl; f++) {
+    const ww = w + (f ? 0.5 : 0), dd = d + (f ? 0.5 : 0), y = 0.7 + f * fh;
+    B.box(ww, fh, dd, 0, y, 0, f ? wc2 : wc);
+    [[-1, 1], [1, 1], [-1, -1], [1, -1]].forEach(([sx, sz]) => B.box(0.4, fh, 0.4, sx * ww / 2, y, sz * dd / 2, TIM));
+    B.box(ww + 0.25, 0.28, dd + 0.25, 0, y + fh - 0.14, 0, TIM);
+    const zf = dd / 2 + 0.02;
+    if (f === 0) { for (let x = 1.9; x < w / 2 - 0.6; x += 2.4) [-1, 1].forEach(s => { win(B, s * x, 2.5, zf, 1.2, 1.2, shut); flowerBox(B, s * x, 1.55, zf + 0.15, 1.5); }); }
+    else { const n = Math.floor((w / 2 - 0.9) / 2.4); for (let k = -n; k <= n; k++) { win(B, k * 2.4, y + 1.5, zf, 1.1, 1.1, shut); if (k % 2 === 0) flowerBox(B, k * 2.4, y + 0.6, zf + 0.15, 1.5); } }
+    [-1, 1].forEach(s => { B.k = 'g'; B.box(0.2, 1.2, 1.2, s * (ww / 2 + 0.03), y + 1.5, 0, GLASS); B.k = 'm'; });
+  }
+  const top = 0.7 + fl * fh, rh = Math.min(4.4, (d + 1.7) * 0.42);
+  B.gable(w + 1.1, d + 1.7, rh, 0, top, 0, rc); B.box(w + 1.2, 0.25, 0.25, 0, top + rh, 0, DSTONE);
+  B.box(0.95, rh + 1.4, 0.95, w / 2 - 1.2, top + 0.2, -d / 4, DSTONE); B.box(1.15, 0.22, 1.15, w / 2 - 1.2, top + rh + 1.6, -d / 4, STONE);
+  const zd = d / 2 + 0.05;
+  B.box(1.45, 2.4, 0.25, 0, 0.7, zd, 0x6b4423); B.box(1.9, 0.28, 0.4, 0, 3.2, zd + 0.1, TIM); B.sph(0.09, 0.45, 1.8, zd + 0.15, 0xffd54f, 1, 4);
+  B.box(2.2, 0.28, 1.3, 0, 0.7, zd + 0.75, STONE); B.box(2.6, 0.22, 1.7, 0, 0.5, zd + 0.85, DSTONE);
+  if (v === 1) { [-1.7, 1.7].forEach(x => B.cyl(0.14, 0.14, 2.7, 6, x, 0.7, zd + 1.7, 0xf2eee3)); B.box(4.2, 0.25, 2.2, 0, 3.4, zd + 0.9, rc, 0, 0.1); }
+  if (v === 2) { B.gable(2.8, 2.8, 1.8, 0, top + rh * 0.12, d / 2 - 0.9, rc, 1.5708); B.k = 'g'; B.box(1.1, 0.9, 0.2, 0, top + 0.8, d / 2 + 0.55, GLASS); B.k = 'm'; }
+  if (v === 3) { const h = fl * fh + 1.4; B.cyl(1.5, 1.6, h, 10, -w / 2, 0, d / 2 - 0.2, wc2); B.cone(2.1, 3.2, 10, -w / 2, h, d / 2 - 0.2, rc); B.k = 'g'; B.box(0.8, 1.1, 0.2, -w / 2, h - 1.8, d / 2 + 1.3, GLASS); B.k = 'm'; }
+  if (v === 4) { B.box(3.6, 2.8, d * 0.7, w / 2 + 1.8, 0, -0.5, wc2); B.gable(4.2, d * 0.7 + 1, 1.5, w / 2 + 1.8, 2.8, -0.5, rc, 1.5708); win(B, w / 2 + 1.8, 1.6, d * 0.35 - 0.5 + 0.02, 1.1, 1.1, shut); }
+  // jardim da frente: caminho, cerquinha e um detalhe que muda de casa para casa
+  const hs = Math.abs(Math.sin(i * 12.9898 + 4.1)) * 5 | 0, zg = d / 2 + 3.3;
+  B.box(1.7, 0.06, 3.2, 0, 0.02, d / 2 + 2.3, 0xd9c9a6);
+  if (i % 4 !== 3) { const L = w / 2 + 1.2 - 1.1; [-1, 1].forEach(s => { B.box(L, 0.6, 0.1, s * (1.1 + L / 2), 0.1, zg, 0xefe6d2); for (let k = 0; k <= Math.floor(L / 1.5); k++) B.box(0.14, 0.8, 0.14, s * (1.1 + k * 1.5), 0, zg, 0xd9cfba); }); }
+  [-1, 1].forEach(s => { B.sph(0.55, s * (w / 2 - 0.2), 0.7, d / 2 + 1.3, 0x3a8a3a, 0.9, 6); B.sph(0.15, s * (w / 2 - 0.1), 1.1, d / 2 + 1.7, [0xff8fb0, 0xffd166][(i + (s > 0 ? 1 : 0)) % 2], 1, 4); });
+  const sx = i % 2 ? 1 : -1, px = sx * (w / 2 + 2.6 + (v === 4 && sx > 0 ? 3.6 : 0)), pz = d / 2 + 0.6;
+  if (hs === 0) tree(B, px, pz - 0.5, 0.85, i % 3 ? 'round' : 'blossom');
+  else if (hs === 1) { barrel(B, px, pz); barrel(B, px + 0.2, pz + 1.1); crate(B, px - 1.1, pz + 0.2, 0.3); }
+  else if (hs === 2) bench(B, px, pz + 1, 0);
+  else if (hs === 3) for (let k = 0; k < 4; k++) B.box(2.4, 0.4, 0.5, px, 0.04, pz - 0.6 + k * 0.85, [0x6aa84f, 0x8cc152, 0xe5c75a, 0x6aa84f][k]);
+  else { B.box(2.2, 0.55, 1.2, px, 0.55, pz, WOOD); [-0.9, 0.9].forEach(x => B.cyl(0.42, 0.42, 0.12, 8, px + x, 0, pz + 0.7, TIM, 0, 0, 1.5708)); B.sph(0.4, px, 1.4, pz, 0xe5a13a, 1, 6); }
 }
-function apt(B, i) {
-  const wc = [0xe3d2b8, 0xcfdae4, 0xe9cdb7, 0xd7dfc6][i % 4], ac = [0xc0392b, 0x2e86c1, 0x2a9d8f, 0xd9822b][i % 4];
-  B.box(9.4, 1.2, 7.4, 0, 0, 0, DSTONE);
-  B.box(9, 11.8, 7, 0, 1.2, 0, wc);
-  [[-4.5, 3.5], [4.5, 3.5], [-4.5, -3.5], [4.5, -3.5]].forEach(([x, z]) => B.box(0.6, 11.8, 0.6, x, 1.2, z, STONE));
-  [4.2, 7.4, 10.6].forEach(y => B.box(9.6, 0.25, 7.6, 0, y - 0.1, 0, STONE));
-  B.box(9.8, 0.7, 7.8, 0, 13, 0, 0x6b5a4a); B.box(9.4, 0.9, 7.4, 0, 13.7, 0, ac);
-  [-4.6, 4.6].forEach(x => [-3.6, 3.6].forEach(z => B.box(0.55, 0.9, 0.55, x, 14.6, z, STONE)));
-  B.box(2.4, 1.6, 2.4, 2.4, 14.6, -1.5, WOOD); B.cyl(1.1, 1.1, 1.2, 8, 2.4, 16.2, -1.5, DSTONE);
-  for (let f = 0; f < 3; f++) [-3, 0, 3].forEach(x => { if (f === 0 && x === 0) return; win(B, x, 2.6 + f * 3.3, 3.5, 1.3, 1.5, f % 2 ? ac : 0x6a4c93); if (f > 0 && x !== 0) flowerBox(B, x, 1.9 + f * 3.3, 3.7, 1.7); });
-  B.box(1.9, 2.7, 0.25, 0, 1.2, 3.5, 0x6b4423); B.box(3.8, 0.28, 1.8, 0, 4.1, 4.1, ac, 0, 0.18); [-1.8, 1.8].forEach(x => B.cyl(0.08, 0.08, 3, 5, x, 1.2, 4.9, WOOD));
-  B.box(3, 0.3, 1.6, 0, 1.2, 4.3, STONE);
-  [-1, 1].forEach(s => { B.box(0.2, 8, 3, s * 4.55, 3.4, 0, STONE); B.k = 'g'; B.box(0.2, 1.5, 1.4, s * 4.55, 6, 0, GLASS); B.k = 'm'; });
+function apt(B, i, p) {
+  const { w, d, fl } = p, fh = 3.3, wc = [0xe3d2b8, 0xcfdae4, 0xe9cdb7, 0xd7dfc6, 0xe6c9d0][i % 5], ac = [0xc0392b, 0x2e86c1, 0x2a9d8f, 0xd9822b, 0x8e44ad][i % 5];
+  B.box(w + 0.4, 1.2, d + 0.4, 0, 0, 0, DSTONE);
+  B.box(w, fl * fh + 0.5, d, 0, 1.2, 0, wc);
+  [[-1, 1], [1, 1], [-1, -1], [1, -1]].forEach(([sx, sz]) => B.box(0.6, fl * fh + 0.5, 0.6, sx * w / 2, 1.2, sz * d / 2, STONE));
+  for (let f = 1; f <= fl; f++) B.box(w + 0.6, 0.25, d + 0.6, 0, 1.2 + f * fh - 0.1, 0, STONE);
+  const H = 1.2 + fl * fh + 0.5, zf = d / 2 + 0.02, nx = Math.max(2, Math.floor((w - 1.5) / 3));
+  for (let f = 0; f < fl; f++) for (let k = 0; k < nx; k++) {
+    const x = (k - (nx - 1) / 2) * (w - 2.4) / Math.max(1, nx - 1) * (nx > 1 ? 1 : 0);
+    if (f === 0 && Math.abs(x) < 1.2) continue;
+    win(B, x, 2.6 + f * fh, zf, 1.3, 1.5, f % 2 ? ac : 0x6a4c93);
+    if (f > 0) { if ((f + k) % 2) { B.box(1.9, 0.2, 1, x, 1.9 + f * fh, zf + 0.5, STONE); B.box(1.9, 0.7, 0.08, x, 2.1 + f * fh, zf + 1, 0x3b3f4a); } else flowerBox(B, x, 1.9 + f * fh, zf + 0.2, 1.7); }
+  }
+  B.box(1.9, 2.7, 0.25, 0, 1.2, zf + 0.03, 0x6b4423); B.box(3.8, 0.28, 1.8, 0, 4.1, zf + 0.9, ac, 0, 0.18); [-1.8, 1.8].forEach(x => B.cyl(0.08, 0.08, 3, 5, x, 1.2, zf + 1.7, WOOD)); B.box(3, 0.3, 1.6, 0, 1.2, zf + 1.1, STONE);
+  [-1, 1].forEach(s => { B.k = 'g'; B.box(0.2, 1.5, 1.4, s * (w / 2 + 0.03), 1.2 + fh * 1.5, 0, GLASS); B.k = 'm'; });
+  B.box(w + 0.8, 0.7, d + 0.8, 0, H, 0, 0x6b5a4a);
+  if (i % 3 === 0) { B.pyr(w + 0.8, d + 0.8, 3.2 + (fl > 4 ? 1.5 : 0), 0, H + 0.7, 0, ac); }
+  else { B.box(w + 0.4, 0.9, d + 0.4, 0, H + 0.7, 0, ac); [-1, 1].forEach(sx => [-1, 1].forEach(sz => B.box(0.55, 0.9, 0.55, sx * (w / 2 + 0.1), H + 1.6, sz * (d / 2 + 0.1), STONE))); B.box(2.2, 1.5, 2.2, w / 4, H + 1.6, -d / 4, WOOD); B.cyl(1.0, 1.0, 1.1, 8, w / 4, H + 3.1, -d / 4, DSTONE); }
+  if (fl >= 5) { B.cyl(0.1, 0.1, 3, 4, 0, H + 3.5, 0, 0x333333); B.box(1.6, 0.9, 0.1, 0.8, H + 5.2, 0, 0xf5c542); }
 }
-function shop(B, i, ry) {   // loja de dois andares do Mercado
-  const wc = [0xf0dcc0, 0xe6d3b3, 0xd9e4ec][i % 3], ac = [0xc0392b, 0x2e86c1, 0x2a9d8f, 0xd9822b, 0x8e44ad][i % 5];
+function shop(B, i, ac, rf) {   // loja de dois andares do Mercado (frente +z)
+  const wc = [0xf0dcc0, 0xe6d3b3, 0xd9e4ec][i % 3];
   B.box(10.4, 0.6, 7.4, 0, 0, 0, STONE); B.box(10, 4.2, 7, 0, 0.6, 0, wc); B.box(10.6, 3.6, 7.6, 0, 4.8, 0, wc);
   [-5, 5].forEach(x => [-3.5, 3.5].forEach(z => B.box(0.45, 8.4, 0.45, x, 0.6, z, TIM)));
   B.box(10.7, 0.3, 7.7, 0, 4.6, 0, TIM);
-  B.gable(11.4, 8.6, 3.4, 0, 8.4, 0, ROOF[(i + 2) % 5]); B.box(1, 3, 1, 3, 9.8, -1.5, DSTONE);
+  B.gable(11.4, 8.6, 3.4, 0, 8.4, 0, rf); B.box(1, 3, 1, 3, 9.8, -1.5, DSTONE);
   for (let k = 0; k < 6; k++) B.box(10.4 / 6, 0.2, 2.2, -5.2 + (k + 0.5) * 10.4 / 6, 3.35, 4.3, k % 2 ? 0xffffff : ac, 0, 0.35);
   B.box(3, 2.6, 0.2, -2.6, 0.7, 3.5, 0x6b4423); B.k = 'g'; B.box(2.6, 2.2, 0.2, 2.4, 1.2, 3.5, GLASS); B.k = 'm';
-  B.box(10.3, 0.2, 0.9, 0, 0.7 + 1.0, 3.9, WOOD);
+  B.box(10.3, 0.2, 0.9, 0, 1.7, 3.9, WOOD);
   [-3, 0, 3].forEach(x => win(B, x, 5.7, 3.8, 1.3, 1.4, ac));
-  B.box(3, 0.9, 0.18, 0, 8.0, 3.9, WOOD); B.box(2.6, 0.55, 0.2, 0, 8.15, 3.95, 0xffe9a0);
 }
+const steel = 0xb8c2cf, gold = 0xe6b93c;
+// o que cada comerciante mostra na frente da sua loja (frente +z)
+function shopProps(B, role) {
+  if (role === 'smith') {
+    B.box(1.7, 7, 1.7, -3.6, 8.2, -1.2, DSTONE); B.box(2.1, 0.3, 2.1, -3.6, 15.2, -1.2, STONE); B.k = 'l'; B.box(1.5, 0.8, 0.3, -2.6, 1.2, 3.62, 0xff7a2a); B.sph(0.5, -3.6, 15.9, -1.2, 0xff9a4a, 0.7, 5); B.k = 'm';
+    B.cyl(0.5, 0.6, 0.8, 7, 3.6, 0, 5.2, WOOD); B.box(1.3, 0.4, 0.6, 3.6, 0.8, 5.2, 0x333b45); B.box(0.5, 0.3, 0.4, 4.4, 0.85, 5.2, 0x333b45);
+    [-1.5, 0, 1.5].forEach((x, k) => { B.box(0.14, 1.9, 0.06, x + 0.5, 1.6, 3.65, steel); B.box(0.6, 0.12, 0.08, x + 0.5, 2.0, 3.66, gold); });
+    B.box(3.8, 0.15, 0.3, 0.5, 1.5, 3.7, TIM); barrel(B, -4.6, 5.4); [0, 1, 2].forEach(k => B.sph(0.3, -2.3 + k * 0.5, 0.3, 5.6, 0x23272e, 0.8, 5));
+  } else if (role === 'armor') {
+    [-3.4, 3.4].forEach(x => { B.cyl(0.08, 0.08, 1.8, 5, x, 0, 5.2, TIM); B.box(0.9, 1.0, 0.5, x, 1.3, 5.2, steel); B.box(1.5, 0.3, 0.5, x, 2.05, 5.2, steel); B.sph(0.3, x, 2.7, 5.2, steel, 1, 6); B.box(0.12, 0.5, 0.4, x, 3.0, 5.2, 0xc0392b); });
+    [[-3, 0x2e86c1], [0, gold], [3, 0xc0392b]].forEach(([x, c]) => { B.cyl(0.85, 0.85, 0.14, 12, x, 3.2, 3.66, c, 0, 1.5708); B.sph(0.25, x, 3.2, 3.78, steel, 1, 5); });
+    B.box(3.2, 0.9, 1, 0, 0, 5.3, WOOD); [-1, 0, 1].forEach(x => B.sph(0.34, x, 1.1, 5.3, steel, 0.8, 6));
+  } else if (role === 'craft') {
+    B.box(3.4, 0.9, 1.2, 3.2, 0, 5.2, WOOD); [0xff4f7a, 0x4fc3f7, 0x66e08a, 0xc9a7ff, 0xffd54f].forEach((c, k) => B.sph(0.22, 2.1 + k * 0.5, 1.2, 5.2, c, 1.3, 4));
+    B.box(1.2, 0.4, 0.6, -3.6, 0.8, 5.2, 0x333b45); B.cyl(0.5, 0.6, 0.8, 7, -3.6, 0, 5.2, WOOD); for (let k = 0; k < 4; k++) B.box(0.8, 0.22, 0.4, -2.2, k * 0.22, 5.6, gold);
+    B.k = 'l'; B.sph(1.0, 0, 13.4, 0, 0xc9a7ff, 1.8, 4); B.k = 'm'; B.cyl(0.4, 0.4, 1.6, 6, 0, 11.8, 0, DSTONE);
+    [-1, 1].forEach(s => { B.box(0.12, 1.3, 0.06, s * 1.3, 1.7, 3.65, steel); B.sph(0.2, s * 1.3, 2.5, 3.65, [0xff4f7a, 0x4fc3f7][s > 0 ? 1 : 0], 1.3, 4); });
+  } else if (role === 'merchant') {
+    [[-3.6, 5.3], [-2.6, 5.6], [3.6, 5.3]].forEach(([x, z], k) => { B.sph(0.55, x, 0.5, z, 0xd9c8a0, 0.9, 6); B.box(0.5, 0.15, 0.3, x, 1.0, z, 0x8a5a2b); });
+    B.box(2.6, 0.9, 1, 2.2, 0, 5.4, WOOD); [0xff7043, 0xffd54f, 0xa5d66b, 0xff7043].forEach((c, k) => B.sph(0.25, 1.4 + k * 0.5, 1.15, 5.4, c, 1, 5));
+    B.box(0.14, 3.4, 0.14, 4.7, 0, 5.8, TIM); B.cyl(0.8, 0.8, 0.14, 12, 4.7, 3.6, 5.8, gold, 0, 1.5708); B.k = 'l'; B.sph(0.3, 4.7, 3.6, 5.95, 0xfff0a0, 1, 5); B.k = 'm';
+    B.box(3.4, 1.6, 0.3, -0.4, 1.0, 3.7, TIM); [0, 1].forEach(r => [0, 1, 2, 3, 4].forEach(k => B.cyl(0.14, 0.14, 0.4, 5, -1.8 + k * 0.7, 1.3 + r * 0.7, 3.95, [0xe74c3c, 0x3498db, 0x2ecc71, 0x9b59b6, 0xf1c40f][(k + r) % 5])));
+  } else if (role === 'market') {
+    B.box(2.8, 0.5, 1.6, -3.4, 0.7, 5.4, WOOD); [-4.3, -2.5].forEach(x => B.cyl(0.5, 0.5, 0.12, 8, x, 0.2, 6.3, TIM, 0, 0, 1.5708)); B.box(0.12, 0.7, 0.12, -5.0, 0.7, 5.4, TIM); [0, 1, 2].forEach(k => B.box(0.7, 0.5, 0.7, -4 + k * 0.9, 1.2, 5.4, [0xb98a4f, 0xe5a13a, 0x6aa84f][k]));
+    B.box(3.6, 2.2, 0.16, 3.2, 0.9, 5.6, TIM); [0, 1, 2, 3].forEach(k => [0, 1].forEach(r => B.box(0.7, 0.55, 0.06, 1.9 + k * 0.85, 1.2 + r * 1.0, 5.72, [0xfff3b0, 0xffd9d9, 0xd9f0ff, 0xe6ffd9][(k + r) % 4])));
+    [-1, 1].forEach(s => { B.cyl(0.08, 0.08, 4.4, 5, s * 5.1, 0, 4.4, TIM); }); for (let k = 0; k < 9; k++) B.cone(0.3, 0.5, 3, -5 + k * 1.25, 4.2 + Math.sin(k / 8 * Math.PI) * -0.5, 4.5, [0xe74c3c, 0xf1c40f, 0x3498db, 0x2ecc71][k % 4], 0);
+  } else if (role === 'deco') {
+    B.box(2.6, 0.6, 1.1, -3.4, 0.2, 5.4, 0xc0584a); B.box(2.6, 0.9, 0.3, -3.4, 0.6, 4.95, 0xc0584a); [-1.4, 1.4].forEach(s => B.box(0.3, 0.8, 1.1, -3.4 + s, 0.2, 5.4, 0xa84a3f));
+    B.box(3.4, 0.05, 2.2, 0, 0.03, 6, 0xd9a05b); B.box(1.4, 0.8, 1.0, 1.4, 0, 6, WOOD); [0.4, 2.4].forEach(x => B.box(0.6, 0.55, 0.6, x, 0, 7.0, 0x8a5a2b));
+    B.cyl(0.05, 0.05, 2.6, 5, 4.2, 0, 5.6, 0x353b46); B.k = 'l'; B.sph(0.4, 4.2, 2.8, 5.6, 0xffe9a0, 1, 6); B.k = 'm'; B.cyl(0.3, 0.2, 0.5, 6, 4.2, 0, 5.6, 0x8a5a2b);
+    [-4.8, 4.9].forEach(x => { B.cyl(0.35, 0.28, 0.6, 7, x, 0, 6.6, 0xb5652f); B.sph(0.5, x, 1.1, 6.6, 0x3a8a3a, 1, 6); });
+    B.box(1.3, 0.1, 0.9, 0, 3.5, 3.7, 0xffffff); B.box(1.3, 2.0, 0.1, 3.6, 1.4, 3.65, 0x8a5a2b); B.k = 'g'; B.box(1.0, 1.7, 0.1, 3.6, 1.5, 3.72, GLASS); B.k = 'm';
+  } else if (role === 'map') {
+    B.box(2.8, 0.9, 1.5, -3.2, 0, 5.3, WOOD); B.box(2.4, 0.05, 1.2, -3.2, 0.95, 5.3, 0xf3e2b8); B.box(0.4, 0.04, 0.4, -3.6, 1.0, 5.3, 0xc0392b);
+    B.cyl(0.12, 0.2, 0.9, 6, 3.4, 0, 5.2, TIM); B.sph(0.6, 3.4, 1.7, 5.2, 0x3a8fd9, 1, 8); B.sph(0.25, 3.7, 1.9, 5.7, 0x6aa84f, 1, 5);
+    for (let k = 0; k < 3; k++) B.cyl(0.14, 0.14, 1.1, 6, 1.4 + k * 0.3, 0.1, 5.6 + k * 0.2, 0xe8d6a8, 0, 0, 1.5708);
+    B.cyl(0.1, 0.1, 3.8, 5, 5, 0, 5.5, TIM); [[3.4, 0.3, 0xe74c3c], [2.8, -0.3, 0x3498db], [2.2, 0.15, 0x2ecc71]].forEach(([y, r, c]) => B.box(1.7, 0.4, 0.1, 5.8, y, 5.5, c, r));
+    B.cyl(1.7, 1.7, 0.04, 14, 0, 0.1, 6.4, gold); B.cyl(0.15, 0.15, 0.06, 6, 0, 0.12, 6.4, 0xc0392b);
+  } else if (role === 'herald') {
+    [-1, 1].forEach(s => { B.cyl(0.1, 0.1, 6.5, 5, s * 5.2, 0, 4.2, TIM); B.box(1.7, 3, 0.1, s * 5.2 + s * 0.9, 3.4, 4.2, s > 0 ? 0xc0392b : 0xf5c542); });
+    B.box(4.2, 2.6, 0.2, -2.2, 0.9, 5.2, TIM); for (let k = 0; k < 6; k++) B.box(0.9, 1.0, 0.05, -3.8 + (k % 3) * 1.4, 1.2 + Math.floor(k / 3) * 1.2, 5.34, [0xfff3b0, 0xffd9d9, 0xd9f0ff][k % 3], k * 0.05);
+    B.cone(0.7, 2.6, 8, 3.4, 3.3, 5.4, gold, 0); B.sph(0.35, 3.4, 3.1, 5.4, gold, 1, 6);
+    B.box(2.4, 1.2, 1.2, 1.6, 0, 5.8, 0xc0392b); B.box(2.6, 0.15, 1.4, 1.6, 1.2, 5.8, gold);
+  }
+}
+// placa de madeira com nome e o que a loja vende (sprite que olha para a camera)
+function signLabel(title, sub, border) {
+  const c = document.createElement('canvas'); c.width = 768; c.height = 190; const g = c.getContext('2d');
+  g.fillStyle = 'rgba(40,24,10,.92)'; g.beginPath(); g.roundRect(6, 8, 756, 174, 30); g.fill(); g.strokeStyle = border || '#f5c542'; g.lineWidth = 8; g.stroke();
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#fff3c4'; g.font = 'bold 66px sans-serif'; g.fillText(title, 384, 76); g.fillStyle = '#ffd89a'; g.font = '40px sans-serif'; g.fillText(sub, 384, 140);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, fog: false, transparent: true })); s.scale.set(9.6, 2.38, 1); return s;
+}
+function tavern(B) {
+  B.box(15, 0.6, 10.4, 0, 0, 0, STONE); B.box(14.4, 4.4, 9.8, 0, 0.6, 0, 0xe9d3a8); B.box(15, 3.6, 10.4, 0, 5, 0, 0xd9bf8e);
+  [-7.4, 7.4].forEach(x => [-5, 5].forEach(z => B.box(0.5, 8, 0.5, x, 0.6, z, TIM))); B.box(15.2, 0.35, 10.6, 0, 4.8, 0, TIM);
+  B.gable(16, 12, 4.6, 0, 8.6, 0, 0x8a3b2a); B.box(1.3, 4.5, 1.3, -4.5, 9.6, -2, DSTONE); B.box(1.3, 4.5, 1.3, 4.5, 9.6, -2, DSTONE);
+  B.box(2.6, 3, 0.25, 0, 0.6, 5.0, 0x5a3b1e); [-4.6, 4.6, -2.6, 2.6].forEach((x, k) => { if (Math.abs(x) > 3) win(B, x, 2.3, 4.95, 1.5, 1.4, 0xc0392b); });
+  [-5.2, -2.2, 2.2, 5.2].forEach(x => win(B, x, 5.9, 5.25, 1.3, 1.4, 0x6a4c93));
+  B.box(0.14, 0.14, 2.2, 0, 7.4, 6.5, 0x333b45); B.box(2.4, 1.5, 0.12, 0, 6.2, 6.5, 0xb98a4f); B.cyl(0.55, 0.55, 0.9, 8, 0, 6.2, 6.62, gold, 0, 1.5708);
+  [[-6.2, 6.4], [-5.2, 6.8], [6.2, 6.4]].forEach(([x, z]) => barrel(B, x, z)); B.box(3.2, 0.2, 1.1, 5.8, 0.9, 7, WOOD); [4.6, 7.0].forEach(x => B.box(0.8, 0.9, 0.8, x, 0, 7, 0x8a5a2b));
+  B.k = 'l'; [-4.6, 4.6].forEach(x => B.box(1.2, 1.0, 0.1, x, 1.8, 5.05, 0xffcf7a)); B.k = 'm';
+}
+function chapel(B) {
+  const S = 0xefeadf; B.box(9, 0.5, 13, 0, 0, 1, STONE); B.box(8, 7.5, 12, 0, 0.5, 1, S); B.gable(13, 9.4, 4.4, 0, 8, 1, 0x9a4a37, 1.5708);
+  B.box(4.6, 15, 4.6, 0, 0.5, 8.2, S); B.pyr(5.6, 5.6, 6.5, 0, 15.5, 8.2, 0x2e5d9a); B.box(0.2, 2.2, 0.2, 0, 21.8, 8.2, gold); B.box(1.2, 0.2, 0.2, 0, 22.8, 8.2, gold);
+  B.k = 'g'; B.box(1.5, 2.8, 0.2, 0, 10.5, 10.55, GLASS); B.box(2.6, 4.2, 0.2, 0, 2.8, 10.55, 0xffd9a8); [-1, 1].forEach(s => [-2.5, 2.5].forEach(z => B.box(0.2, 3.4, 1.1, s * 4.03, 3.4, z + 1, GLASS))); B.k = 'm';
+  B.box(2.6, 3.8, 0.3, 0, 0.5, 10.5, 0x6b4423); B.cyl(1.3, 1.3, 0.3, 10, 0, 4.3, 10.5, 0x6b4423, 0, 1.5708);
+  for (let i = 0; i < 3; i++) B.box(4.4 + i, 0.3, 1.2, 0, i * 0.3, 11.6 + (2 - i) * 1.2, i % 2 ? DSTONE : STONE);
+}
+function clocktower(B) {
+  B.box(6.4, 0.6, 6.4, 0, 0, 0, STONE); B.box(5.4, 14, 5.4, 0, 0.6, 0, 0xd6cdbb); B.box(6.2, 0.6, 6.2, 0, 14.6, 0, DSTONE); B.box(5.6, 5.2, 5.6, 0, 15.2, 0, 0xd6cdbb); B.pyr(7, 7, 6.5, 0, 20.4, 0, 0x2e5d9a);
+  [[0, 2.8, 0], [0, -2.8, 0], [2.8, 0, 1.5708], [-2.8, 0, 1.5708]].forEach(([x, z, r]) => { B.k = 'l'; B.cyl(2, 2, 0.2, 18, x, 17.8, z, 0xfff6d9, r, r ? 0 : 1.5708, r ? 1.5708 : 0); B.k = 'm'; });
+  [-1, 1].forEach(s => B.box(0.18, 1.6, 0.1, 0, 17.8, s * 2.95, 0x23272e)); B.box(1.3, 0.14, 0.1, 0.5, 17.8, 3.0, 0x23272e);
+  B.cyl(0.1, 0.1, 3, 4, 0, 26.9, 0, 0x333333); B.box(1.6, 0.9, 0.1, 0.8, 29, 0, 0xf5c542); B.box(1.6, 2.6, 0.2, 0, 0.6, 2.75, 0x5a3b1e);
+}
+function guild(B) {
+  B.box(18, 0.6, 9, 0, 0, 0, STONE); B.box(17.4, 6, 8.4, 0, 0.6, 0, 0xe2d7c1); B.box(18, 0.5, 9, 0, 6.6, 0, DSTONE);
+  for (let i = 0; i < 8; i++) B.box(1.6, 1.4, 1.2, -7.7 + i * 2.2, 7.1, 4, DSTONE);
+  [-7, 7].forEach(x => { B.cyl(2.2, 2.4, 11, 10, x, 0, 0, 0xcfc6b2); B.cone(3, 4.5, 10, x, 11, 0, 0xc0392b); });
+  B.box(3, 4, 0.3, 0, 0.6, 4.3, 0x5a3b1e); [-4.5, 4.5].forEach(x => win(B, x, 2.8, 4.25, 1.6, 1.8, 0x2e86c1)); [-6, -3, 3, 6].forEach((x, k) => { B.box(1.8, 5, 0.12, x, 1.8, 4.35, [0xc0392b, 0xf5c542, 0x2e86c1, 0x2a9d8f][k]); });
+  B.cyl(0.1, 0.1, 5, 4, 0, 7.1, 0, 0x333333); B.box(2.2, 1.3, 0.1, 1.1, 10.4, 0, 0xf5c542);
+}
+
 function stall(B, x, z, ry, col) {   // barraca: NPC fica na frente (direcao +z local)
   B.frame(x, z, ry);
   B.box(4.4, 1.2, 1.5, 0, 0, 0, WOOD); B.box(4.6, 0.14, 1.8, 0, 1.2, 0.1, TIM);
@@ -330,11 +441,10 @@ export function buildCity() {
     B.frame(0, 0, 0);
     // jardim: sebes, canteiros, estatuas e a Via Real
     for (let s = -1; s <= 1; s += 2) {
-      for (let i = 0; i < 6; i++) { B.box(4, 1.4, 1.2, s * (13 + i * 4.2), 0, -113, 0x2f7d32); B.box(4, 1.4, 1.2, s * (13 + i * 4.2), 0, -145, 0x2f7d32); }
-      for (let i = 0; i < 10; i++) bush(B, s * (14 + i * 2.4), -119 + (i % 2) * 14, FC[i % 5]);
-      statue(B, s * 10, -121, 0, s > 0 ? 0xd9b04a : 0xc0c8d4); lamp(B, s * 7, -111); lamp(B, s * 15, -127); lamp(B, s * 7, -138);
+      for (let i = 0; i < 6; i++) { B.box(4, 1.4, 1.2, s * (26 + i * 4.2), 0, -113, 0x2f7d32); B.box(4, 1.4, 1.2, s * (30 + i * 4.2), 0, -146, 0x2f7d32); }
+      for (let i = 0; i < 6; i++) bush(B, s * (33 + i * 2.4), -119 + (i % 2) * 14, FC[i % 5]);
+      statue(B, s * 10, -121, 0, s > 0 ? 0xd9b04a : 0xc0c8d4); lamp(B, s * 7, -111); lamp(B, s * 12, -127); lamp(B, s * 7, -138);
     }
-    B.frame(-9, -121, 0); B.box(0.2, 2.6, 0.2, -1.1, 0, 0.2, TIM); B.box(0.2, 2.6, 0.2, 1.1, 0, 0.2, TIM); B.box(3.2, 1.7, 0.18, 0, 1.1, 0.3, 0xd9c28a); B.box(0.7, 0.9, 0.05, -0.8, 1.7, 0.42, 0xffffff); B.box(0.7, 0.9, 0.05, 0.6, 1.6, 0.42, 0xffe9a0); B.frame(0, 0, 0);
   }
 
   // ---- Academia das Vocações ----
@@ -355,17 +465,30 @@ export function buildCity() {
   for (let i = 0; i < 6; i++) { const a = i / 6 * 6.283 + 0.4; bench(B, DECO_SQ.x + Math.cos(a) * 8.5, DECO_SQ.z + Math.sin(a) * 8.5, -a + Math.PI / 2); }
 
   // ---- casas e predios (um por terreno) + aneis para tocar ----
-  PLOTS.forEach((p, i) => { B.frame(p.x, p.z, p.ry); if (p.kind === 'house') house(B, i); else apt(B, i); });
+  PLOTS.forEach((p, i) => { B.frame(p.x, p.z, p.ry); if (p.kind === 'house') house(B, i, p); else apt(B, i, p); });
   B.frame(0, 0, 0);
 
   // ---- Mercado Real: barracas, lojas, lanternas e cargas ----
   const stallCols = ['#ff8a65', '#4fc3f7', '#a1887f', '#81c784', '#4db6ac'];
   NPC_DEFS.forEach(d => { if (d.role === 'smith' || d.role === 'armor' || d.role === 'craft' || d.role === 'merchant' || d.role === 'market' || d.role === 'map' || d.role === 'deco' || d.role === 'herald') { const c = new THREE.Color(d.color).getHex(); stall(B, d.pos[0] - Math.sin(d.ry) * 2.4, d.pos[1] - Math.cos(d.ry) * 2.4, d.ry, c); } });
   [[96, -8.3, 0, 0xffb74d], [92, 8.3, Math.PI, 0xe57373], [105, 8.3, Math.PI, 0x4db6ac], [38, 8.3, Math.PI, 0xba68c8], [70, -8.4, 0, 0xffd54f]].forEach(([x, z, ry, c]) => { if (Math.abs(x - 70) < 4 && z > 0) return; stall(B, x, z, ry, c); barrel(B, x + 2.6, z + (z > 0 ? -1 : 1)); crate(B, x - 2.7, z + (z > 0 ? -1.2 : 1.2), 0.3); });
-  for (let i = 0, x = 38; x < 110; x += 11.5, i++) {
-    if (Math.abs(x - 70) < 9 || Math.abs(x - 112) < 9) continue;
-    B.frame(x, -20, Math.PI); shop(B, i); B.frame(x + 0.5, 20, 0); shop(B, i + 3);
-  }
+  // cada comerciante tem a sua loja atras da barraca, com as coisas que vende na frente e uma placa dizendo o que oferece
+  const signs = [];
+  const sign = (x, y, z, t, sb, bd) => { const sp = signLabel(t, sb, bd); sp.position.set(x, y, z); sp.userData.noOutline = true; signs.push(sp); };
+  const PI = Math.PI, ROLE_SHOP = {
+    smith: { x: 42, z: -17.5, ry: 0, ac: 0xff8a65, rf: 0x4a4f5a, t: '🔨 Forja do Gorim', s: 'Armas • Melhorias', y: 18 },
+    armor: { x: 56, z: -17.5, ry: 0, ac: 0x4fc3f7, rf: 0x2e5d9a, t: '🛡️ Armaria da Mara', s: 'Armaduras • Escudos', y: 14.2 },
+    craft: { x: 82, z: -17.5, ry: 0, ac: 0xa1887f, rf: 0x6a4c93, t: '⚒️ Ateliê da Tessa', s: 'Forja de armas • Gemas', y: 16.6 },
+    merchant: { x: 49, z: 17.5, ry: PI, ac: 0x81c784, rf: 0x2a9d8f, t: '💰 Empório da Ilyra', s: 'Amuletos • Compra e venda', y: 14.2 },
+    market: { x: 60, z: 17.5, ry: PI, ac: 0x4db6ac, rf: 0xd9822b, t: '🏪 Bazar do Bento', s: 'Troca entre jogadores', y: 14.2 },
+    map: { x: -10, z: 137, ry: 0, ac: 0xffd54f, rf: 0x8b5a2b, t: '🗺️ Cartografia do Shiro', s: 'Viagem entre as florestas', y: 14.2 },
+    deco: { x: -90, z: 17.5, ry: PI, ac: 0xffb74d, rf: 0xc0392b, t: '🪑 Móveis da Lia', s: 'Decoração para sua casa', y: 14.2 },
+    herald: { x: -18, z: -135, ry: 0, ac: 0xe57373, rf: 0x8e3b2a, t: '📯 Arautos de Aurora', s: 'Rankings • Chefe • Missões', y: 14.2 },
+  };
+  Object.entries(ROLE_SHOP).forEach(([role, o], k) => { B.frame(o.x, o.z, o.ry); shop(B, k, o.ac, o.rf); shopProps(B, role); sign(o.x, o.y, o.z, o.t, o.s); });
+  [[98, -17.5, 0, 0xffb74d, 0x8b5a2b, '🥖 Padaria Doce Pão', 'Pães e bolos quentinhos'], [86, 17.5, PI, 0xba68c8, 0x2e5d9a, '🧪 Alquimia da Vovó', 'Poções e ervas'], [99, 17.5, PI, 0x4fc3f7, 0x2a9d8f, '🎣 Peixaria do Porto', 'Peixe fresquinho']].forEach(([x, z, ry, ac, rf, t, sb], k) => { B.frame(x, z, ry); shop(B, k + 8, ac, rf); sign(x, 14.2, z, t, sb, '#9ad0ff'); });
+  LAND.forEach(l => { B.frame(l.x, l.z, Math.atan2(-l.x, -l.z)); ({ tavern, chapel, clock: clocktower, guild })[l.k](B); sign(l.x, { tavern: 13.8, chapel: 25.5, clock: 32, guild: 14.8 }[l.k], l.z, l.t, l.s, '#c9a7ff'); });
+  signs.forEach(sp => group.add(sp));
   B.frame(0, 0, 0);
   for (let x = 36; x < 112; x += 12) [-1, 1].forEach(s => { if (Math.abs(x - 70) > 4) lamp(B, x, s * 9.8); });
   for (let i = 0; i < 4; i++) { barrel(B, 33.5, -3 + i * 2); crate(B, 33.5, 5 + (i % 2), i); }
@@ -455,7 +578,7 @@ export function buildCity() {
     const near = PLOTS.map(p => [Math.hypot(p.x - px, p.z - pz), p]).filter(a => a[0] < 46).sort((a, b) => a[0] - b[0]).slice(0, tags.length);
     tags.forEach((t, i) => {
       const it = near[i]; if (!it) { t.visible = false; t.pid = null; return; }
-      const p = it[1], tx = plotText(p); t.visible = true; t.position.set(p.x, p.kind === 'house' ? 9.6 : 15.4, p.z);
+      const p = it[1], tx = plotText(p); t.visible = true; t.position.set(p.x, p.top, p.z);
       const key = p.id + tx.txt; if (t.pid !== key) { t.pid = key; t.userData.draw(tx.txt, tx.bd); }
     });
   };
@@ -523,6 +646,7 @@ export function drawCityBase(c, X, Z, k, full) {
   c.beginPath(); c.arc(X(0), Z(0), 6 * k, 0, 7); c.fill();
   c.fillStyle = '#ece5d6'; c.fillRect(X(-23), Z(CASTLE.z - 12), 46 * k, 24 * k);
   c.fillStyle = '#b83a2c'; [-25, 25].forEach(x => { c.beginPath(); c.arc(X(x), Z(CASTLE.z + 5), 5.5 * k, 0, 7); c.fill(); });
+  c.fillStyle = '#d98b5f'; LAND.forEach(l => { c.beginPath(); c.arc(X(l.x), Z(l.z), 5 * k, 0, 7); c.fill(); });
   c.fillStyle = '#b9a6e6'; c.beginPath(); c.arc(X(ACAD.x), Z(ACAD.z), 6 * k, 0, 7); c.fill();
   c.fillStyle = '#e8cf6a'; c.beginPath(); c.arc(X(FARM.x), Z(FARM.z), 5 * k, 0, 7); c.fill();
   c.strokeStyle = '#b7bdc6'; c.lineWidth = Math.max(2, (full ? 6 : 3) * (full ? 1 : 0.7)); c.beginPath(); c.arc(X(0), Z(0), (CITY_R + 1.5) * k, Math.PI / 2 + 0.04, Math.PI / 2 - 0.04 + Math.PI * 2); c.stroke();
