@@ -93,6 +93,14 @@ const CAM_OFFSET = new THREE.Vector3(0, 8.2, 10);
 const _co = new THREE.Vector3(); let zoom = 1, zoomT = 1;
 const setZoom = (f) => { zoomT = Math.min(decor.on ? 7 : inCity ? 4.2 : 2.8, Math.max(0.55, f)); };
 const CAM_DECOR = new THREE.Vector3(0, 13, 5.2);
+// camera imersiva: baixa, atras do heroi, com horizonte (alternativa a visao de cima). Gira com [ ] ou pelos botoes.
+const CAM_LOW = new THREE.Vector3(0, 3.9, 10.5), LOW_LOOK = new THREE.Vector3(0, 2.6, -4);
+let camMode = 'top', camYaw = 0, camYawT = 0;
+try { camMode = localStorage.getItem('cammode') === 'low' ? 'low' : 'top'; } catch (e) {}
+const lowCam = () => camMode === 'low' && !decor.on && !inHome;
+const yawNow = () => (lowCam() ? camYaw : 0);
+const rotY = (v, a) => { const c = Math.cos(a), s = Math.sin(a), x = v.x * c + v.z * s, z = -v.x * s + v.z * c; v.x = x; v.z = z; return v; };
+const camOffset = () => lowCam() ? rotY(_co.copy(CAM_LOW), camYaw) : _co.copy(CAM_OFFSET);
 
 const hemi = new THREE.HemisphereLight(0xffffff, 0x4a7a3a, 0.85); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff2d6, 1.1);
@@ -1418,6 +1426,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { if (invOpen) closeInv(); else if (panelOpen && !picking) closePanel(); else if (decor.on) toggleDecor(false); else if (inHome) leaveHome(); return; }
   if (k === ' ') useSkill(); if (k === 'm') toggleMount();
   if (k === 'e' && nearNpc && !isPaused()) openNpc(nearNpc);
+  if (k === '[') camYawT += 0.4; if (k === ']') camYawT -= 0.4;
   if (k === '+' || k === '=') setZoom(zoomT * 0.85); if (k === '-') setZoom(zoomT * 1.18);
   if (k === '1') switchHero(0); if (k === '2') switchHero(1); if (k === '3') switchHero(2);
 });
@@ -1553,7 +1562,7 @@ function setCityMode(on) {
     if (state.stage === 5 && !state.endless && !bossRef) spawnBoss();
   }
   setZoom(on ? 1.6 : 1); zoom = zoomT;
-  pet.position.copy(player.position); camera.position.copy(player.position).add(_co.copy(CAM_OFFSET).multiplyScalar(zoom));
+  pet.position.copy(player.position); camera.position.copy(player.position).add(camOffset().multiplyScalar(zoom));
   if (on) setBtn('citybtn', '🌲', 'SAIR'); else setBtn('citybtn', '🏰', 'CIDADE'); refreshHud();
 }
 
@@ -1704,7 +1713,7 @@ function openCityMap() {
 
 // ===================== Casas e apartamentos =====================
 const refreshPlots = () => { if (city) city.setOwned(state.homes, owners, myOid); };
-function syncCam() { pet.position.copy(player.position); camera.position.copy(player.position).add(_co.copy(CAM_OFFSET).multiplyScalar(zoom)); }
+function syncCam() { pet.position.copy(player.position); camera.position.copy(player.position).add(camOffset().multiplyScalar(zoom)); }
 
 const RENT = 180, WEEK = 7 * 864e5;
 function homeBonus() { let h = 0, a = 0; Object.keys(state.homes).forEach(id => { const p = PLOTS.find(x => x.id === id); if (p) { if (p.kind === 'house') h++; else a++; } }); return { atk: Math.min(5, h) * 0.03, gold: Math.min(5, a) * 0.02 }; }
@@ -2072,6 +2081,11 @@ function travelTo(i) {
 $('questbtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (isPaused() || dialogOpen) return; openQuests(); });
 $('citybtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (isPaused()) return; if (inHome) leaveHome(); else setCityMode(!inCity); });
 $('mapbtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (!isPaused()) openMap(); });
+const setCamMode = (m) => { camMode = m; try { localStorage.setItem('cammode', m); } catch (e) {} if (m === 'low') setZoom(Math.min(zoomT, 1.3)); else setZoom(Math.max(zoomT, 1)); toast(m === 'low' ? '🎥 Câmera imersiva ([ ] ou ⟲ ⟳ giram)' : '🎥 Câmera de cima'); $('camb').querySelector('small').textContent = m === 'low' ? 'IMERSIVA' : 'DE CIMA'; };
+$('camb').addEventListener('pointerdown', (e) => { e.stopPropagation(); setCamMode(camMode === 'low' ? 'top' : 'low'); });
+$('camb').querySelector('small').textContent = camMode === 'low' ? 'IMERSIVA' : 'DE CIMA';
+$('rotl').addEventListener('pointerdown', (e) => { e.stopPropagation(); camYawT += 0.5; });
+$('rotr').addEventListener('pointerdown', (e) => { e.stopPropagation(); camYawT -= 0.5; });
 $('zoomin').addEventListener('pointerdown', (e) => { e.stopPropagation(); setZoom(zoomT * 0.82); });
 $('zoomout').addEventListener('pointerdown', (e) => { e.stopPropagation(); setZoom(zoomT * 1.22); });
 $('talk').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (nearNpc) openNpc(nearNpc); });
@@ -2202,6 +2216,7 @@ function update(dt) {
     if (Math.hypot(dx, dz) > 0.15) walkGoal = null;
     else { const wx = walkGoal.x - pp0.x, wz = walkGoal.z - pp0.z, wd = Math.hypot(wx, wz); if (wd < 3.2) { const g0 = walkGoal; walkGoal = null; if (g0.plot) openPlotMenu(g0.plot); else if (g0.npc) openNpcMenu(g0.npc); } else { dx = wx / wd; dz = wz / wd; } }
   }
+  { const ya = yawNow(); if (ya && !walkGoal) { const c = Math.cos(ya), s = Math.sin(ya), x = dx * c + dz * s, z = -dx * s + dz * c; dx = x; dz = z; } }
   const m = Math.hypot(dx, dz); if (m > 1) { dx /= m; dz /= m; }
   const p = player.position, bear = T < bearUntil;
   const gyNow = inCity ? 0 : walkY(p.x, p.z), wet = gyNow < -0.35 && !mounted;
@@ -2361,9 +2376,12 @@ function frame() {
   const p = player.position;
   zoom += (zoomT - zoom) * Math.min(1, dt * 8);
   const dcm = decor.on && homeRoom, cx = dcm ? 0 : p.x, cz = dcm ? 1.2 : p.z;
-  camera.position.lerp(new THREE.Vector3(cx, 0, cz).add(_co.copy(dcm ? CAM_DECOR : CAM_OFFSET).multiplyScalar(zoom)), Math.min(1, dt * (dcm ? 9 : 6)));
+  camera.position.lerp(new THREE.Vector3(cx, 0, cz).add((dcm ? _co.copy(CAM_DECOR) : camOffset()).multiplyScalar(zoom)), Math.min(1, dt * (dcm ? 9 : 6)));
   if (shake > 0) { shake -= dt; camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake; }
-  camera.lookAt(cx, dcm ? 0 : 0.8, cz);
+  { const lc = lowCam(); camYaw += (camYawT - camYaw) * Math.min(1, dt * 8);
+    const f = lc ? 62 : 50; if (Math.abs(camera.fov - f) > 0.05) { camera.fov += (f - camera.fov) * Math.min(1, dt * 5); camera.updateProjectionMatrix(); }
+    if (lc) { const l = rotY(_co.copy(LOW_LOOK), camYaw); camera.lookAt(cx + l.x, l.y, cz + l.z); } else camera.lookAt(cx, dcm ? 0 : 0.8, cz);
+    const rb = $('camrot'); if (rb) rb.style.display = lc ? 'flex' : 'none'; }
   farGroup.position.set(p.x, 0, p.z);
   ambient.setVisible(!inCity && !decor.on); if (!inCity) ambient.update(dt, p);
   sun.position.set(p.x + 10, 18, p.z + 7); sun.target.position.copy(p);
@@ -2391,6 +2409,8 @@ if (qs.has('night')) dayT = +qs.get('night') || 0;
 if (qs.has('quests')) setTimeout(() => openQuests(), 1500);
 if (qs.has('dbg')) window.__g = { social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
 if (qs.get('pos')) { const iv = setInterval(() => { if (!gameStarted) return; clearInterval(iv); setTimeout(() => { const [px, pz] = qs.get('pos').split(',').map(Number); if (inCity) setCityMode(false); player.position.set(px || 0, 0, pz || 0); playerGy = walkY(px || 0, pz || 0); }, 600); }, 300); }
+if (qs.get('cam') === 'low') { camMode = 'low'; $('camb').querySelector('small').textContent = 'IMERSIVA'; }
+if (qs.has('yaw')) { camYaw = camYawT = +qs.get('yaw'); }
 if (qs.has('zoom')) { setZoom(+qs.get('zoom')); zoom = zoomT; }
 if (qs.has('fly')) { zoomT = zoom = +qs.get('fly'); }
 if (qs.has('eq')) { setTimeout(() => openInv('eq'), 300); }
@@ -2406,7 +2426,7 @@ if (qs.has('home')) {
 }
 if (qs.has('visit')) setTimeout(() => { setCityMode(true); net && net.send({ t: 'visit', plot: PLOTS[+qs.get('visit') || 0].id }); }, 3500);
 if (qs.get('edge')) { player.position.set(+qs.get('edge') - 0, 0, 0); }
-camera.position.copy(player.position).add(_co.copy(CAM_OFFSET).multiplyScalar(zoom));
+camera.position.copy(player.position).add(camOffset().multiplyScalar(zoom));
 
 (function offlineReward() {
   const mins = Math.min(480, Math.floor((Date.now() - (state.lastSeen || Date.now())) / 60000));

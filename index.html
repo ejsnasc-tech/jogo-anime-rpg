@@ -220,6 +220,7 @@
   .float { position:fixed; z-index:15; pointer-events:none; font-size:24px; transform:translate(-50%,-50%); animation:rise .75s ease-out forwards; text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000; }
   @keyframes rise { to { transform:translate(-50%,-190%); opacity:0; } }
   #toast { position:fixed; top:28%; left:50%; transform:translateX(-50%); z-index:40; font-size:22px; color:#7CFC00; text-align:center; pointer-events:none; width:90%; }
+  .rotb { width:48px; height:48px; border-radius:50%; border:3px solid #fff; background:rgba(30,50,100,.75); color:#fff; font-size:24px; }
 </style>
 </head>
 <body>
@@ -234,7 +235,7 @@
 <div id="leftbtns"><button id="eqbtn">🧍 EQUIP</button><button id="bagbtn">🎒 BAG</button></div>
 <div id="inv"></div>
 <canvas id="minimap" width="208" height="208"></canvas>
-<div id="topbtns"><button id="citybtn"><span class="i">🏰</span><small>CIDADE</small></button><button id="mapbtn"><span class="i">🗺️</span><small>MAPA</small></button><button id="zoomin"><span class="i">🔍</span><small>ZOOM +</small></button><button id="zoomout"><span class="i">🔍</span><small>ZOOM −</small></button><button id="questbtn"><span class="i">📜</span><small>MISSÕES</small></button><button id="emobtn"><span class="i">😀</span><small>EMOTE</small></button><button id="netbtn"><span class="i">🔴</span><small>OFFLINE</small></button><button id="chatbtn"><span class="i">💬</span><small>CHAT</small></button></div>
+<div id="camrot" style="display:none;position:absolute;left:50%;bottom:222px;transform:translateX(-50%);gap:14px;z-index:6"><button id="rotl" class="rotb">⟲</button><button id="rotr" class="rotb">⟳</button></div><div id="topbtns"><button id="citybtn"><span class="i">🏰</span><small>CIDADE</small></button><button id="mapbtn"><span class="i">🗺️</span><small>MAPA</small></button><button id="camb"><span class="i">🎥</span><small>DE CIMA</small></button><button id="zoomin"><span class="i">🔍</span><small>ZOOM +</small></button><button id="zoomout"><span class="i">🔍</span><small>ZOOM −</small></button><button id="questbtn"><span class="i">📜</span><small>MISSÕES</small></button><button id="emobtn"><span class="i">😀</span><small>EMOTE</small></button><button id="netbtn"><span class="i">🔴</span><small>OFFLINE</small></button><button id="chatbtn"><span class="i">💬</span><small>CHAT</small></button></div>
 <button id="talk" class="stroke"></button>
 <div id="chatlog"></div><div id="chatbar"><input id="chatinp" maxlength="120" placeholder="Digite e toque em enviar…" autocomplete="off"><button id="chatsend">➤</button></div>
 <div id="homebar"><button id="decbtn">🛠 DECORAR</button><button id="upbtn">📐 AMPLIAR</button><button id="flbtn">🪜 ANDAR 1/1</button></div>
