@@ -6,6 +6,7 @@ import { clone as skClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { CLASS_MODELS } from './data.js';
 import { makeHeroProcedural } from './models.js';
 import { decorate, addOutline } from './looks.js';
+import { loadVrm, retargetClips, attachProp } from './vrmhero.js';
 
 const BASE = (import.meta.env && import.meta.env.BASE_URL) || './';
 const FILES = {
@@ -17,6 +18,9 @@ const FILES = {
   Skeleton_Mage: 'models/enemies/Skeleton_Mage.glb', Skeleton_Rogue: 'models/enemies/Skeleton_Rogue.glb',
 };
 const loaded = {};
+const VRM_FILES = { VRM_Vivi: 'models/chars/VRM_Vivi.vrm', VRM_Vita: 'models/chars/VRM_Vita.vrm', VRM_Victoria: 'models/chars/VRM_Victoria.vrm' };
+const vrmLoaded = {};
+const VRM_TEST = (typeof location !== 'undefined' && new URLSearchParams(location.search).get('vrm')) || null;   // teste: ?vrm=Vivi
 const HERO_HEIGHT = 2.1;
 
 // tamanho/posição da cabeça (no referencial do osso) para encaixar cabelo, rosto e acessórios
@@ -38,7 +42,8 @@ export const modelsLoaded = () => Object.keys(loaded).length > 0;
 export function preloadModels(onProgress) {
   const loader = new GLTFLoader(), names = Object.keys(FILES); let done = 0;
   const tick = () => { done++; if (onProgress) onProgress(done / names.length); };
-  return Promise.all(names.map(n => new Promise((res) => {
+  const vrmJobs = VRM_TEST ? Object.keys(VRM_FILES).filter(k => k === 'VRM_' + VRM_TEST).map(k => loadVrm(BASE + VRM_FILES[k]).then(r => { vrmLoaded[k] = r; }).catch(e => console.warn('VRM nao carregou', k, e))) : [];
+  return Promise.all([...vrmJobs, ...names.map(n => new Promise((res) => {
     loader.load(BASE + FILES[n], (gltf) => {
       let mat = null;
       gltf.scene.traverse(o => { if (o.isMesh && !mat) mat = o.material; });
@@ -49,7 +54,7 @@ export function preloadModels(onProgress) {
       loaded[n] = { scene: gltf.scene, clips: gltf.animations, mat, img: mat && mat.map ? mat.map.image : null, height: h, head: headInfo(gltf.scene) };
       tick(); res();
     }, undefined, (err) => { console.warn('modelo nao carregou:', n, err); tick(); res(); });
-  })));
+  }))]);
 }
 
 // ---- recolor pela paleta (cada parte do modelo aponta para quadradinhos de cor da textura) ----
@@ -129,7 +134,21 @@ function giveProps(root, cls) {
   });
 }
 // ---- heróis ----
-export function makeHero(def) {
+function makeVrmHero(key, def) {
+  const V = vrmLoaded[key]; V.used = true;
+  const ref = loaded.Knight.scene, g = new THREE.Group(), sv = 2.0 / V.height;
+  g.add(V.vrm.scene); V.vrm.scene.scale.setScalar(sv);
+  if (!V.clips) V.clips = retargetClips(ref, loaded.Knight.clips, V.vrm, V.v0);
+  const by = PROPS[def.cls] || PROPS.warrior, src = Object.keys(by).find(k => loaded[k]);
+  if (src) by[src].forEach(nm => { const n = loaded[src].scene.getObjectByName(nm); if (n) attachProp(loaded[src].scene, V.vrm, V.v0, n, HERO_HEIGHT / loaded[src].height, sv); });
+  g.userData = newUserData(V.clips, ANIM[def.cls] || ANIM.warrior, { vrm: V.vrm });
+  g.userData.mixer = new THREE.AnimationMixer(V.vrm.scene);
+  setLoco(g.userData, 'idle', 1);
+  return g;
+}
+export function makeHero(def, wantVrm) {
+  const vk = VRM_TEST && 'VRM_' + VRM_TEST;
+  if (wantVrm && vk && vrmLoaded[vk] && loaded.Knight) return makeVrmHero(vk, def);
   const wanted = def.model && loaded[def.model] ? def.model : (CLASS_MODELS[def.cls] || CLASS_MODELS.warrior)[0][0];
   const L = loaded[wanted];
   if (!L) return makeHeroProcedural(def);
@@ -206,6 +225,7 @@ export function animateHero(g, dt, o) {
   if (u.orbs) u.orbs.rotation.y += dt * 2.5;
   if (u.halo) u.halo.rotation.z += dt * 2;
   u.mixer.update(dt);
+  if (u.vrm) u.vrm.update(dt);
 }
 
 // which: 'atk' | 'ult' | 'hit' | 'death' | nome de clipe; dur = duração desejada em segundos

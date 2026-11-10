@@ -489,7 +489,7 @@ function setHero() {
   hero = HEROES.find(h => h.id === state.team[activeIdx]) || HEROES[0];
   const pos = player ? player.position.clone() : new THREE.Vector3(0, 0, 0);
   if (player) scene.remove(player);
-  player = makeHero(lookFor(hero)); player.position.copy(pos); scene.add(player); lookSig = lookSignature();
+  player = makeHero(lookFor(hero), true); player.position.copy(pos); scene.add(player); lookSig = lookSignature();
   overload = 0; bearUntil = 0;
   refreshHud(); refreshTeam(); updateSkillLabel(true);
 }
