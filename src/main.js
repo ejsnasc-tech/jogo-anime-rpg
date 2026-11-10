@@ -88,7 +88,7 @@ $('game').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xcfe9ff, 35, 140);
-const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 300);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.25, 300);
 const CAM_OFFSET = new THREE.Vector3(0, 8.2, 10);
 const _co = new THREE.Vector3(); let zoom = 1, zoomT = 1;
 const setZoom = (f) => { zoomT = Math.min(decor.on ? 7 : 2.8, Math.max(0.55, f)); };
@@ -1731,11 +1731,21 @@ function openPlotMenu(p) {
   if (isPaused()) return;
   walkGoal = null;
   const own = state.homes[p.id], o = owners[p.id], other = !own && o && o.oid !== myOid, house = p.kind === 'house', R = ROOMS[p.kind], again = () => openPlotMenu(p);
-  const rows = [{ head: true, text: (house ? '🏠 ' : '🏢 ') + p.name + ' — ' + R.label + '\n' + (own ? 'Este lar é seu! Entre para decorar com móveis.' : other ? 'Morada de ' + o.name + '. Você pode visitar e ver a decoração.' : house ? 'Casa ampla para decorar do seu jeito.' : 'Apartamento aconchegante para morar e decorar.') }];
+  const rows = [{ head: true, text: (house ? '🏠 ' : '🏢 ') + p.name + ' — ' + R.label + '\n' + (own ? 'Este lar é seu! Entre para decorar com móveis.' : other ? 'Morada de ' + o.name + '. ' + ({ open: 'Aberta: você pode entrar e olhar a decoração (sem mexer em nada).', invited: 'Só entra quem foi convidado.', private: 'Casa privada: só o dono entra.' }[o.acc || 'private']) : house ? 'Casa ampla para decorar do seu jeito.' : 'Apartamento aconchegante para morar e decorar.') }];
   if (other && o.name === meName()) rows.push({ head: true, text: '⚠ Esta casa tem o mesmo nome que o seu, mas foi comprada em outro navegador/aparelho, por isso você só pode visitar. Para ter acesso de dono, abra PERFIL → “Entrar com um código de conta” e use o código do navegador onde comprou.' });
   if (own) rows.push({ text: '🚪 Entrar\n' + (own.furn || []).length + ' móvel(is) • sala ' + roomDims(p.kind, own.sz).w + '×' + roomDims(p.kind, own.sz).d + ' m • ' + (own.fls || 1) + ' andar(es)', btn: 'ENTRAR', fn: () => { closePanel(); enterHome(p); } });
   if (own) rows.push({ text: '📐 Ampliar sala / 🏗 Novos andares\nMais espaço para decorar', btn: 'ABRIR', fn: () => openHomeUp(p) });
-  else if (other) rows.push({ text: '👀 Visitar a casa de ' + o.name + '\nVeja os móveis dele', btn: 'VISITAR', enabled: !!(net && net.connected), fn: () => { closePanel(); net.send({ t: 'visit', plot: p.id }); } });
+  if (own) {
+    const acc = own.acc || 'private', LAB = { private: '🔒 Privada — só você entra', invited: '👥 Só convidados — entra quem você convidar', open: '🌐 Aberta — qualquer jogador entra e olha (ninguém mexe em nada)' };
+    const pushAcc = () => { save(state); if (owners[p.id]) owners[p.id].acc = own.acc; if (net) net.send({ t: 'access', plot: p.id, mode: own.acc || 'private', guests: own.guests || [] }); again(); };
+    rows.push({ text: '🔐 Quem pode entrar\n' + LAB[acc], btn: 'MUDAR', fn: () => { own.acc = { private: 'invited', invited: 'open', open: 'private' }[acc]; pushAcc(); } });
+    if (acc === 'invited') {
+      rows.push({ text: '➕ Convidar jogador\nDigite o nome exato dele no jogo', btn: 'CONVIDAR', fn: () => { const n = (prompt('Nome do jogador convidado:') || '').trim().toLowerCase().slice(0, 24); if (!n) return; own.guests = [...new Set([...(own.guests || []), n])].slice(0, 30); pushAcc(); } });
+      (own.guests || []).forEach(g => rows.push({ text: '👤 ' + g + '\nConvidado', btn: 'REMOVER', fn: () => { own.guests = (own.guests || []).filter(x => x !== g); pushAcc(); } }));
+    }
+  }
+  else if (other && (o.acc || 'private') === 'private') rows.push({ text: '🔒 Casa privada\nSó o dono ' + o.name + ' pode entrar', btn: 'TRANCADA', enabled: false, fn: () => {} });
+  else if (other) rows.push({ text: (o.acc === 'invited' ? '🎟 Entrar (só convidados)\nSe o seu nome estiver na lista de ' + o.name : '👀 Visitar a casa de ' + o.name + '\nVeja os móveis dele — só olhar'), btn: 'ENTRAR', enabled: !!(net && net.connected), fn: () => { closePanel(); net.send({ t: 'visit', plot: p.id }); } });
   else rows.push({
     text: (house ? '🛒 Comprar ' : '🔑 Alugar ') + p.name + '\nSala de ' + R.w + '×' + R.d + ' m (dá para ampliar e ter mais andares)', btn: '🪙' + p.price, enabled: state.gold >= p.price,
     fn: () => { state.gold -= p.price; state.homes[p.id] = p.kind === 'apt' ? { furn: [], paid: Date.now() + WEEK } : { furn: [] }; track('house'); save(state); refreshHud(); if (net) net.send({ t: 'buy', plot: p.id }); refreshPlots(); closePanel(); toast(house ? '🏠 Casa comprada!' : '🏢 Apartamento alugado!'); again(); },
@@ -1760,6 +1770,7 @@ function enterHome(p, visit) {
   mk.visible = false; homeRoom.group.add(mk); decor.mark = mk; decor.sel = null;
   (visit ? visit.furn || [] : state.homes[p.id].furn || []).forEach(f => addFurn(f));
   if (city) city.group.visible = false;
+  ground.position.y = -0.9;   // o chão do mundo ficava na mesma altura do piso da sala e piscava (z-fighting)
   setSky(['#2b2140', '#4a3a66', '#7a5f8f']); scene.fog.color.set(0x2b2140); ground.material.color.set(0x241c33);
   clearEnemies(); nearNpc = null; walkGoal = null; $('talk').style.display = 'none';
   player.position.set(0, 0, homeRoom.hd - 1.8); facing = Math.PI;
@@ -1769,7 +1780,7 @@ function enterHome(p, visit) {
 }
 function cleanupHome() {
   if (homeRoom) scene.remove(homeRoom.group);
-  homeRoom = null; inHome = null; homeVisit = null; decor.on = false; decor.sel = null; decor.drag = false; decor.mark = null;
+  ground.position.y = 0; homeRoom = null; inHome = null; homeVisit = null; decor.on = false; decor.sel = null; decor.drag = false; decor.mark = null;
   document.body.classList.remove('inhome'); $('minimap').style.display = ''; $('homebar').style.display = 'none'; $('decor').style.display = 'none';
 }
 function leaveHome() {
@@ -2100,15 +2111,17 @@ function syncHomes() {
   Object.keys(owners).forEach(id => { if (owners[id].oid === myOid && !state.homes[id]) { state.homes[id] = { furn: [] }; recover.add(id); net && net.send({ t: 'visit', plot: id }); } });
   Object.keys(state.homes).forEach(id => {
     const o = owners[id];
+    if (o && o.oid === myOid && net && state.homes[id].acc && state.homes[id].acc !== (o.acc || 'private')) net.send({ t: 'access', plot: id, mode: state.homes[id].acc, guests: state.homes[id].guests || [] });
     if (o && o.oid !== myOid) { delete state.homes[id]; toast('⚠ ' + id + ' já pertence a ' + o.name); }
     else if (!o && net) { net.send({ t: 'buy', plot: id }); net.send({ t: 'furn', plot: id, furn: state.homes[id].furn || [], sz: state.homes[id].sz | 0, fls: state.homes[id].fls || 1 }); }
   });
   save(state); refreshPlots();
 }
 function netEvent(m) {
-  if (m.t === 'plot') { owners[m.id] = { oid: m.oid, name: m.name }; refreshPlots(); }
+  if (m.t === 'plot') { owners[m.id] = { oid: m.oid, name: m.name, acc: m.acc || 'private' }; refreshPlots(); }
+  else if (m.t === 'denied') { toast(m.acc === 'invited' ? '🔒 Esta casa é só para convidados — peça um convite ao dono' : '🔒 Esta casa é privada: só o dono pode entrar'); }
   else if (m.t === 'buyfail') { delete state.homes[m.plot]; refreshPlots(); toast('⚠ Alguém comprou essa casa antes'); }
-  else if (m.t === 'home' && recover.has(m.plot)) { recover.delete(m.plot); if (state.homes[m.plot]) { state.homes[m.plot].furn = m.furn || []; state.homes[m.plot].sz = m.sz | 0; state.homes[m.plot].fls = m.fls || 1; save(state); } toast('🏠 Casa recuperada: ' + m.plot); }
+  else if (m.t === 'home' && recover.has(m.plot)) { recover.delete(m.plot); if (state.homes[m.plot]) { state.homes[m.plot].furn = m.furn || []; state.homes[m.plot].sz = m.sz | 0; state.homes[m.plot].fls = m.fls || 1; if (m.acc) { state.homes[m.plot].acc = m.acc; state.homes[m.plot].guests = m.guests || []; } save(state); } toast('🏠 Casa recuperada: ' + m.plot); }
   else if (m.t === 'home') { const p = PLOTS.find(x => x.id === m.plot); if (p && inCity && !inHome) enterHome(p, { name: m.name, furn: m.furn, sz: m.sz | 0, fls: m.fls || 1 }); }
   else if (m.t === 'hello') {
     myOid = m.oid || ''; Object.keys(owners).forEach(k => delete owners[k]); Object.assign(owners, m.plots || {}); syncHomes(); netId = m.id; remotes.forEach((r, id) => { if (id === netId) dropRemote(id); }); (m.players || []).forEach(addRemote); refreshNet(); }

@@ -38,7 +38,7 @@ export class Arena {
     state.blockConcurrencyWhile(async () => { this.plots = (await state.storage.get('plots')) || {}; });
   }
   savePlots() { return this.state.storage.put('plots', this.plots); }
-  pub() { const o = {}; for (const id in this.plots) o[id] = { oid: this.plots[id].oid, name: this.plots[id].name }; return o; }
+  pub() { const o = {}; for (const id in this.plots) o[id] = { oid: this.plots[id].oid, name: this.plots[id].name, acc: this.plots[id].acc || 'private' }; return o; }
 
   players() { return this.state.getWebSockets().map(ws => ws.deserializeAttachment()).filter(p => p && p.name); }
   pubP(p) { return { id: p.id, name: p.name, look: p.look, x: p.x, z: p.z, f: p.f, w: p.w, mv: p.mv, rm: p.rm || '' }; }
@@ -91,7 +91,12 @@ export class Arena {
       if (!PLOT_RE.test(id) || !me.oid) return;
       const cur = this.plots[id];
       if (cur && cur.oid !== me.oid) { this.send(ws, { t: 'buyfail', plot: id }); return; }
-      if (!cur) { this.plots[id] = { oid: me.oid, name: me.name, furn: [] }; await this.savePlots(); this.broadcast({ t: 'plot', id, oid: me.oid, name: me.name }); }
+      if (!cur) { this.plots[id] = { oid: me.oid, name: me.name, furn: [] }; await this.savePlots(); this.broadcast({ t: 'plot', id, oid: me.oid, name: me.name, acc: 'private' }); }
+    } else if (m.t === 'access') {
+      const id = String(m.plot || ''), pl = this.plots[id];
+      if (!pl || pl.oid !== me.oid || !['private', 'invited', 'open'].includes(m.mode)) return;
+      pl.acc = m.mode; pl.guests = (Array.isArray(m.guests) ? m.guests : []).slice(0, 30).map(g => String(g).trim().toLowerCase().slice(0, 24)).filter(Boolean);
+      await this.savePlots(); this.broadcast({ t: 'plot', id, oid: pl.oid, name: pl.name, acc: pl.acc });
     } else if (m.t === 'furn') {
       const id = String(m.plot || ''), pl = this.plots[id];
       if (!pl || pl.oid !== me.oid || !Array.isArray(m.furn)) return;
@@ -103,7 +108,11 @@ export class Arena {
       if (pl && pl.oid === me.oid) { delete this.plots[id]; await this.savePlots(); this.broadcast({ t: 'plot', id, oid: '', name: '' }); this.send(ws, { t: 'plot', id, oid: '', name: '' }); }
     } else if (m.t === 'visit') {
       const pl = this.plots[String(m.plot || '')];
-      if (pl) this.send(ws, { t: 'home', plot: String(m.plot), name: pl.name, furn: pl.furn || [], sz: pl.sz | 0, fls: pl.fls || 1 });
+      if (!pl) return;
+      const mine = pl.oid === me.oid, acc = pl.acc || 'private';
+      const ok = mine || acc === 'open' || (acc === 'invited' && (pl.guests || []).includes(String(me.name || '').trim().toLowerCase()));
+      if (!ok) { this.send(ws, { t: 'denied', plot: String(m.plot), acc }); return; }
+      this.send(ws, { t: 'home', plot: String(m.plot), name: pl.name, furn: pl.furn || [], sz: pl.sz | 0, fls: pl.fls || 1, acc: mine ? acc : undefined, guests: mine ? pl.guests || [] : undefined });
     } else if (m.t === 'chat') {
       const now = Date.now(); if (now - (me.t || 0) < 900) return; me.t = now; ws.serializeAttachment(me);
       const text = clean(m.text, 120); if (text) this.broadcast({ t: 'chat', id: me.id, name: me.name, text });
