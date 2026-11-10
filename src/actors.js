@@ -6,7 +6,7 @@ import { clone as skClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { CLASS_MODELS } from './data.js';
 import { makeHeroProcedural } from './models.js';
 import { decorate, addOutline } from './looks.js';
-import { parseVrm, retargetClips, attachProp } from './vrmhero.js';
+import { parseVrm, retargetClips, attachProp, recolorVrm } from './vrmhero.js';
 
 const BASE = (import.meta.env && import.meta.env.BASE_URL) || './';
 const FILES = {
@@ -137,6 +137,7 @@ function makeVrmHero(key, def) {
   g.userData = newUserData([], ANIM[def.cls] || ANIM.warrior, { pending: true });
   const ref = loaded.Knight.scene, file = BASE + 'models/chars/' + key + '.vrm';
   parseVrm(file, BASE).then((V) => {
+    try { recolorVrm(V.vrm, def, key); } catch (e) { console.warn('recolor falhou', e); }
     const sv = 2.0 / V.height; g.add(V.vrm.scene); V.vrm.scene.scale.setScalar(sv); V.vrm.scene.position.y = -V.minY * sv;
     if (!vrmInfo[key]) vrmInfo[key] = retargetClips(ref, loaded.Knight.clips, V.vrm, V.v0);
     const u = g.userData; u.clips = vrmInfo[key]; u.vrm = V.vrm; u.mixer = new THREE.AnimationMixer(V.vrm.scene);

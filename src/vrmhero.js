@@ -67,3 +67,74 @@ export function attachProp(ref, vrm, v0, node, scaleK, scaleV) {
   c.traverse(o => { o.visible = true; if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
   hand.add(c);
 }
+
+// ---- cores: cabelo, olhos, roupa e pele mudam trocando as texturas (cache por modelo+material+cor) ----
+const tcache = new Map();
+const lum = (d, i) => 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+function processTex(src, key, fn) {
+  if (!src || !src.image) return { tex: src, info: null };
+  if (tcache.has(key)) return tcache.get(key);
+  const im = src.image, c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
+  const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(im, 0, 0);
+  const id = x.getImageData(0, 0, c.width, c.height), info = fn(id.data); x.putImageData(id, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.flipY = src.flipY; t.colorSpace = src.colorSpace; t.wrapS = src.wrapS; t.wrapT = src.wrapT; t.anisotropy = 4;
+  const r = { tex: t, info }; tcache.set(key, r); return r;
+}
+const rgbOf = (hex) => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255];
+function tintFn(hex, ref) {   // pinta com a cor mantendo luz/sombra do desenho (cabelo, olhos)
+  const rgb = rgbOf(hex);
+  return (d) => {
+    let s = 0, n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 8) { s += lum(d, i); n++; }
+    const mean = (s / Math.max(1, n)) || 1, m = ref || mean;
+    for (let i = 0; i < d.length; i += 4) { const f = lum(d, i) / m; d[i] = Math.min(255, rgb[0] * f); d[i + 1] = Math.min(255, rgb[1] * f); d[i + 2] = Math.min(255, rgb[2] * f); }
+    return mean;
+  };
+}
+function hueFn(deg) {         // roupa: cores vivas giram o matiz; cinza/branco/preto ganham o tom escolhido
+  const hue2 = (p, q, t) => { if (t < 0) t += 1; if (t > 1) t -= 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+  return (d) => {
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, dl = mx - mn;
+      let h = 0, s = 0;
+      if (dl > 0.0001) { s = l > 0.5 ? dl / (2 - mx - mn) : dl / (mx + mn); h = mx === r ? ((g - b) / dl + (g < b ? 6 : 0)) : mx === g ? (b - r) / dl + 2 : (r - g) / dl + 4; h /= 6; }
+      if (s > 0.22) h = (h + deg / 360) % 1; else { h = deg / 360; s = 0.55 * (1 - Math.pow(Math.abs(2 * l - 1), 4)); }
+      if (s === 0) continue;
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+      d[i] = hue2(p, q, h + 1 / 3) * 255; d[i + 1] = hue2(p, q, h) * 255; d[i + 2] = hue2(p, q, h - 1 / 3) * 255;
+    }
+    return 1;
+  };
+}
+function skinFn(hex, ref) {   // leva a cor media da pele para o tom escolhido
+  const t = rgbOf(hex);
+  return (d) => {
+    let f = ref;
+    if (!f) { let r = 0, g = 0, b = 0, n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 8) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; } n = Math.max(1, n); f = [t[0] / (r / n || 1), t[1] / (g / n || 1), t[2] / (b / n || 1)]; }
+    for (let i = 0; i < d.length; i += 4) { d[i] = Math.min(255, d[i] * f[0]); d[i + 1] = Math.min(255, d[i + 1] * f[1]); d[i + 2] = Math.min(255, d[i + 2] * f[2]); }
+    return f;
+  };
+}
+// def: vHair/vEye/vSkin = cor 0xRRGGBB, vCloth = giro de matiz em graus (null = original)
+export function recolorVrm(vrm, def, key) {
+  if (def.vHair == null && def.vCloth == null && def.vSkin == null && def.vEye == null) return;
+  vrm.scene.traverse((o) => {
+    if (!o.isMesh) return;
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => {
+      if (!m || m.userData._rc) return;
+      const nm = m.name || ''; let mode = null, val = null;
+      if (/_HAIR/i.test(nm) || nm === 'hair') { mode = 'hair'; val = def.vHair; }
+      else if (/_CLOTH/.test(nm)) { mode = 'cloth'; val = def.vCloth; }
+      else if (/_SKIN/.test(nm)) { mode = 'skin'; val = def.vSkin; }
+      else if (/EyeIris/.test(nm)) { mode = 'eye'; val = def.vEye; }
+      if (!mode || val == null) return;
+      m.userData._rc = true; let info = null;
+      ['map', 'shadeMultiplyTexture'].forEach((slot) => {
+        if (!m[slot]) return;
+        const fn = mode === 'cloth' ? hueFn(val) : mode === 'skin' ? skinFn(val, slot === 'map' ? null : info) : tintFn(val, slot === 'map' ? null : info);
+        const r = processTex(m[slot], [key, nm, slot, mode, val].join('|'), fn);
+        if (slot === 'map') info = r.info; m[slot] = r.tex;
+      });
+      m.needsUpdate = true;
+    });
+  });
+}

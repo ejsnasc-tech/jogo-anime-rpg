@@ -69,18 +69,29 @@ export const PREMADE = [
   { name: 'Orin Estelar', model: 'Mage', hat: true,     cls: 'mage',     realm: 'arcana',   skin: 1, hairStyle: 'long',     hair: 5, eye: 1, face: 'calm',   outfit: 3, cape: 4, bio: 'Mago sereno que lê as estrelas como livros.' },
   { name: 'Vexa Ruína', body: 'f', model: 'Mage', hat: false,       cls: 'sorcerer', realm: 'sombras',  skin: 0, hairStyle: 'mohawk',   hair: 7, eye: 5, face: 'fierce', outfit: 6, cape: 9, bio: 'Feiticeira de poder instável e sorriso perigoso.' },
   { name: 'Bram Raiz-Velha', model: 'Mage', hat: false,  cls: 'druid',    realm: 'primeva',  skin: 4, hairStyle: 'long',     hair: 1, eye: 3, face: 'smile',  outfit: 5, cape: 2, bio: 'Druida gentil que fala com árvores e animais.' },
-  { name: 'Mara Vento-Sul', body: 'f', model: 'Barbarian', hat: false,   cls: 'warrior',  realm: 'mares',    skin: 3, hairStyle: 'ponytail', hair: 4, eye: 0, face: 'smile',  outfit: 0, cape: 1, bio: 'Capitã de navio que luta com a mesma alegria com que navega.' },
-  // heróis anime (modelos VRoid VRM, CC0): visual de anime de verdade; cor/penteado não mudam
-  { name: 'Vivi Campo-Verde', body: 'f', model: 'VRM_Vivi', cls: 'archer', realm: 'primeva', skin: 0, hair: 2, eye: 3, face: 'smile', outfit: 4, cape: 2, bio: 'Arqueira de vila, doce e cheia de coragem.' },
-  { name: 'Vita Cristalina', body: 'f', model: 'VRM_Vita', cls: 'sorcerer', realm: 'arcana', skin: 0, hair: 5, eye: 1, face: 'calm', outfit: 3, cape: 6, bio: 'Feiticeira de cabelo prateado e magia de cristal.' },
-  { name: 'Victoria Aurora', body: 'f', model: 'VRM_Victoria', cls: 'paladin', realm: 'planalto', skin: 0, hair: 3, eye: 2, face: 'smile', outfit: 0, cape: 9, bio: 'Princesa guerreira que protege o reino com luz.' },
-  { name: 'Shino Véu-Negro', body: 'f', model: 'VRM_Shino', cls: 'assassin', realm: 'sombras', skin: 0, hair: 0, eye: 4, face: 'cool', outfit: 1, cape: 4, bio: 'Assassina silenciosa das sombras.' },
-  { name: 'Shibu Lâmina-Clara', body: 'f', model: 'VRM_Shibu', cls: 'warrior', realm: 'planalto', skin: 0, hair: 1, eye: 3, face: 'fierce', outfit: 2, cape: 0, bio: 'Espadachim de honra e vontade de ferro.' },
-  { name: 'Darkness Noturna', body: 'f', model: 'VRM_Darkness', cls: 'mage', realm: 'arcana', skin: 0, hair: 7, eye: 5, face: 'calm', outfit: 6, cape: 4, bio: 'Maga da noite, de olhar frio e feitiços roxos.' },
-  { name: 'Haruto Capuz', model: 'VRM_Haruto', cls: 'warrior', realm: 'mares', skin: 0, hair: 0, eye: 1, face: 'smile', outfit: 0, cape: 1, bio: 'Jovem guerreiro de moletom; leal e sem medo.' },
-  { name: 'Fumiriya Sakura', model: 'VRM_Fumiriya', cls: 'mage', realm: 'arcana', skin: 0, hair: 0, eye: 1, face: 'calm', outfit: 3, cape: 1, bio: 'Mago estudioso que fala pouco e acerta muito.' },
-  { name: 'Seed Folha-Nova', model: 'VRM_Seed', cls: 'druid', realm: 'primeva', skin: 0, hair: 0, eye: 2, face: 'smile', outfit: 4, cape: 2, bio: 'Druida jovem, de passos leves e olhar curioso.' }
+  { name: 'Mara Vento-Sul', body: 'f', model: 'Barbarian', hat: false,   cls: 'warrior',  realm: 'mares',    skin: 3, hairStyle: 'ponytail', hair: 4, eye: 0, face: 'smile',  outfit: 0, cape: 1, bio: 'Capitã de navio que luta com a mesma alegria com que navega.' }
 ];
+
+// ---- heróis anime (modelos VRoid VRM): 30 de cada sexo = modelo base + cores (cabelo, olhos, roupa, pele) ----
+export const VRM_BASES = { f: ['VRM_Vivi', 'VRM_Vita', 'VRM_Victoria', 'VRM_Shino', 'VRM_Shibu', 'VRM_Darkness', 'VRM_SampA', 'VRM_SampB', 'VRM_HairF'], m: ['VRM_Haruto', 'VRM_Fumiriya', 'VRM_Seed', 'VRM_SampC'] };
+const VRM_VARIANTS = [{}, { vh: 6, vc: 200, ve: 1 }, { vh: 4, vc: 30, vs: 1, ve: 4 }, { vh: 9, vc: 300, ve: 5 }, { vh: 3, vc: 90, vs: 2, ve: 2 }, { vh: 8, vc: 150, vs: 3, ve: 3 }, { vh: 7, vc: 260, vs: 1, ve: 6 }, { vh: 5, vc: 330, vs: 4, ve: 1 }];
+const VRM_NAMES = {
+  f: ['Vivi Campo-Verde', 'Vita Cristalina', 'Victoria Aurora', 'Shino Véu-Negro', 'Shibu Lâmina-Clara', 'Darkness Noturna', 'Aiko Brisa-Suave', 'Hana Pétala', 'Yuki Neve-Clara', 'Mei Lua-Nova', 'Rin Chama-Azul', 'Sakura Aurora', 'Akari Luz-do-Dia', 'Miyu Estrela', 'Nami Maré-Alta', 'Luna Prateada', 'Kaede Folha-Rubra', 'Himari Sol-Nascente', 'Saki Espinho', 'Emi Cantora', 'Nana Raio-Verde', 'Ayame Íris', 'Tsukiko Eclipse', 'Reiko Trovão', 'Misaki Cometa', 'Chiyo Sino-Dourado', 'Mio Coral', 'Haruka Horizonte', 'Natsu Verão', 'Suzu Sininho'],
+  m: ['Haruto Capuz', 'Fumiriya Sakura', 'Seed Folha-Nova', 'Kenji Aço-Frio', 'Ryu Dragão-Branco', 'Akio Vento-Norte', 'Daichi Pedra-Firme', 'Hiro Faísca', 'Takumi Mestre-Forja', 'Ren Lâmina-Rubra', 'Sora Céu-Aberto', 'Yuto Sombra-Leve', 'Kaito Mar-Bravo', 'Itsuki Raiz-Velha', 'Naoki Chama-Viva', 'Shun Relâmpago', 'Riku Terra-Dourada', 'Tatsu Tempestade', 'Kazuki Lua-Cheia', 'Minato Porto-Seguro', 'Haku Neve-Eterna', 'Jiro Corvo', 'Ryota Falcão', 'Eiji Guardião', 'Satoru Sábio', 'Tsubasa Asa-Negra', 'Yamato Honra', 'Isamu Bravura', 'Kouki Esperança', 'Daisuke Andarilho'],
+};
+const VRM_CLS = { f: ['archer', 'sorcerer', 'paladin', 'assassin', 'warrior', 'mage', 'druid'], m: ['warrior', 'mage', 'druid', 'paladin', 'assassin', 'archer', 'sorcerer'] };
+const VRM_REALMS = ['primeva', 'arcana', 'planalto', 'sombras', 'mares'];
+const VRM_BIOS = ['Cheio de coragem e sempre pronto para a aventura.', 'Calmo por fora, determinado por dentro.', 'Treinou a vida toda para proteger o reino.', 'Viajante curioso que procura histórias novas.', 'Fala pouco, mas nunca abandona um amigo.', 'Sonha em ficar famoso em todos os reinos.'];
+export const VRM_ROSTER = [];
+['f', 'm'].forEach((sx) => {
+  const bases = VRM_BASES[sx];
+  for (let i = 0; i < 30; i++) {
+    const v = VRM_VARIANTS[Math.floor(i / bases.length)] || {};
+    VRM_ROSTER.push({ name: VRM_NAMES[sx][i], body: sx, model: bases[i % bases.length], cls: VRM_CLS[sx][i % 7], realm: VRM_REALMS[i % 5], vh: v.vh, vc: v.vc, vs: v.vs, ve: v.ve, bio: VRM_BIOS[i % VRM_BIOS.length] });
+  }
+});
+PREMADE.push(...VRM_ROSTER);
+
 
 // Converte as escolhas do criador em um herói jogável
 export function buildPlayerHero(c) {
@@ -93,6 +104,7 @@ export function buildPlayerHero(c) {
     skin: SKINS[c.skin % SKINS.length], hairColor: HAIR_COLORS[c.hair % HAIR_COLORS.length],
     body: c.body === 'f' ? 'f' : 'm', build: c.build || 'normal', height: c.height || 'mid', hairStyle: c.hairStyle || 'short', outfitStyle: c.outfitStyle || 'auto', face: c.face || 'calm', acc: c.acc || 'none',
     eyeColor: EYE_COLORS[(c.eye != null ? c.eye : 1) % EYE_COLORS.length],
+    vHair: c.vh != null ? HAIR_COLORS[c.vh % HAIR_COLORS.length] : null, vEye: c.ve != null ? EYE_COLORS[c.ve % EYE_COLORS.length] : null, vSkin: c.vs ? SKINS[c.vs % SKINS.length] : null, vCloth: c.vc != null ? c.vc : null,
     atk: b.atk, rate: b.rate, range: b.range, cost: 0, bio: c.bio || 'O Guardião da Pena.',
   };
 }
