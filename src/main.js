@@ -8,7 +8,7 @@ import { initCraft } from './craft.js';
 import { initShop } from './shop.js';
 import { itemGemSum, SLOTS, SLOT_ORDER, EQUIP_KEYS, KINDS, WEAPON_KIND, OFF_KIND, RAR, MATS, FOREST_LV, MAX_PLUS, newItem, itemValue, itemStat, itemIcon, itemFmt, statFmt, itemName, itemLine, sellPrice, buyPrice, upgradeCost, rollDrop, migrateItems } from './items.js';
 import { itemArt, ghostArt } from './itemart.js';
-import { buildCity, CITY_R, CITY_SPAWN, PLOTS } from './city.js';
+import { buildCity, CITY_R, CITY_SPAWN, PLOTS, DISTRICTS, drawCityBase } from './city.js';
 import { createNet, nameTag, NET_URL } from './net.js';
 import { makeBiome, groundTex, BIOME_INFO } from './biomes.js';
 import { EXTRA_PETS } from './pets.js';
@@ -88,10 +88,10 @@ $('game').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xcfe9ff, 35, 140);
-const camera = new THREE.PerspectiveCamera(50, 1, 0.25, 300);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.25, 420);
 const CAM_OFFSET = new THREE.Vector3(0, 8.2, 10);
 const _co = new THREE.Vector3(); let zoom = 1, zoomT = 1;
-const setZoom = (f) => { zoomT = Math.min(decor.on ? 7 : 2.8, Math.max(0.55, f)); };
+const setZoom = (f) => { zoomT = Math.min(decor.on ? 7 : inCity ? 4.2 : 2.8, Math.max(0.55, f)); };
 const CAM_DECOR = new THREE.Vector3(0, 13, 5.2);
 
 const hemi = new THREE.HemisphereLight(0xffffff, 0x4a7a3a, 0.85); scene.add(hemi);
@@ -1543,10 +1543,10 @@ function setCityMode(on) {
   if (on && wb) endWB();
   if (on && dg) { dg = null; toast('🏰 Você saiu da masmorra'); }
   if (on && !inCity) track('city');
-  inCity = on; fieldGroup.visible = !on; ground.visible = on; terrain.visible = !on; if (city) city.group.visible = on;
+  curDistrict = ''; inCity = on; fieldGroup.visible = !on; ground.visible = on; terrain.visible = !on; if (city) city.group.visible = on;
   clearEnemies(); nearNpc = null; walkGoal = null; $('talk').style.display = 'none';
   if (on) {
-    setSky(['#6ec6ff', '#bfe6ff', '#fff1d6']); scene.fog.color.set(0xdff0ff); ground.material.map = grassMap; ground.material.needsUpdate = true; ground.material.color.set(0xb5d99c); hemi.groundColor.set(0x4a7a3a); scene.fog.near = 35; biomeFar = 140;
+    setSky(['#6ec6ff', '#bfe6ff', '#fff1d6']); scene.fog.color.set(0xdff0ff); ground.material.map = grassMap; ground.material.needsUpdate = true; ground.material.color.set(0xb5d99c); hemi.groundColor.set(0x4a7a3a); scene.fog.near = 70; biomeFar = 270;
     player.position.set(CITY_SPAWN[0], 0, CITY_SPAWN[1]);
   } else {
     applyAct(); player.position.set(0, 0, 0);
@@ -1645,6 +1645,7 @@ function openFurnShop(n, keep) {
   if (keep) $('card').scrollTop = st;
 }
 
+let curDistrict = '';
 function walkTo(n) { walkGoal = { x: n.pos[0], z: n.pos[1], npc: n }; toast('🚶 Indo falar com ' + n.title.split(',')[0] + '…'); }
 function handleTap(x, y) {
   if (!inCity || !city || inHome || isPaused()) return;
@@ -1664,19 +1665,15 @@ function drawMap(cvs, full) {
   c.fillStyle = inCity ? '#79b85f' : '#2f5d2a'; c.fillRect(0, 0, S, S);
   let px = h, pz = h;
   if (inCity) {
-    const k = (h - 8) / (CITY_R + 3), X = (x) => h + x * k, Z = (z) => h + z * k;
+    const ox = full ? 0 : p.x, oz = full ? 0 : p.z, k = (h - 8) / (full ? CITY_R + 3 : 62), X = (x) => h + (x - ox) * k, Z = (z) => h + (z - oz) * k;
     px = X(p.x); pz = Z(p.z);
-    c.fillStyle = '#cbbfa8'; c.beginPath(); c.arc(X(0), Z(0), 17.5 * k, 0, 7); c.fill();
-    c.fillStyle = '#c9b48a'; c.fillRect(X(-3.2), Z(17), 6.4 * k, (CITY_R + 1 - 17) * k);
-    c.fillStyle = '#ece5d6'; c.fillRect(X(-9), Z(-29), 18 * k, 7 * k);
+    drawCityBase(c, X, Z, k, full);
     PLOTS.forEach(p => { c.save(); c.translate(X(p.x), Z(p.z)); c.rotate(-p.ry); c.fillStyle = state.homes[p.id] ? '#66e08a' : p.kind === 'house' ? '#d9c2a0' : '#b9a6c9'; c.fillRect(-p.w / 2 * k, -p.d / 2 * k, p.w * k, p.d * k); c.restore(); });
-    c.fillStyle = '#4fc3f7'; c.beginPath(); c.arc(X(0), Z(0), 3 * k, 0, 7); c.fill();
-    c.strokeStyle = '#b7bdc6'; c.lineWidth = full ? 6 : 3; c.beginPath(); c.arc(h, h, (CITY_R + 1.5) * k, Math.PI / 2 + 0.14, Math.PI / 2 - 0.14 + Math.PI * 2); c.stroke();
     c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = (full ? 22 : 11) + 'px sans-serif'; c.fillStyle = '#fff';
-    c.fillText('🚪', X(0), Z(CITY_R + 1));
+    c.fillText('🚪', X(0), Z(CITY_R - 3));
     city.npcs.forEach(n => {
-      c.fillStyle = n.color; c.beginPath(); c.arc(X(n.pos[0]), Z(n.pos[1]), full ? 17 : 8.5, 0, 7); c.fill();
-      c.font = (full ? 22 : 12) + 'px sans-serif'; c.fillStyle = '#000'; c.fillText(n.icon, X(n.pos[0]), Z(n.pos[1]) + 1);
+      c.fillStyle = n.color; c.beginPath(); c.arc(X(n.pos[0]), Z(n.pos[1]), full ? 9 : 7, 0, 7); c.fill();
+      c.font = (full ? 13 : 10) + 'px sans-serif'; c.fillStyle = '#000'; c.fillText(n.icon, X(n.pos[0]), Z(n.pos[1]) + 1);
     });
   } else {
     const k = (h - 8) / 32, X = (x) => h + (x - p.x) * k, Z = (z) => h + (z - p.z) * k;
@@ -1696,6 +1693,7 @@ function openCityMap() {
   const rows = [{ head: true, text: 'Toque em IR para o personagem caminhar até o morador. Você também pode tocar direto no NPC na cidade.' }];
   city.npcs.forEach(n => rows.push({ text: n.icon + ' ' + n.title + '\n' + ROLE_DESC[n.role], btn: 'IR', fn: () => { closePanel(); walkTo(n); } }));
   PLOTS.filter(p => state.homes[p.id]).forEach(p => rows.push({ text: '🏠 ' + p.name + '\nSeu lar', btn: 'IR', fn: () => { closePanel(); walkGoal = { x: p.door[0], z: p.door[1], plot: p }; } }));
+  DISTRICTS.forEach(d => rows.push({ text: d.icon + ' ' + d.name, btn: 'IR', fn: () => { closePanel(); walkGoal = { x: d.x, z: d.z, spot: true }; toast('🚶 Indo para ' + d.name + '…'); } }));
   rows.push({ text: '🏘️ Casas e prédios\nToque numa casa (🏠 à venda) ou prédio (🏢 aluguel) no mapa 3D para comprar e entrar.' });
   rows.push({ text: '🚪 Portão da cidade\nSair para a floresta', btn: 'SAIR', fn: () => { closePanel(); setCityMode(false); } });
   openPanel('🏰 MAPA DA CIDADE', rows);
@@ -2202,7 +2200,7 @@ function update(dt) {
   if (walkGoal) {
     const pp0 = player.position;
     if (Math.hypot(dx, dz) > 0.15) walkGoal = null;
-    else { const wx = walkGoal.x - pp0.x, wz = walkGoal.z - pp0.z, wd = Math.hypot(wx, wz); if (wd < 3.2) { const g0 = walkGoal; walkGoal = null; if (g0.plot) openPlotMenu(g0.plot); else openNpcMenu(g0.npc); } else { dx = wx / wd; dz = wz / wd; } }
+    else { const wx = walkGoal.x - pp0.x, wz = walkGoal.z - pp0.z, wd = Math.hypot(wx, wz); if (wd < 3.2) { const g0 = walkGoal; walkGoal = null; if (g0.plot) openPlotMenu(g0.plot); else if (g0.npc) openNpcMenu(g0.npc); } else { dx = wx / wd; dz = wz / wd; } }
   }
   const m = Math.hypot(dx, dz); if (m > 1) { dx /= m; dz /= m; }
   const p = player.position, bear = T < bearUntil;
@@ -2215,7 +2213,7 @@ function update(dt) {
     p.x = THREE.MathUtils.clamp(p.x, -homeRoom.hw + 0.7, homeRoom.hw - 0.7); p.z = THREE.MathUtils.clamp(p.z, -homeRoom.hd + 0.8, zmax);
     if (p.z > homeRoom.hd + 0.35) { leaveHome(); return; }
   } else if (inCity) {
-    const gate = Math.abs(p.x) < 3.2 && p.z > 0, r = Math.hypot(p.x, p.z), lim = CITY_R - 1.2;
+    const gate = Math.abs(p.x) < 5.2 && p.z > 0, r = Math.hypot(p.x, p.z), lim = CITY_R - 1.2;
     if (!gate && r > lim) { p.x *= lim / r; p.z *= lim / r; }
     if (p.z > CITY_R + 0.5) { setCityMode(false); return; }
   }
@@ -2239,6 +2237,7 @@ function update(dt) {
 
   if (inCity && city && !inHome) {
     nearNpc = city.update(dt, p);
+    { const dd = city.districtAt(p.x, p.z), id = dd ? dd.id : ''; if (id !== curDistrict) { curDistrict = id; if (dd) toast(dd.icon + ' ' + dd.name); } }
     const tb = $('talk');
     if (nearNpc) { tb.style.display = 'block'; const t = '💬 ' + nearNpc.icon + ' ' + nearNpc.title.split(',')[0]; if (tb.textContent !== t) tb.textContent = t; } else tb.style.display = 'none';
   }
@@ -2387,11 +2386,13 @@ setPet(); renderSkillChips();
 if (qs.get('skills')) { qs.get('skills').split(',').forEach(x => { const [k, v] = x.split(':'); state.skills[k] = +v || 1; }); renderSkillChips(); }
 if (qs.has('levelup')) state.skillPts = 1;
 if (qs.has('city')) setCityMode(true);
+if (qs.has('at')) { const [ax, az] = qs.get('at').split(',').map(Number); if (!qs.has('city')) setCityMode(true); player.position.set(ax, 0, az); syncCam(); }
 if (qs.has('night')) dayT = +qs.get('night') || 0;
 if (qs.has('quests')) setTimeout(() => openQuests(), 1500);
 if (qs.has('dbg')) window.__g = { social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
 if (qs.get('pos')) { const iv = setInterval(() => { if (!gameStarted) return; clearInterval(iv); setTimeout(() => { const [px, pz] = qs.get('pos').split(',').map(Number); if (inCity) setCityMode(false); player.position.set(px || 0, 0, pz || 0); playerGy = walkY(px || 0, pz || 0); }, 600); }, 300); }
 if (qs.has('zoom')) { setZoom(+qs.get('zoom')); zoom = zoomT; }
+if (qs.has('fly')) { zoomT = zoom = +qs.get('fly'); }
 if (qs.has('eq')) { setTimeout(() => openInv('eq'), 300); }
 if (qs.has('bag')) { setTimeout(() => { openInv('bag'); const x = state.items.find(i => !isEquipped(i)); invSel = x && x.uid; renderInv(); }, 300); }
 if (qs.has('citymap')) { setTimeout(() => openCityMap(), 300); }
@@ -2525,7 +2526,7 @@ function runSelfTest() {
       for (let k = 0; k < 3; k++) if (!doUpgrade(it)) throw new Error('upgrade falhou');
       if (itemValue(it) <= 0) throw new Error('valor');
     }
-    for (const md of ['upgrade', 'buy', 'sell']) { openGear('t', SLOT_ORDER, md, null); closePanel(); } openProfile(); closePanel(); openInv('eq'); renderInv(); invSel = state.items[0].uid; renderInv(); bagFilter = 'helm'; renderInv(); invMode = 'bag'; renderInv(); invMode = 'eq'; bagFilter = 'all'; const spare = newItem('helm', 0, 0); state.items.push(spare); invSel = spare.uid; renderInv(); closeInv(); invSel = null; openMap(); closePanel(); openCityMap(); closePanel(); renderEquipBox(); toggleInv("eq"); toggleInv("eq"); handleTap(215, 450); walkTo(city.npcs[0]); for (let i = 0; i < 200 && walkGoal; i++) update(0.05); if (!panelOpen) throw new Error('NPC nao abriu menu ao chegar'); closePanel();
+    for (const md of ['upgrade', 'buy', 'sell']) { openGear('t', SLOT_ORDER, md, null); closePanel(); } openProfile(); closePanel(); openInv('eq'); renderInv(); invSel = state.items[0].uid; renderInv(); bagFilter = 'helm'; renderInv(); invMode = 'bag'; renderInv(); invMode = 'eq'; bagFilter = 'all'; const spare = newItem('helm', 0, 0); state.items.push(spare); invSel = spare.uid; renderInv(); closeInv(); invSel = null; openMap(); closePanel(); openCityMap(); closePanel(); renderEquipBox(); toggleInv("eq"); toggleInv("eq"); handleTap(215, 450); player.position.set(city.npcs[0].pos[0], 0, city.npcs[0].pos[1] + 20); walkTo(city.npcs[0]); for (let i = 0; i < 200 && walkGoal; i++) update(0.05); if (!panelOpen) throw new Error('NPC nao abriu menu ao chegar'); closePanel();
     if (!(calcMaxHp() > hp0 && atkPower() > at0)) throw new Error('equipamento nao aumentou status');
     // morte na floresta leva de volta a cidade
     setCityMode(false); clearEnemies(); hp = 1; maxHp = Math.max(maxHp, 10); hitPlayer({ dmg: 1e6 }); for (let i = 0; i < 40; i++) update(0.05); if (!inCity) throw new Error('morte nao levou a cidade'); setCityMode(false); if (inCity) throw new Error('nao voltou');
