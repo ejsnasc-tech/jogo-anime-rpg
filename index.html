@@ -58,6 +58,18 @@
   #topbtns button small { font-size:8px; margin-top:1px; letter-spacing:.2px; }
   #topbtns button .bdg { position:absolute; top:-5px; right:-5px; min-width:20px; height:20px; border-radius:10px; background:#e74c3c; border:2px solid #fff; font-size:11px; display:flex; align-items:center; justify-content:center; padding:0 3px; }
   #topbtns button:active { transform:scale(.92); }
+  #topbtns.min .more { display:none !important; }
+  #panel.open ~ #menu { display:none; }
+  #morebtn { border-color:#fff !important; background:radial-gradient(circle at 35% 30%, #6a4bc4, #3b2578) !important; }
+  #card .pclose { position:sticky; top:0; float:right; margin:-6px -6px 4px 8px; width:46px; height:46px; border-radius:50%; background:#c0392b; border:3px solid #fff; color:#fff; font:inherit; font-size:22px; line-height:1; padding:0; cursor:pointer; z-index:3; box-shadow:0 2px 6px rgba(0,0,0,.5); }
+  @media (max-width:520px) {
+    #topbtns button { width:46px; height:46px; }
+    #topbtns button .i { font-size:19px; }
+    #topbtns button small { font-size:7px; }
+    #menu button { width:48px; height:48px; font-size:20px; }
+    #menu button small { font-size:8px; }
+    #menu { gap:7px; }
+  }
   #talk { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom) + 150px); display:none; z-index:21; height:54px; padding:0 22px; border-radius:27px; background:#e67e22; border:3px solid #fff; color:#fff; font:inherit; font-size:17px; cursor:pointer; }
   #leftbtns { position:fixed; top:calc(env(safe-area-inset-top) + 96px); left:8px; display:flex; gap:6px; z-index:19; }
   #leftbtns button { height:38px; border-radius:19px; border:2px solid #fff; color:#fff; font:inherit; font-size:13px; padding:0 12px; cursor:pointer; }
@@ -263,7 +275,7 @@
 <div id="leftbtns"><button id="eqbtn">🧍 EQUIP</button><button id="bagbtn">🎒 BAG</button></div>
 <div id="inv"></div>
 <canvas id="minimap" width="208" height="208"></canvas>
-<div id="camrot" style="display:none;position:absolute;left:50%;bottom:222px;transform:translateX(-50%);gap:14px;z-index:6"><button id="rotl" class="rotb">⟲</button><button id="rotr" class="rotb">⟳</button></div><div id="topbtns"><button id="citybtn"><span class="i">🏰</span><small>CIDADE</small></button><button id="mapbtn"><span class="i">🗺️</span><small>MAPA</small></button><button id="camb"><span class="i">🎥</span><small>DE CIMA</small></button><button id="zoomin"><span class="i">🔍</span><small>ZOOM +</small></button><button id="zoomout"><span class="i">🔍</span><small>ZOOM −</small></button><button id="questbtn"><span class="i">📜</span><small>MISSÕES</small></button><button id="emobtn"><span class="i">😀</span><small>EMOTE</small></button><button id="netbtn"><span class="i">🔴</span><small>OFFLINE</small></button><button id="chatbtn"><span class="i">💬</span><small>CHAT</small></button></div>
+<div id="camrot" style="display:none;position:absolute;left:50%;bottom:222px;transform:translateX(-50%);gap:14px;z-index:6"><button id="rotl" class="rotb">⟲</button><button id="rotr" class="rotb">⟳</button></div><div id="topbtns"><button id="morebtn"><span class="i">☰</span><small>MENU</small></button><button id="citybtn"><span class="i">🏰</span><small>CIDADE</small></button><button id="mapbtn"><span class="i">🗺️</span><small>MAPA</small></button><button id="camb" class="more"><span class="i">🎥</span><small>DE CIMA</small></button><button id="zoomin" class="more"><span class="i">🔍</span><small>ZOOM +</small></button><button id="zoomout" class="more"><span class="i">🔍</span><small>ZOOM −</small></button><button id="questbtn"><span class="i">📜</span><small>MISSÕES</small></button><button id="emobtn" class="more"><span class="i">😀</span><small>EMOTE</small></button><button id="netbtn"><span class="i">🔴</span><small>OFFLINE</small></button><button id="chatbtn" class="more"><span class="i">💬</span><small>CHAT</small></button></div>
 <button id="talk" class="stroke"></button>
 <div id="chatlog"></div><div id="chatbar"><input id="chatinp" maxlength="120" placeholder="Digite e toque em enviar…" autocomplete="off"><button id="chatsend">➤</button></div>
 <div id="homebar"><button id="decbtn">🛠 DECORAR</button><button id="upbtn">📐 AMPLIAR</button><button id="flbtn">🪜 ANDAR 1/1</button></div>

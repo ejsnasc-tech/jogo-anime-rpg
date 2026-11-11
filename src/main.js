@@ -857,10 +857,20 @@ $('dialog').addEventListener('pointerdown', (e) => { e.stopPropagation(); nextLi
 
 // ===================== Painéis =====================
 function closePanel() { $('panel').classList.remove('open'); panelOpen = false; }
+$('panel').addEventListener('click', (e) => { if (e.target === $('panel') && !picking) closePanel(); });
+// menu da direita: recolhe os botoes secundarios (lembra a escolha)
+(function () {
+  const tb = $('topbtns'); let min;
+  try { const v = localStorage.getItem('ui_min'); min = v == null ? innerWidth < 520 : v === '1'; } catch (_) { min = innerWidth < 520; }
+  const apply = () => { tb.classList.toggle('min', min); $('morebtn').querySelector('small').textContent = min ? 'MAIS' : 'MENOS'; $('morebtn').querySelector('.i').textContent = min ? '☰' : '✕'; };
+  apply();
+  $('morebtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); min = !min; try { localStorage.setItem('ui_min', min ? '1' : '0'); } catch (_) {} apply(); });
+})();
 function openPanel(title, rows) {
   if (dialogOpen) return;
   panelOpen = true;
   const card = $('card'); card.innerHTML = '';
+  const xb = document.createElement('button'); xb.className = 'pclose'; xb.textContent = '✕'; xb.onclick = () => { if (!picking) closePanel(); }; card.appendChild(xb);
   const h = document.createElement('h2'); h.textContent = title; card.appendChild(h);
   rows.forEach(r => {
     const row = document.createElement('div'); row.className = 'prow' + (r.head ? ' head' : '');
