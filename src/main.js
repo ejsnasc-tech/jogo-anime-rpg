@@ -2310,6 +2310,8 @@ function update(dt) {
     if (Math.hypot(dx, dz) > 0.15) walkGoal = null;
     else { const wx = walkGoal.x - pp0.x, wz = walkGoal.z - pp0.z, wd = Math.hypot(wx, wz); if (wd < 3.2) { const g0 = walkGoal; walkGoal = null; if (g0.plot) openPlotMenu(g0.plot); else if (g0.npc) openNpcMenu(g0.npc); } else { dx = wx / wd; dz = wz / wd; } }
   }
+  // camera imersiva acompanha o rumo: empurrar para o lado (ou para frente e de lado) gira a visao nessa direcao
+  if (lowCam() && !walkGoal) { const m0 = Math.hypot(dx, dz); if (m0 > 0.2) { const fwd = Math.max(0, -dz / m0); camYawT -= (dx / m0) * Math.min(1, m0) * (0.5 + 0.9 * fwd) * 1.7 * dt; } }
   { const ya = yawNow(); if (ya && !walkGoal) { const c = Math.cos(ya), s = Math.sin(ya), x = dx * c + dz * s, z = -dx * s + dz * c; dx = x; dz = z; } }
   const m = Math.hypot(dx, dz); if (m > 1) { dx /= m; dz /= m; }
   const p = player.position, bear = T < bearUntil;
@@ -2506,7 +2508,7 @@ if (qs.has('city')) setCityMode(true);
 if (qs.has('at')) { const [ax, az] = qs.get('at').split(',').map(Number); if (!qs.has('city')) setCityMode(true); player.position.set(ax, 0, az); syncCam(); }
 if (qs.has('night')) dayT = +qs.get('night') || 0;
 if (qs.has('quests')) setTimeout(() => openQuests(), 1500);
-if (qs.has('dbg')) window.__g = { spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
+if (qs.has('dbg')) window.__g = { get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
 if (qs.get('pos')) { const iv = setInterval(() => { if (!gameStarted) return; clearInterval(iv); setTimeout(() => { const [px, pz] = qs.get('pos').split(',').map(Number); if (inCity) setCityMode(false); player.position.set(px || 0, 0, pz || 0); playerGy = walkY(px || 0, pz || 0); }, 600); }, 300); }
 if (qs.get('cam') === 'low') { camMode = 'low'; $('camb').querySelector('small').textContent = 'IMERSIVA'; }
 if (qs.has('yaw')) { camYaw = camYawT = +qs.get('yaw'); }
