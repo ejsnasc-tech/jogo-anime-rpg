@@ -1302,11 +1302,13 @@ function addDanger(x, z, r, delay, dmg, color, linger) {
   m.rotation.x = -Math.PI / 2; m.position.set(x, walkY(x, z) + 0.15, z); scene.add(m);
   dangers.push({ x, z, r, at: T + delay, dmg, color, linger: linger || 0, mesh: m, fired: false, next: 0, until: 0 });
 }
-function dropDanger(i) { const d = dangers[i]; scene.remove(d.mesh); d.mesh.geometry.dispose(); d.mesh.material.dispose(); dangers.splice(i, 1); }
+function dropDanger(i) { const d = dangers[i]; if (!d) return; scene.remove(d.mesh); d.mesh.geometry.dispose(); d.mesh.material.dispose(); dangers.splice(i, 1); }
 function updateDangers() {
+  if (!player) return;
   const p = player.position;
   for (let i = dangers.length - 1; i >= 0; i--) {
-    const d = dangers[i], inside = Math.hypot(p.x - d.x, p.z - d.z) < d.r;
+    const d = dangers[i]; if (!d) continue;   // (clearEnemies pode esvaziar a lista se o golpe matar o jogador)
+    const inside = Math.hypot(p.x - d.x, p.z - d.z) < d.r;
     if (!d.fired) {
       d.mesh.material.opacity = 0.25 + 0.2 * Math.abs(Math.sin(T * 12));
       if (T >= d.at) {
