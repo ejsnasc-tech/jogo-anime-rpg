@@ -66,7 +66,8 @@
   #topbtns button:active { transform:scale(.92); }
   #topbtns.min .more { display:none !important; }
   #panel.open ~ #menu { display:none; }
-  #rothint { position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom) + 190px); transform:translateX(-50%); z-index:60; display:none; background:rgba(0,0,0,.82); border:2px solid var(--gold); border-radius:14px; padding:10px 14px; color:#fff; font-size:14px; text-align:center; width:78%; max-width:320px; }
+  #inv.open ~ #menu { display:none; }
+  #rothint { position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom) + 190px); transform:translateX(-50%); z-index:20; display:none; background:rgba(0,0,0,.82); border:2px solid var(--gold); border-radius:14px; padding:10px 14px; color:#fff; font-size:14px; text-align:center; width:78%; max-width:320px; }
   #rothint button { margin-top:8px; background:#2980b9; border:2px solid #fff; border-radius:12px; color:#fff; font:inherit; font-size:13px; padding:5px 14px; }
   body.phone.portrait #rothint.show { display:block; }
   /* celular deitado: pouca altura */
@@ -116,6 +117,12 @@
   body.phone #card h2 { font-size:22px; margin-bottom:8px; }
   body.phone #card .pclose { width:38px; height:38px; font-size:18px; }
   body.phone #toast { font-size:17px; }
+  body.phone .float { font-size:15px; text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000; }
+  body.phone #bossbar { left:50%; right:auto; transform:translateX(-50%); width:min(56%,300px); top:calc(env(safe-area-inset-top) + 58px); font-size:10px; }
+  body.phone #bossbar .bg { height:8px; border-width:1px; margin-top:1px; }
+  body.phone #bossimg { width:26px !important; height:26px !important; left:-30px !important; top:-6px !important; }
+  body.phone #menu { top:calc(env(safe-area-inset-top) + 186px); transform:none; }
+  body.phone.land #menu { top:auto; }
 
   #morebtn { border-color:#fff !important; background:radial-gradient(circle at 35% 30%, #6a4bc4, #3b2578) !important; }
   #card .pclose { position:sticky; top:0; float:right; margin:-6px -6px 4px 8px; width:46px; height:46px; border-radius:50%; background:#c0392b; border:3px solid #fff; color:#fff; font:inherit; font-size:22px; line-height:1; padding:0; cursor:pointer; z-index:3; box-shadow:0 2px 6px rgba(0,0,0,.5); }
@@ -130,7 +137,6 @@
   #talk { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom) + 150px); display:none; z-index:21; height:54px; padding:0 22px; border-radius:27px; background:#e67e22; border:3px solid #fff; color:#fff; font:inherit; font-size:17px; cursor:pointer; }
   #leftbtns { position:fixed; top:calc(env(safe-area-inset-top) + 96px); left:8px; display:flex; gap:6px; z-index:19; }
   #leftbtns button { height:38px; border-radius:19px; border:2px solid #fff; color:#fff; font:inherit; font-size:13px; padding:0 12px; cursor:pointer; }
-  #eqbtn { background:rgba(142,68,173,.92); } #bagbtn { background:rgba(211,84,0,.92); }
   #leftbtns button { box-shadow:0 2px 6px rgba(0,0,0,.4); }
   #chatlog { position:fixed; left:8px; bottom:calc(env(safe-area-inset-bottom) + 176px); max-width:62%; z-index:8; pointer-events:none; display:flex; flex-direction:column; gap:3px; font:700 12px Arial,sans-serif; }
   #chatlog .cl { background:rgba(10,16,30,.72); color:#fff; padding:3px 8px; border-radius:8px; word-break:break-word; }
@@ -329,7 +335,6 @@
   <div id="stage" class="stroke"></div>
 </div>
 <div id="skillbar"></div>
-<div id="leftbtns"><button id="eqbtn">🧍 EQUIP</button><button id="bagbtn">🎒 BAG</button></div>
 <div id="inv"></div>
 <canvas id="minimap" width="208" height="208"></canvas>
 <div id="camrot" style="display:none;position:absolute;left:50%;bottom:222px;transform:translateX(-50%);gap:14px;z-index:6"><button id="rotl" class="rotb">⟲</button><button id="rotr" class="rotb">⟳</button></div><div id="topbtns"><button id="morebtn"><span class="i">☰</span><small>MENU</small></button><button id="citybtn"><span class="i">🏰</span><small>CIDADE</small></button><button id="mapbtn"><span class="i">🗺️</span><small>MAPA</small></button><button id="camb" class="more"><span class="i">🎥</span><small>DE CIMA</small></button><button id="zoomin" class="more"><span class="i">🔍</span><small>ZOOM +</small></button><button id="zoomout" class="more"><span class="i">🔍</span><small>ZOOM −</small></button><button id="questbtn"><span class="i">📜</span><small>MISSÕES</small></button><button id="emobtn" class="more"><span class="i">😀</span><small>EMOTE</small></button><button id="netbtn"><span class="i">🔴</span><small>OFFLINE</small></button><button id="fsbtn" class="more"><span class="i">⛶</span><small>TELA CHEIA</small></button><button id="chatbtn" class="more"><span class="i">💬</span><small>CHAT</small></button></div>
@@ -353,6 +358,8 @@
 <div id="dialog"><div id="dbox"><div id="dname"></div><div id="dtext"></div><div id="dhint">toque para continuar ▶</div></div></div>
 
 <div id="menu">
+  <button id="eqbtn" class="stroke" title="EQUIP">🧍<small>EQUIP</small></button>
+  <button id="bagbtn" class="stroke" title="BAG">🎒<small>BAG</small></button>
   <button id="b-crew" class="stroke" title="CLASSE">🧙<small>CLASSE</small></button>
   <button id="b-bag" class="stroke" title="PERFIL">👤<small>PERFIL</small></button>
   <button id="b-home" class="stroke" title="HOME">🏠<small>HOME</small></button>
