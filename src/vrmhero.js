@@ -138,3 +138,30 @@ export function recolorVrm(vrm, def, key) {
     });
   });
 }
+
+
+// Fisico: escala os ossos reais (a animacao so mexe em rotacao/posicao, entao a escala fica).
+// Os eixos locais dos ossos variam de modelo para modelo: a escala e dada em eixos do MUNDO (x lado, y cima, z frente)
+// no pose de repouso e convertida para os eixos locais de cada osso. Ossos filhos levam a escala inversa para nao esticarem.
+// Devolve a escala de altura (aplicada na cena inteira).
+const _bq = new THREE.Quaternion(), _bm = new THREE.Matrix4();
+export function applyBuild(vrm, b) {
+  if (!b) return 1;
+  vrm.scene.updateMatrixWorld(true);
+  const raw = (n) => vrm.humanoid.getRawBoneNode(n);
+  const ws = (n, X, Y, Z) => {   // escala em eixos do mundo
+    const o = raw(n); if (!o) return; o.getWorldQuaternion(_bq); _bm.makeRotationFromQuaternion(_bq);
+    const e = _bm.elements, W = [X, Y, Z], L = [1, 1, 1];
+    for (let i = 0; i < 3; i++) { let j = 0, m = 0; for (let k = 0; k < 3; k++) { const v = Math.abs(e[i * 4 + k]); if (v > m) { m = v; j = k; } } L[i] = W[j]; }
+    o.scale.set(L[0], L[1], L[2]);
+  };
+  const uni = (n, k) => { const o = raw(n); if (o) o.scale.setScalar(k); };
+  const w = b.w || 1, sh = b.sh || 1, ar = b.ar || 1, lg = b.lg || 1, hd = b.hd || 1, tw = w * sh;
+  if (w !== 1) ws('spine', w, 1, w);
+  if (sh !== 1) ws('chest', sh, 1, sh);
+  if (tw !== 1) ['neck', 'leftShoulder', 'rightShoulder'].forEach(n => ws(n, 1 / tw, 1, 1 / tw));
+  if (hd !== 1) uni('head', hd);
+  if (ar !== 1) ['left', 'right'].forEach(sd => { ws(sd + 'UpperArm', 1, ar, ar); uni(sd + 'Hand', 1 / ar); });
+  if (lg !== 1) ['left', 'right'].forEach(sd => { ws(sd + 'UpperLeg', lg, 1, lg); uni(sd + 'Foot', 1 / lg); });
+  return b.h || 1;
+}

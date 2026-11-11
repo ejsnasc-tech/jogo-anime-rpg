@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { makeHero, animateHero, playOnce } from './actors.js';
-import { CLASSES, CLASS_BASE, CLASS_MODELS, REALMS, SKINS, HAIR_COLORS, EYE_COLORS, OUTFIT_COLORS, CAPE_COLORS, ORIGINS, PREMADE, buildPlayerHero, PORTRAITS, VRM_ROSTER, VRM_BASES } from './data.js';
+import { CLASSES, CLASS_BASE, CLASS_MODELS, REALMS, SKINS, HAIR_COLORS, EYE_COLORS, OUTFIT_COLORS, CAPE_COLORS, ORIGINS, PREMADE, buildPlayerHero, PORTRAITS, VRM_ROSTER, VRM_BASES, VRM_BUILDS } from './data.js';
 import { HAIR_STYLES, FACES, ACCS, SEXES, BUILDS, HEIGHTS, OUTFIT_STYLES, MALE_HAIR, FEMALE_HAIR, MALE_FACES, FEMALE_FACES, MALE_ACCS, FEMALE_ACCS } from './looks.js';
 function applySex(c, v) { c.body = v; const bad = v === 'm' ? FEMALE_HAIR : MALE_HAIR; if (bad.includes(c.hairStyle || 'short')) c.hairStyle = v === 'm' ? 'short' : 'long'; c.outfitStyle = 'auto'; if (!(v === 'm' ? MALE_FACES : FEMALE_FACES).includes(c.face)) c.face = 'calm'; if (!(v === 'm' ? MALE_ACCS : FEMALE_ACCS).includes(c.acc || 'none')) c.acc = 'none'; }
 const rndOutfit = (sex) => OUTFIT_STYLES.filter(x => sex === 'f' || x[0] !== 'dress')[Math.floor(Math.random() * (OUTFIT_STYLES.length - (sex === 'f' ? 0 : 1)))][0];
@@ -132,7 +132,7 @@ export function openCreator(opts) {
     return box;
   }
   function applyHero(e) {
-    c = Object.assign({}, c, { body: e.body, model: e.model, vh: e.vh, vc: e.vc, vs: e.vs, ve: e.ve, bio: e.bio });
+    c = Object.assign({}, c, { body: e.body, model: e.model, vh: e.vh, vc: e.vc, vs: e.vs, ve: e.ve, vb: e.vb, bio: e.bio });
     if (!lockCls) { c.cls = e.cls; c.realm = e.realm; }
     if (!c.realm) c.realm = e.realm;
   }
@@ -150,7 +150,7 @@ export function openCreator(opts) {
   }
 
   let tab = 'class', tabBox = null;
-  const VTABS = [['vbase', '🧍 Modelo'], ['vhair', '💇 Cabelo'], ['veye', '👁️ Olhos'], ['vcloth', '👕 Roupa'], ['vskin', '🧑 Pele'], ['class', '⚔️ Classe']];
+  const VTABS = [['vbase', '🧍 Modelo'], ['vhair', '💇 Cabelo'], ['veye', '👁️ Olhos'], ['vcloth', '👕 Roupa'], ['vskin', '🧑 Pele'], ['vbuild', '💪 Físico'], ['class', '⚔️ Classe']];
   const TABS = [['class', lockCls ? '🧙 Visual' : '⚔️ Classe'], ['body', '💪 Corpo'], ['hair', '💇 Cabelo'], ['face', '😊 Rosto'], ['outfit', '👕 Roupa'], ['acc', '🎀 Extras']];
 
   function refreshTab() {
@@ -199,7 +199,7 @@ export function openCreator(opts) {
 
 
   // ---- galeria: 30 heróis anime por sexo (visual fixo) + botão Personalizar ----
-  const sameLook = (e) => e.model === c.model && (e.vh == null) === (c.vh == null) && (e.vh == null || e.vh === c.vh) && (e.vc == null) === (c.vc == null) && (e.vc == null || e.vc === c.vc) && !e.vs === !c.vs && (!e.vs || e.vs === c.vs) && (e.ve == null) === (c.ve == null) && (e.ve == null || e.ve === c.ve);
+  const sameLook = (e) => e.model === c.model && (e.vh == null) === (c.vh == null) && (e.vh == null || e.vh === c.vh) && (e.vc == null) === (c.vc == null) && (e.vc == null || e.vc === c.vc) && !e.vs === !c.vs && (!e.vs || e.vs === c.vs) && (e.ve == null) === (c.ve == null) && (e.ve == null || e.ve === c.ve) && (e.vb || 0) === (c.vb || 0);
   function viewGallery() {
     body.innerHTML = '';
     const sex = c.body || 'm', roster = VRM_ROSTER.filter(x => x.body === sex);
@@ -211,12 +211,12 @@ export function openCreator(opts) {
     const info = el('div', 'desc'), clsBox = el('div', 'row');
     function paint() {
       btns.forEach((b, i) => b.classList.toggle('sel', sameLook(roster[i])));
-      const k = CLASSES[c.cls]; info.innerHTML = '<b>' + k.icon + ' ' + k.name + ' — ' + k.role + '</b><br>' + k.desc + '<br><i>ULT: ' + k.ult + '</i>';
+      const k = CLASSES[c.cls]; info.innerHTML = '💪 Físico: <b>' + VRM_BUILDS[c.vb || 0].n + '</b><br><b>' + k.icon + ' ' + k.name + ' — ' + k.role + '</b><br>' + k.desc + '<br><i>ULT: ' + k.ult + '</i>';
       clsBox.innerHTML = '';
       if (!lockCls) CLASS_LIST.forEach(kk => { const b = el('button', 'chip' + (c.cls === kk ? ' sel' : ''), CLASSES[kk].icon + ' ' + CLASSES[kk].name); b.onclick = () => { c.cls = kk; showHero(c); paint(); }; clsBox.appendChild(b); });
     }
     function pickHero(e, redraw) {
-      c = Object.assign({}, c, { body: e.body, model: e.model, vh: e.vh, vc: e.vc, vs: e.vs, ve: e.ve, bio: e.bio });
+      c = Object.assign({}, c, { body: e.body, model: e.model, vh: e.vh, vc: e.vc, vs: e.vs, ve: e.ve, vb: e.vb, bio: e.bio });
       if (!lockCls) { c.cls = e.cls; c.realm = e.realm; }
       if (!c.realm) c.realm = e.realm;
       showHero(c); if (redraw) viewGallery(); else paint();
@@ -243,6 +243,7 @@ export function openCreator(opts) {
       tabBox.appendChild(el('div', 'desc', 'Escolha o corpo e o modelo; depois ajuste cabelo, olhos, roupa e pele nas outras abas.'));
     } else if (tab === 'vhair') { tabBox.appendChild(el('div', 'lbl', 'Cor do cabelo')); tabBox.appendChild(sw('vh', HAIR_COLORS)); }
     else if (tab === 'veye') { tabBox.appendChild(el('div', 'lbl', 'Cor dos olhos')); tabBox.appendChild(sw('ve', EYE_COLORS)); }
+    else if (tab === 'vbuild') { tabBox.appendChild(el('div', 'lbl', 'Físico do herói')); tabBox.appendChild(chips(VRM_BUILDS.map((b, i) => [i, b.n]), c.vb || 0, (v) => { c.vb = v; })); }
     else if (tab === 'vskin') { tabBox.appendChild(el('div', 'lbl', 'Tom de pele')); tabBox.appendChild(sw('vs', SKINS)); }
     else if (tab === 'vcloth') {
       tabBox.appendChild(el('div', 'lbl', 'Cor da roupa (gira o tom da roupa original)'));

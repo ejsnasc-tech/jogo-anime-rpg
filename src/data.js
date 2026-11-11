@@ -75,6 +75,20 @@ export const PREMADE = [
 // ---- heróis anime (modelos VRoid VRM): 30 de cada sexo = modelo base + cores (cabelo, olhos, roupa, pele) ----
 export const VRM_BASES = { f: ['VRM_Vivi', 'VRM_Vita', 'VRM_Victoria', 'VRM_Shino', 'VRM_Shibu', 'VRM_Darkness', 'VRM_SampA', 'VRM_SampB', 'VRM_HairF'], m: ['VRM_Haruto', 'VRM_Fumiriya', 'VRM_Seed', 'VRM_SampC'] };
 const VRM_VARIANTS = [{}, { vh: 6, vc: 200, ve: 1 }, { vh: 4, vc: 30, vs: 1, ve: 4 }, { vh: 9, vc: 300, ve: 5 }, { vh: 3, vc: 90, vs: 2, ve: 2 }, { vh: 8, vc: 150, vs: 3, ve: 3 }, { vh: 7, vc: 260, vs: 1, ve: 6 }, { vh: 5, vc: 330, vs: 4, ve: 1 }];
+// fisicos: h = altura, w = barriga/tronco, sh = ombros/peito, ar = grossura dos bracos, lg = grossura das pernas, hd = tamanho da cabeca
+export const VRM_BUILDS = [
+  { n: 'Normal' },
+  { n: 'Forte', h: 1.05, w: 1.08, sh: 1.12, ar: 1.2, lg: 1.1 },
+  { n: 'Musculoso', h: 1.08, w: 1.06, sh: 1.28, ar: 1.45, lg: 1.22, hd: 0.94 },
+  { n: 'Magro', h: 1.02, w: 0.84, sh: 0.94, ar: 0.82, lg: 0.84 },
+  { n: 'Gordinho', h: 0.97, w: 1.36, sh: 1.0, ar: 1.25, lg: 1.2, hd: 1.05 },
+  { n: 'Alto e magro', h: 1.14, w: 0.86, sh: 0.92, ar: 0.82, lg: 0.86, hd: 0.97 },
+  { n: 'Baixinho', h: 0.88, w: 1.02, hd: 1.12 },
+  { n: 'Grandalhão', h: 1.14, w: 1.3, sh: 1.2, ar: 1.4, lg: 1.3, hd: 0.96 },
+  { n: 'Atlético', h: 1.06, w: 0.98, sh: 1.1, ar: 1.1, lg: 1.05 },
+  { n: 'Cheinho', h: 1.0, w: 1.18, sh: 1.0, ar: 1.12, lg: 1.12 },
+];
+const VRM_BUILD_SET = { f: [0, 3, 8, 6, 5, 1, 9], m: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] };
 const VRM_NAMES = {
   f: ['Vivi Campo-Verde', 'Vita Cristalina', 'Victoria Aurora', 'Shino Véu-Negro', 'Shibu Lâmina-Clara', 'Darkness Noturna', 'Aiko Brisa-Suave', 'Hana Pétala', 'Yuki Neve-Clara', 'Mei Lua-Nova', 'Rin Chama-Azul', 'Sakura Aurora', 'Akari Luz-do-Dia', 'Miyu Estrela', 'Nami Maré-Alta', 'Luna Prateada', 'Kaede Folha-Rubra', 'Himari Sol-Nascente', 'Saki Espinho', 'Emi Cantora', 'Nana Raio-Verde', 'Ayame Íris', 'Tsukiko Eclipse', 'Reiko Trovão', 'Misaki Cometa', 'Chiyo Sino-Dourado', 'Mio Coral', 'Haruka Horizonte', 'Natsu Verão', 'Suzu Sininho'],
   m: ['Haruto Capuz', 'Fumiriya Sakura', 'Seed Folha-Nova', 'Kenji Aço-Frio', 'Ryu Dragão-Branco', 'Akio Vento-Norte', 'Daichi Pedra-Firme', 'Hiro Faísca', 'Takumi Mestre-Forja', 'Ren Lâmina-Rubra', 'Sora Céu-Aberto', 'Yuto Sombra-Leve', 'Kaito Mar-Bravo', 'Itsuki Raiz-Velha', 'Naoki Chama-Viva', 'Shun Relâmpago', 'Riku Terra-Dourada', 'Tatsu Tempestade', 'Kazuki Lua-Cheia', 'Minato Porto-Seguro', 'Haku Neve-Eterna', 'Jiro Corvo', 'Ryota Falcão', 'Eiji Guardião', 'Satoru Sábio', 'Tsubasa Asa-Negra', 'Yamato Honra', 'Isamu Bravura', 'Kouki Esperança', 'Daisuke Andarilho'],
@@ -87,7 +101,7 @@ export const VRM_ROSTER = [];
   const bases = VRM_BASES[sx];
   for (let i = 0; i < 30; i++) {
     const v = VRM_VARIANTS[Math.floor(i / bases.length)] || {};
-    VRM_ROSTER.push({ name: VRM_NAMES[sx][i], body: sx, model: bases[i % bases.length], cls: VRM_CLS[sx][i % 7], realm: VRM_REALMS[i % 5], vh: v.vh, vc: v.vc, vs: v.vs, ve: v.ve, bio: VRM_BIOS[i % VRM_BIOS.length] });
+    VRM_ROSTER.push({ name: VRM_NAMES[sx][i], body: sx, model: bases[i % bases.length], cls: VRM_CLS[sx][i % 7], realm: VRM_REALMS[i % 5], vh: v.vh, vc: v.vc, vs: v.vs, ve: v.ve, vb: VRM_BUILD_SET[sx][(i * (sx === 'm' ? 7 : 3) + (sx === 'm' ? 3 : 1)) % VRM_BUILD_SET[sx].length], bio: VRM_BIOS[i % VRM_BIOS.length] });
   }
 });
 PREMADE.push(...VRM_ROSTER);
@@ -104,7 +118,7 @@ export function buildPlayerHero(c) {
     skin: SKINS[c.skin % SKINS.length], hairColor: HAIR_COLORS[c.hair % HAIR_COLORS.length],
     body: c.body === 'f' ? 'f' : 'm', build: c.build || 'normal', height: c.height || 'mid', hairStyle: c.hairStyle || 'short', outfitStyle: c.outfitStyle || 'auto', face: c.face || 'calm', acc: c.acc || 'none',
     eyeColor: EYE_COLORS[(c.eye != null ? c.eye : 1) % EYE_COLORS.length],
-    vHair: c.vh != null ? HAIR_COLORS[c.vh % HAIR_COLORS.length] : null, vEye: c.ve != null ? EYE_COLORS[c.ve % EYE_COLORS.length] : null, vSkin: c.vs ? SKINS[c.vs % SKINS.length] : null, vCloth: c.vc != null ? c.vc : null,
+    vHair: c.vh != null ? HAIR_COLORS[c.vh % HAIR_COLORS.length] : null, vEye: c.ve != null ? EYE_COLORS[c.ve % EYE_COLORS.length] : null, vSkin: c.vs ? SKINS[c.vs % SKINS.length] : null, vCloth: c.vc != null ? c.vc : null, vBuild: c.vb || 0,
     atk: b.atk, rate: b.rate, range: b.range, cost: 0, bio: c.bio || 'O Guardião da Pena.',
   };
 }

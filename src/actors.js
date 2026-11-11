@@ -3,10 +3,10 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as skClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { CLASS_MODELS } from './data.js';
+import { CLASS_MODELS, VRM_BUILDS } from './data.js';
 import { makeHeroProcedural } from './models.js';
 import { decorate, addOutline } from './looks.js';
-import { parseVrm, retargetClips, attachProp, recolorVrm } from './vrmhero.js';
+import { parseVrm, retargetClips, attachProp, recolorVrm, applyBuild } from './vrmhero.js';
 
 const BASE = (import.meta.env && import.meta.env.BASE_URL) || './';
 const FILES = {
@@ -138,7 +138,7 @@ function makeVrmHero(key, def) {
   const ref = loaded.Knight.scene, file = BASE + 'models/chars/' + key + '.vrm';
   parseVrm(file, BASE).then((V) => {
     try { recolorVrm(V.vrm, def, key); } catch (e) { console.warn('recolor falhou', e); }
-    const sv = 2.0 / V.height; g.add(V.vrm.scene); V.vrm.scene.scale.setScalar(sv); V.vrm.scene.position.y = -V.minY * sv;
+    const hs = applyBuild(V.vrm, VRM_BUILDS[def.vBuild || 0]), sv = 2.0 / V.height * hs; g.add(V.vrm.scene); V.vrm.scene.scale.setScalar(sv); V.vrm.scene.position.y = -V.minY * sv;
     if (!vrmInfo[key]) vrmInfo[key] = retargetClips(ref, loaded.Knight.clips, V.vrm, V.v0);
     const u = g.userData; u.clips = vrmInfo[key]; u.vrm = V.vrm; u.mixer = new THREE.AnimationMixer(V.vrm.scene);
     setLoco(u, 'idle', 1); u.mixer.update(0); V.vrm.update(0); g.updateMatrixWorld(true); V.vrm.scene.traverse(o => { if (o.isSkinnedMesh) o.skeleton.update(); });   // pose de repouso: apoia os pes no chao
