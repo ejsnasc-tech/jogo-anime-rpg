@@ -878,6 +878,8 @@ $('panel').addEventListener('click', (e) => { if (e.target === $('panel') && !pi
       try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (_) {}
     } else if (!isStandalone()) toast('📲 No iPhone: toque em Compartilhar ▸ "Adicionar à Tela de Início" e abra por lá para jogar em tela cheia');
   });
+  const fsSync = () => document.body.classList.toggle('fs', !!document.fullscreenElement || !!isStandalone());
+  fsSync(); document.addEventListener('fullscreenchange', fsSync);
   let hid = false; try { hid = sessionStorage.getItem('rot_hide') === '1'; } catch (_) {}
   const rh = $('rothint'); if (!hid && !isStandalone()) rh.classList.add('show');
   $('rothide').addEventListener('click', () => { rh.classList.remove('show'); try { sessionStorage.setItem('rot_hide', '1'); } catch (_) {} });
