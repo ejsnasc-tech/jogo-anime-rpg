@@ -60,6 +60,7 @@ function load() {
   return s;
 }
 let cloudDirty = false, cloudBusy = false;
+window.__flush = () => { try { save(state); } catch (e) {} };
 const save = (s) => { if (testing) return; s.lastSeen = Date.now(); try { localStorage.setItem('acrpg', JSON.stringify(s)); } catch (e) {} cloudDirty = true; };
 const state = load();
 ensureMeta(state);

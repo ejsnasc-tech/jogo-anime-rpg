@@ -4,6 +4,34 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Anime Crossover RPG</title>
+<script>
+// Atualizacao automatica: o navegador guarda a pagina por ate 10 min; aqui comparamos com o version.json (sempre fresco).
+(function () {
+  var B = '__BUILD__'; if (B.indexOf('__') === 0 || location.protocol.indexOf('http') !== 0) return;
+  var first = true;
+  function go(v) {
+    try { if (window.__flush) window.__flush(); } catch (e) {}
+    var u = new URL(location.href); u.searchParams.set('v', v); location.replace(u.toString());
+  }
+  function banner(v) {
+    if (document.getElementById('updbar')) return;
+    var d = document.createElement('div'); d.id = 'updbar';
+    d.style.cssText = 'position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:99999;background:#f5c542;color:#10192b;font:bold 15px Arial;padding:10px 16px;border-radius:14px;box-shadow:0 4px 14px #0008;max-width:90vw;text-align:center';
+    d.textContent = '🔄 Nova versão do jogo! Toque aqui para atualizar'; d.onclick = function () { go(v); }; document.body.appendChild(d);
+  }
+  function chk() {
+    fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j.v || j.v === B) { first = false; return; }
+      var done = null; try { done = sessionStorage.getItem('upd_done'); } catch (e) {}
+      if (first && done !== j.v) { try { sessionStorage.setItem('upd_done', j.v); } catch (e) {} go(j.v); } else banner(j.v);
+      first = false;
+    }).catch(function () {});
+  }
+  chk(); setInterval(chk, 60000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) chk(); });
+})();
+</script>
+
 <style>
   :root { --gold:#f5c542; --navy:#10192b; --blue:#24385e; }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
