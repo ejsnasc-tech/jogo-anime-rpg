@@ -862,13 +862,30 @@ $('panel').addEventListener('click', (e) => { if (e.target === $('panel') && !pi
 (function () {
   const forced = new URLSearchParams(location.search).get('ui');
   const mq = matchMedia('(max-width: 600px), (max-height: 520px) and (pointer: coarse)');
-  const set = () => document.body.classList.toggle('phone', forced ? forced === 'phone' : mq.matches);
-  set(); mq.addEventListener && mq.addEventListener('change', set);
+  const set = () => {
+    const bc = document.body.classList, ph = forced ? forced === 'phone' : mq.matches, land = innerWidth > innerHeight;
+    bc.toggle('phone', ph); bc.toggle('land', ph && land); bc.toggle('portrait', ph && !land);
+  };
+  set(); mq.addEventListener && mq.addEventListener('change', set); addEventListener('resize', set); addEventListener('orientationchange', set);
+  // tela cheia (Android: trava em horizontal; iPhone nao permite -> orienta a instalar na tela inicial)
+  const isStandalone = () => matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone;
+  $('fsbtn').addEventListener('pointerdown', async (e) => {
+    e.stopPropagation();
+    const de = document.documentElement;
+    if (document.fullscreenElement) { try { await document.exitFullscreen(); } catch (_) {} return; }
+    if (de.requestFullscreen) {
+      try { await de.requestFullscreen({ navigationUI: 'hide' }); } catch (_) {}
+      try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (_) {}
+    } else if (!isStandalone()) toast('📲 No iPhone: toque em Compartilhar ▸ "Adicionar à Tela de Início" e abra por lá para jogar em tela cheia');
+  });
+  let hid = false; try { hid = sessionStorage.getItem('rot_hide') === '1'; } catch (_) {}
+  const rh = $('rothint'); if (!hid && !isStandalone()) rh.classList.add('show');
+  $('rothide').addEventListener('click', () => { rh.classList.remove('show'); try { sessionStorage.setItem('rot_hide', '1'); } catch (_) {} });
 })();
 // menu da direita: recolhe os botoes secundarios (lembra a escolha)
 (function () {
   const tb = $('topbtns'); let min;
-  try { const v = localStorage.getItem('ui_min'); min = v == null ? innerWidth < 520 : v === '1'; } catch (_) { min = innerWidth < 520; }
+  try { const v = localStorage.getItem('ui_min'); min = v == null ? (innerWidth < 520 || innerHeight < 520) : v === '1'; } catch (_) { min = innerWidth < 520 || innerHeight < 520; }
   const apply = () => { tb.classList.toggle('min', min); $('morebtn').querySelector('small').textContent = min ? 'MAIS' : 'MENOS'; $('morebtn').querySelector('.i').textContent = min ? '☰' : '✕'; };
   apply();
   $('morebtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); min = !min; try { localStorage.setItem('ui_min', min ? '1' : '0'); } catch (_) {} apply(); });
