@@ -858,6 +858,13 @@ $('dialog').addEventListener('pointerdown', (e) => { e.stopPropagation(); nextLi
 // ===================== Painéis =====================
 function closePanel() { $('panel').classList.remove('open'); panelOpen = false; }
 $('panel').addEventListener('click', (e) => { if (e.target === $('panel') && !picking) closePanel(); });
+// celular x PC: body.phone liga o layout compacto (?ui=phone / ?ui=pc forca um deles)
+(function () {
+  const forced = new URLSearchParams(location.search).get('ui');
+  const mq = matchMedia('(max-width: 600px), (max-height: 520px) and (pointer: coarse)');
+  const set = () => document.body.classList.toggle('phone', forced ? forced === 'phone' : mq.matches);
+  set(); mq.addEventListener && mq.addEventListener('change', set);
+})();
 // menu da direita: recolhe os botoes secundarios (lembra a escolha)
 (function () {
   const tb = $('topbtns'); let min;
@@ -1779,7 +1786,7 @@ function runSkills(dt) {
   const O = sk('orbs');
   orbMeshes.forEach((m, i) => { m.visible = O > 0 && i < O + 1; });
   if (O) {
-    while (orbMeshes.length < O + 1) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 10), new THREE.MeshBasicMaterial({ color: 0xb28dff })); m.add(vfx.glowSprite(0xb28dff, 3.6)); scene.add(m); orbMeshes.push(m); m.visible = true; }
+    while (orbMeshes.length < O + 1) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 10), new THREE.MeshBasicMaterial({ color: 0xb28dff })); m.add(vfx.glowSprite(0xb28dff, 1.9)); scene.add(m); orbMeshes.push(m); m.visible = true; }
     orbAngle += dt * 2.8; const n = O + 1;
     orbMeshes.forEach((m, i) => {
       if (i >= n) return;

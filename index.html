@@ -60,6 +60,41 @@
   #topbtns button:active { transform:scale(.92); }
   #topbtns.min .more { display:none !important; }
   #panel.open ~ #menu { display:none; }
+  /* ===== modo CELULAR (body.phone): HUD compacto, menos ícones na tela. PC continua como antes ===== */
+  body.phone #hud { padding:calc(env(safe-area-inset-top) + 4px) 8px 4px; }
+  body.phone #hud .row { font-size:13px; gap:6px; }
+  body.phone #hud .row span { white-space:nowrap; }
+  body.phone #hname { overflow:hidden; text-overflow:ellipsis; max-width:44%; }
+  body.phone #hname img { width:22px !important; height:22px !important; margin-right:4px !important; }
+  body.phone #hpwrap { height:10px; margin-top:3px; border-width:1px; }
+  body.phone #stage { margin-top:2px; font-size:10px; }
+  body.phone #leftbtns { top:calc(env(safe-area-inset-top) + 66px); }
+  body.phone #leftbtns button { height:32px; font-size:11px; padding:0 9px; }
+  body.phone #topbtns { top:calc(env(safe-area-inset-top) + 66px); gap:5px !important; }
+  body.phone #topbtns button { width:42px; height:42px; border-width:2px; }
+  body.phone #topbtns button .i { font-size:17px; }
+  body.phone #topbtns button small { font-size:6.5px; }
+  body.phone #minimap { top:calc(env(safe-area-inset-top) + 104px); width:78px; height:78px; }
+  body.phone #skills { top:calc(env(safe-area-inset-top) + 64px); }
+  body.phone #menu { gap:6px; }
+  body.phone #menu button { width:42px; height:42px; font-size:17px; border-width:2px; }
+  body.phone #menu button small { font-size:6.5px; }
+  body.phone #skillbar { grid-template-columns:repeat(6,30px); gap:3px; bottom:calc(env(safe-area-inset-bottom) + 14px); }
+  body.phone #skillbar .sk { width:30px; height:30px; border-radius:8px; }
+  body.phone #skillbar .sk:not(.on) { display:none; }
+  body.phone #skillbar .ic { font-size:16px; line-height:26px; }
+  body.phone #skillbar .lv { font-size:9px; }
+  body.phone #team { left:6px; bottom:calc(env(safe-area-inset-bottom) + 14px); gap:5px; }
+  body.phone .tbtn { width:46px; height:46px; border-width:3px; font-size:18px; }
+  body.phone .tbtn small { font-size:8px; }
+  body.phone #skill { width:68px; height:68px; right:10px; bottom:calc(env(safe-area-inset-bottom) + 14px); font-size:15px; border-width:3px; }
+  body.phone #mount { min-width:78px; height:38px; font-size:12px; right:10px; bottom:calc(env(safe-area-inset-bottom) + 92px); border-width:2px; }
+  body.phone #fish { min-width:78px; height:38px; font-size:12px; right:10px; bottom:calc(env(safe-area-inset-bottom) + 138px); border-width:2px; }
+  body.phone #card { padding:12px; }
+  body.phone #card h2 { font-size:22px; margin-bottom:8px; }
+  body.phone #card .pclose { width:38px; height:38px; font-size:18px; }
+  body.phone #toast { font-size:17px; }
+
   #morebtn { border-color:#fff !important; background:radial-gradient(circle at 35% 30%, #6a4bc4, #3b2578) !important; }
   #card .pclose { position:sticky; top:0; float:right; margin:-6px -6px 4px 8px; width:46px; height:46px; border-radius:50%; background:#c0392b; border:3px solid #fff; color:#fff; font:inherit; font-size:22px; line-height:1; padding:0; cursor:pointer; z-index:3; box-shadow:0 2px 6px rgba(0,0,0,.5); }
   @media (max-width:520px) {
