@@ -13,6 +13,7 @@ import { createNet, nameTag, NET_URL } from './net.js';
 import { makeBiome, groundTex, BIOME_INFO } from './biomes.js';
 import { EXTRA_PETS } from './pets.js';
 import { createAmbient } from './ambient.js';
+import { createVfx } from './vfx.js';
 const IMG = ((import.meta.env && import.meta.env.BASE_URL) || './') + 'img/';
 import { QUESTS, ACH, LOGIN_DAYS, ensureMeta, loginState, claimLogin, loginReward, questReward, offlineGain } from './meta.js';
 import { initSocial } from './social.js';
@@ -110,6 +111,9 @@ Object.assign(sun.shadow.camera, { left: -22, right: 22, top: 22, bottom: -22, n
 scene.add(sun, sun.target);
 
 const ambient = createAmbient(scene);
+const vfx = createVfx(scene);
+const flashEl = (() => { const d = document.createElement('div'); d.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:2;opacity:0'; $('game').appendChild(d); return d; })();
+function screenFlash(color, a, ms) { flashEl.style.transition = 'none'; flashEl.style.background = 'radial-gradient(circle at 50% 60%,' + color + ' 0%,rgba(0,0,0,0) 75%)'; flashEl.style.opacity = a; void flashEl.offsetWidth; flashEl.style.transition = 'opacity ' + ms + 'ms ease-out'; flashEl.style.opacity = 0; }
 function setSky(colors) {
   const c = document.createElement('canvas'); c.width = 2; c.height = 256;
   const g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 256);
@@ -1009,20 +1013,14 @@ function addEffect(mesh, dur, tick, end) { scene.add(mesh); effects.push({ mesh,
 function disposeObj(o) { o.traverse(c => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); }); }
 
 function ringFx(pos, color, grow, dur, y) {
-  const m = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 40), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
-  m.rotation.x = -Math.PI / 2; m.position.set(pos.x, y || 0.15, pos.z);
-  addEffect(m, dur || 0.5, (k) => { m.scale.setScalar(1 + k * grow); m.material.opacity = 0.9 * (1 - k); });
+  vfx.shock(pos, color, 1 + grow, dur || 0.5, y);
+  if (grow >= 3) vfx.ringSparks(pos, color, (1 + grow) * 0.35, Math.min(26, 8 + grow * 2));
 }
 
-function swingFx(pos, a, r, arc, color) {
-  const g = new THREE.Group();
-  const m = new THREE.Mesh(new THREE.CircleGeometry(r, 20, -arc / 2, arc), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, side: THREE.DoubleSide }));
-  m.rotation.x = -Math.PI / 2; g.add(m); g.position.set(pos.x, 0.35, pos.z); g.rotation.y = a - Math.PI / 2;
-  addEffect(g, 0.25, (k) => { m.material.opacity = 0.6 * (1 - k); });
-}
+function swingFx(pos, a, r, arc, color) { vfx.slash(pos, a, r * 1.15, arc, color, 0.28); }
 
 function explode(pos, radius, dmg, color, exclude) {
-  ringFx(pos, color, radius, 0.35);
+  ringFx(pos, color, radius, 0.35); vfx.flash(pos, color, radius * 2.6, 0.3, 1); vfx.burst(pos, { color, n: Math.round(10 + radius * 5), speed: 3 + radius * 1.6, up: 0.8, size: 0.5, life: 0.65 });
   enemies.slice().forEach(x => { if (x !== exclude && dist2(x.mesh.position, pos) < radius + x.radius * 0.5) damageEnemy(x, dmg); });
 }
 
@@ -1208,6 +1206,7 @@ function damageEnemy(e, dmg, crit, fromNet) {
   if (e.res && !fromNet) { const k = ['mage', 'sorcerer', 'druid'].includes(hero.cls) ? e.res.m : e.res.p; if (k !== 1) { dmg = Math.max(1, Math.round(dmg * k)); if (Math.random() < 0.25) ftAt(e.mesh.position, k > 1 ? 'FRACO!' : 'RESISTE', k > 1 ? '#7CFC00' : '#9aa5b1', 2.3); } }
   const cc = Math.min(0.8, sk('crit') * 0.08 + statSum('crit') + petPerk('crit'));
   if (!fromNet && !crit && cc > 0 && Math.random() < cc) { dmg = Math.round(dmg * (1.8 + sk('deadly') * 0.2)); crit = true; }
+  vfx.burst(e.mesh.position, { color: crit ? 0xffb020 : 0xfff4d0, n: crit ? 16 : 7, speed: crit ? 5.5 : 3.6, up: 0.6, size: crit ? 0.45 : 0.3, life: 0.35, y: 1.0 }); if (crit) vfx.flash(e.mesh.position, 0xffc040, 3, 0.2, 1.2);
   e.hp -= dmg; ftAt(e.mesh.position, (crit ? '💥' : '') + dmg, crit ? '#ff9f1c' : '#ffd166', 1.6 * (e.boss ? 2 : 1));
   e.flash = 0.08;
   if (e.remote) { rl('ehit', { n: e.nid, d: dmg }, rmHost); if (e.hp <= 0) e.hp = 1; if (e === bossRef) $('bossfill').style.width = Math.max(0, e.hp / e.maxHp * 100) + '%'; return; }
@@ -1393,7 +1392,8 @@ function fire(from, to, color, dmg, opt) {
   const dir = to.clone().sub(from).setY(0).normalize();
   if (opt.arrow) { b.scale.set(0.35, 0.35, 2.4); b.rotation.y = Math.atan2(dir.x, dir.z); }
   scene.add(b);
-  bullets.push({ mesh: b, dir, life: opt.life || 1.1, dmg, speed: opt.speed || 16, kind: opt.kind, pierce: !!opt.pierce, splash: opt.splash || 0, color, hit: new Set() });
+  const gl = vfx.glowSprite(color, (opt.arrow ? 1.8 : 3.0) * (opt.size || 1)); gl.position.copy(b.position); scene.add(gl); vfx.flash(from, color, 2.6, 0.18, 1.2);
+  bullets.push({ glow: gl, mesh: b, dir, life: opt.life || 1.1, dmg, speed: opt.speed || 16, kind: opt.kind, pierce: !!opt.pierce, splash: opt.splash || 0, color, hit: new Set() });
 }
 
 function onBulletHit(b, e) {
@@ -1453,20 +1453,21 @@ function doAttack(target) {
 
 function heal(v) {
   if (hp >= maxHp) return;
-  hp = Math.min(maxHp, hp + v); ftAt(player.position, '+' + Math.round(v), '#7CFC00', 2.4);
+  hp = Math.min(maxHp, hp + v); ftAt(player.position, '+' + Math.round(v), '#7CFC00', 2.4); vfx.rise(player.position, 0x8cff8c, v > maxHp * 0.1 ? 26 : 5, 0.9, 2.4, 0.32);
 }
 
 function useSkill() {
   if (isPaused() || T < (skillReady[hero.id] || 0)) return;
   const cls = hero.cls, def = CLASSES[cls], p = player.position, dmg = atkPower();
   skillReady[hero.id] = T + def.ultCd * (1 - sk('arcane') * 0.08); playOnce(player, 'ult', 1.0);
+  { const c = '#' + new THREE.Color(hero.color).getHexString(); screenFlash(c, 0.4, 420); vfx.flash(p, hero.color, 7, 0.4, 1.3); }
   const fwd = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
   if (cls === 'warrior') {
-    ringFx(p, hero.color, 7, 0.5); shake = 0.35;
+    ringFx(p, hero.color, 7, 0.5); shake = 0.35; vfx.shock(p, 0xffc36b, 8, 0.6); vfx.burst(p, { color: 0xffc36b, n: 44, speed: 10, up: 0.3, size: 0.75, life: 0.8 }); vfx.column(p, 0xffd28a, 6, 6, 0.5); vfx.scorch(p, 4, 1.8);
     enemies.slice().forEach(e => { if (dist2(e.mesh.position, p) < 7) { e.stun = 2.5; damageEnemy(e, dmg * 2); } });
     shield = Math.round(maxHp * 0.25); shieldUntil = T + 6; toast('🛡️ Grito de Guerra!');
   } else if (cls === 'paladin') {
-    ringFx(p, 0xffe08a, 7, 0.6); shake = 0.3; heal(maxHp * 0.35); shield = Math.round(maxHp * 0.15); shieldUntil = T + 5;
+    ringFx(p, 0xffe08a, 7, 0.6); shake = 0.3; vfx.column(p, 0xffe9a0, 16, 6, 1.0); vfx.rise(p, 0xfff0a0, 40, 4, 5, 0.5); heal(maxHp * 0.35); shield = Math.round(maxHp * 0.15); shieldUntil = T + 5;
     enemies.slice().forEach(e => { if (dist2(e.mesh.position, p) < 6.5) damageEnemy(e, Math.round(dmg * 2.5)); });
     toast('✨ Luz Sagrada!');
   } else if (cls === 'assassin') {
@@ -1474,25 +1475,26 @@ function useSkill() {
     for (let i = 0; i < 6; i++) timers.push({ at: T + i * 0.18, fn: () => {
       const pool = enemies.filter(e => dist2(e.mesh.position, player.position) < 14); if (!pool.length) return;
       const t = pool[Math.floor(Math.random() * pool.length)], tp = t.mesh.position, pp = player.position;
-      ringFx(pp, hero.color, 1.5, 0.3);
+      ringFx(pp, hero.color, 1.5, 0.3); vfx.burst(pp, { color: 0x9b59ff, n: 16, speed: 4, size: 0.6, life: 0.5, grav: 0 });
       pp.x = THREE.MathUtils.clamp(tp.x + 1.1, -WORLD, WORLD); pp.z = THREE.MathUtils.clamp(tp.z, -WORLD, WORLD);
-      const crit = Math.random() < 0.35; damageEnemy(t, Math.round(dmg * 1.6 * (crit ? 2 : 1)), crit); ringFx(tp, 0xffffff, 2, 0.25);
+      const crit = Math.random() < 0.35; vfx.slash(tp, Math.random() * 6.28, 2.4, Math.PI * 1.1, 0xd9a6ff, 0.25, 1.1); vfx.slash(tp, Math.random() * 6.28, 2.0, Math.PI * 0.9, 0xffffff, 0.2, 1.0); damageEnemy(t, Math.round(dmg * 1.6 * (crit ? 2 : 1)), crit); ringFx(tp, 0xffffff, 2, 0.25);
     } });
   } else if (cls === 'mage') {
     const t = nearestEnemy(p, 14), tp = t ? t.mesh.position.clone() : p.clone().addScaledVector(fwd, 5);
-    const m = new THREE.Mesh(new THREE.SphereGeometry(1.2, 14, 12), glow(0xff5a1f)); m.position.set(tp.x, 22, tp.z);
-    addEffect(m, 0.8, (k) => { m.position.y = 22 * (1 - k) + 0.5; }, () => { explode(tp, 6.5, dmg * 6, 0xff5a1f); shake = 0.5; });
+    const m = new THREE.Mesh(new THREE.SphereGeometry(1.2, 14, 12), glow(0xff5a1f)); m.position.set(tp.x, 22, tp.z); m.add(vfx.glowSprite(0xff8a2a, 6));
+    addEffect(m, 0.8, (k) => { m.position.y = 22 * (1 - k) + 0.5; for (let i = 0; i < 3; i++) vfx.trail(m.position, i ? 0xffc060 : 0xff5a1f, 1.5); }, () => { explode(tp, 6.5, dmg * 6, 0xff5a1f); shake = 0.5; vfx.flash(tp, 0xffd27a, 18, 0.5, 1.5); vfx.shock(tp, 0xff6a1f, 8, 0.7); vfx.burst(tp, { color: 0xff7a2a, n: 70, speed: 12, up: 1.3, size: 0.95, life: 1.0, grav: 9 }); vfx.scorch(tp, 5, 4); screenFlash('#ffb060', 0.45, 500); });
     ringFx(tp, 0xff5a1f, 6.5, 0.8); toast('☄️ Meteoro!');
   } else if (cls === 'sorcerer') {
-    const mult = 3 + overload / 20; ringFx(p, hero.color, 9, 0.6); shake = 0.4;
+    const mult = 3 + overload / 20; ringFx(p, hero.color, 9, 0.6); shake = 0.4; vfx.spiral(p, hero.color, 9, 60); vfx.spiral(p, 0xffffff, 6, 30); vfx.shock(p, hero.color, 10, 0.8);
     enemies.slice().forEach(e => { if (dist2(e.mesh.position, p) < 9) damageEnemy(e, Math.round(dmg * mult)); });
     overload = 0; toast('🌀 Sobrecarga liberada!');
   } else if (cls === 'druid') {
-    bearUntil = T + 6; toast('🐻 Forma de Urso!'); heal(maxHp * 0.15); ringFx(p, 0x7CFC00, 5, 0.6);
+    bearUntil = T + 6; toast('🐻 Forma de Urso!'); heal(maxHp * 0.15); ringFx(p, 0x7CFC00, 5, 0.6); vfx.rise(p, 0x7CFC00, 44, 3.5, 4, 0.5); vfx.burst(p, { color: 0xb6ff6a, n: 30, speed: 7, up: 0.9, size: 0.55, life: 0.9, grav: 2 }); vfx.column(p, 0x9bff6a, 8, 4, 0.7);
   } else if (cls === 'archer') {
     const t = nearestEnemy(p, 14), tp = t ? t.mesh.position.clone() : p.clone().addScaledVector(fwd, 5);
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 40), new THREE.MeshBasicMaterial({ color: 0xfff3a0, transparent: true, opacity: 0.45, side: THREE.DoubleSide }));
     ring.rotation.x = -Math.PI / 2; ring.position.set(tp.x, 0.15, tp.z); ring.scale.setScalar(5); scene.add(ring);
+    vfx.shock(tp, 0xfff3a0, 5.5, 0.6); vfx.flash(tp, 0xfff3a0, 8, 0.3, 1);
     zones.push({ x: tp.x, z: tp.z, r: 5, until: T + 4, next: T, dmg: Math.round(dmg * 1.2), ring }); toast('🏹 Chuva de Flechas!');
   }
 }
@@ -1600,17 +1602,15 @@ function castSkill(id) {
     const tg = enemies.filter(e => dist2(e.mesh.position, p) < 16).sort((a, b) => dist2(a.mesh.position, p) - dist2(b.mesh.position, p)).slice(0, l + 1);
     if (!tg.length) return false;
     tg.forEach(e => {
-      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 14, 6), new THREE.MeshBasicMaterial({ color: 0xfff27a, transparent: true, opacity: 1 }));
-      m.position.set(e.mesh.position.x, 7, e.mesh.position.z);
-      addEffect(m, 0.3, (k) => { m.material.opacity = 1 - k; });
+      vfx.bolt(e.mesh.position, 0xfff27a, 18);
       ringFx(e.mesh.position, 0xfff27a, 1.8, 0.3); damageEnemy(e, Math.round(atkPower() * (1.2 + l * 0.25)));
     });
     return true;
   }
   if (!enemies.length) return false;
-  if (id === 'nova') { explode(p, 3.5 + l * 0.7, Math.round(atkPower() * (1.4 + l * 0.3)), 0xff6a2f); return true; }
+  if (id === 'nova') { vfx.shock(p, 0xff8a3a, 4.5 + l * 0.7, 0.5); explode(p, 3.5 + l * 0.7, Math.round(atkPower() * (1.4 + l * 0.3)), 0xff6a2f); return true; }
   if (id === 'frost') {
-    const r = 5 + l * 0.6; ringFx(p, 0x7fdcff, r, 0.5);
+    const r = 5 + l * 0.6; ringFx(p, 0x7fdcff, r, 0.5); vfx.burst(p, { color: 0xc4f4ff, n: 44, speed: r * 1.7, up: 0.3, size: 0.55, life: 0.9, grav: 2 }); vfx.flash(p, 0x9fe8ff, r * 1.8, 0.4, 0.8);
     enemies.slice().forEach(e => { if (dist2(e.mesh.position, p) < r) { e.slow = 2.5 + l * 0.4; damageEnemy(e, Math.round(atkPower() * (0.8 + l * 0.2))); } });
     return true;
   }
@@ -1630,11 +1630,11 @@ function runSkills(dt) {
   const O = sk('orbs');
   orbMeshes.forEach((m, i) => { m.visible = O > 0 && i < O + 1; });
   if (O) {
-    while (orbMeshes.length < O + 1) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 10), new THREE.MeshBasicMaterial({ color: 0xb28dff })); scene.add(m); orbMeshes.push(m); m.visible = true; }
+    while (orbMeshes.length < O + 1) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 10), new THREE.MeshBasicMaterial({ color: 0xb28dff })); m.add(vfx.glowSprite(0xb28dff, 3.6)); scene.add(m); orbMeshes.push(m); m.visible = true; }
     orbAngle += dt * 2.8; const n = O + 1;
     orbMeshes.forEach((m, i) => {
       if (i >= n) return;
-      const a = orbAngle + i / n * Math.PI * 2; m.position.set(p.x + Math.cos(a) * 2.5, 1.2, p.z + Math.sin(a) * 2.5);
+      const a = orbAngle + i / n * Math.PI * 2; m.position.set(p.x + Math.cos(a) * 2.5, 1.2, p.z + Math.sin(a) * 2.5); vfx.trail(m.position, 0xb28dff, 0.5);
       enemies.slice().forEach(e => { if (T >= (e.orbCd || 0) && Math.hypot(e.mesh.position.x - m.position.x, e.mesh.position.z - m.position.z) < e.radius + 0.6) { e.orbCd = T + 0.5; damageEnemy(e, Math.round(atkPower() * 0.6)); } });
     });
   }
@@ -2424,7 +2424,7 @@ function update(dt) {
   // projéteis inimigos
   for (let i = eshots.length - 1; i >= 0; i--) {
     const b = eshots[i]; if (!b) continue;   // (clearEnemies pode esvaziar a lista se o tiro matar o jogador)
-    b.mesh.position.addScaledVector(b.dir, b.speed * dt); b.life -= dt;
+    b.mesh.position.addScaledVector(b.dir, b.speed * dt); b.life -= dt; vfx.trail(b.mesh.position, b.color, 0.55);
     const hit = !b.vis && Math.hypot(b.mesh.position.x - p.x, b.mesh.position.z - p.z) < 0.8;
     if (hit) { hitPlayer({ dmg: b.dmg }); if (b.splash) ringFx(b.mesh.position, b.color, b.splash, 0.35); }
     let hitR = false;
@@ -2436,13 +2436,14 @@ function update(dt) {
   for (let i = bullets.length - 1; i >= 0; i--) {
     const b = bullets[i];
     b.mesh.position.addScaledVector(b.dir, b.speed * dt); b.life -= dt;
+    if (b.glow) b.glow.position.copy(b.mesh.position); vfx.trail(b.mesh.position, b.color, b.splash ? 0.7 : 0.5); if (b.kind === 'bolt' || b.pierce) vfx.trail(b.mesh.position, 0xffffff, 0.25);
     const hits = enemies.filter(e => !b.hit.has(e) && Math.hypot(e.mesh.position.x - b.mesh.position.x, e.mesh.position.z - b.mesh.position.z) < e.radius + 0.25);
     let remove = b.life <= 0;
     if (hits.length) {
       if (b.pierce) { hits.forEach(e => { b.hit.add(e); onBulletHit(b, e); }); }
       else { b.hit.add(hits[0]); onBulletHit(b, hits[0]); remove = true; }
     } else if (remove && b.splash) explode(b.mesh.position, b.splash, Math.round(b.dmg * 0.7), b.color);
-    if (remove) { scene.remove(b.mesh); b.mesh.material.dispose(); bullets.splice(i, 1); }
+    if (remove) { scene.remove(b.mesh); if (b.glow) scene.remove(b.glow); b.mesh.material.dispose(); bullets.splice(i, 1); }
   }
 
   // efeitos, zonas e temporizadores
@@ -2453,7 +2454,8 @@ function update(dt) {
   }
   for (let i = zones.length - 1; i >= 0; i--) {
     const z = zones[i];
-    if (T >= z.next) { z.next = T + 0.4; enemies.slice().forEach(e => { if (Math.hypot(e.mesh.position.x - z.x, e.mesh.position.z - z.z) < z.r) damageEnemy(e, z.dmg); }); ringFx({ x: z.x + (Math.random() - 0.5) * z.r, z: z.z + (Math.random() - 0.5) * z.r }, 0xfff3a0, 0.8, 0.25); }
+    for (let q = 0; q < 2; q++) { const a = Math.random() * 6.283, rr = Math.sqrt(Math.random()) * z.r; vfx.emit(z.x + Math.cos(a) * rr, 14, z.z + Math.sin(a) * rr, 0, -30, 0, 0.45, 0.5, 0.12, 0xfff3a0, 1, 0, 0); }
+    if (T >= z.next) { z.next = T + 0.4; for (let q = 0; q < 4; q++) { const a = Math.random() * 6.283, rr = Math.sqrt(Math.random()) * z.r; vfx.burst({ x: z.x + Math.cos(a) * rr, z: z.z + Math.sin(a) * rr, y: 0 }, { color: 0xfff3a0, n: 5, speed: 3, size: 0.3, life: 0.35, y: 0.2 }); } enemies.slice().forEach(e => { if (Math.hypot(e.mesh.position.x - z.x, e.mesh.position.z - z.z) < z.r) damageEnemy(e, z.dmg); }); ringFx({ x: z.x + (Math.random() - 0.5) * z.r, z: z.z + (Math.random() - 0.5) * z.r }, 0xfff3a0, 0.8, 0.25); }
     if (T >= z.until) { scene.remove(z.ring); disposeObj(z.ring); zones.splice(i, 1); }
   }
   for (let i = timers.length - 1; i >= 0; i--) { if (T >= timers[i].at) { const f = timers[i].fn; timers.splice(i, 1); f(); } }
@@ -2486,6 +2488,7 @@ function frame() {
   farGroup.position.set(p.x, 0, p.z);
   ambient.setVisible(!inCity && !decor.on); if (!inCity) ambient.update(dt, p);
   sun.position.set(p.x + 10, 18, p.z + 7); sun.target.position.copy(p);
+  vfx.update(dt, camera, renderer.domElement.height);
   renderer.render(scene, camera);
 }
 
@@ -2508,7 +2511,7 @@ if (qs.has('city')) setCityMode(true);
 if (qs.has('at')) { const [ax, az] = qs.get('at').split(',').map(Number); if (!qs.has('city')) setCityMode(true); player.position.set(ax, 0, az); syncCam(); }
 if (qs.has('night')) dayT = +qs.get('night') || 0;
 if (qs.has('quests')) setTimeout(() => openQuests(), 1500);
-if (qs.has('dbg')) window.__g = { get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
+if (qs.has('dbg')) window.__g = { useSkill, castSkill, get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
 if (qs.get('pos')) { const iv = setInterval(() => { if (!gameStarted) return; clearInterval(iv); setTimeout(() => { const [px, pz] = qs.get('pos').split(',').map(Number); if (inCity) setCityMode(false); player.position.set(px || 0, 0, pz || 0); playerGy = walkY(px || 0, pz || 0); }, 600); }, 300); }
 if (qs.get('cam') === 'low') { camMode = 'low'; $('camb').querySelector('small').textContent = 'IMERSIVA'; }
 if (qs.has('yaw')) { camYaw = camYawT = +qs.get('yaw'); }
