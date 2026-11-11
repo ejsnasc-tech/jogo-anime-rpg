@@ -158,17 +158,17 @@ export const ENDING = [
 export const ACTS = [
   {
     realm: 'mares', name: 'Mar das Marés', reward: 'sora',
-    boss: { name: 'Capitão Fantasma', color: 0x9fe8ff },
+    boss: { name: 'Rei Abissal', color: 0x9fe8ff },
     intro: [
       ['Kaito', 'Esse mar está estranho... as ondas somem na névoa. Fiquem atrás de mim!'],
     ],
     bossIntro: [
-      ['Capitão Fantasma', 'Quem ousa navegar em águas que eu já esqueci?'],
-      ['Kaito', 'Um navio sem tripulação... o Esquecimento levou até o nome dele.'],
+      ['Rei Abissal', 'Quem ousa nadar em águas que eu já esqueci?'],
+      ['Kaito', 'Um rei-peixe sem reino... o Esquecimento levou até o nome dele.'],
       ['Kaito', 'Vamos devolver o que é dele!'],
     ],
     outro: [
-      ['Capitão Fantasma', 'Eu... lembro. Eu era Marcus, o Cartógrafo. Obrigado.'],
+      ['Rei Abissal', 'Eu... lembro. Eu era Marcus, o Cartógrafo. Obrigado.'],
       ['Narrador', 'O primeiro fragmento do Tomo brilhou na Pena.'],
       ['Sora', 'Uau, que luz! Eu sou a Sora, do Clã das Sombras. Segui esse brilho por três Reinos. Posso ir com vocês?'],
       ['Kaito', 'Claro! Quanto mais gente na tripulação, melhor!'],
@@ -194,13 +194,13 @@ export const ACTS = [
   },
   {
     realm: 'arcana', name: 'Academia Arcana', reward: 'lumen',
-    boss: { name: 'Arquimago Vazio', color: 0x9d8cff },
+    boss: { name: 'Serafim Vazio', color: 0x9d8cff },
     intro: [
       ['Narrador', 'A Academia Arcana flutua entre as nuvens. Os livros voam sozinhos, mas metade deles está em branco.'],
       ['Ren', 'Livros em branco... o Esquecimento chegou aqui primeiro.'],
     ],
     bossIntro: [
-      ['Arquimago Vazio', 'Conhecimento é uma jaula. Eu abri todas as portas... e apaguei o que havia atrás.'],
+      ['Serafim Vazio', 'Conhecimento é uma jaula. Eu abri todas as portas... e apaguei o que havia atrás.'],
       ['Kaito', 'Isso não é libertar, é destruir!'],
     ],
     outro: [
@@ -211,13 +211,13 @@ export const ACTS = [
   },
   {
     realm: 'planalto', name: 'Planalto Dourado', reward: 'akira',
-    boss: { name: 'Titã de Ouro Velho', color: 0xffd45e },
+    boss: { name: 'Flor-Titã Dourada', color: 0xffd45e },
     intro: [
       ['Narrador', 'No Planalto Dourado, guerreiros treinam desde o nascer do sol. Agora, os campos de treino estão vazios.'],
       ['Lúmen', 'Vazios... ou apagados?'],
     ],
     bossIntro: [
-      ['Titã de Ouro Velho', 'Força é tudo que resta quando a memória se vai.'],
+      ['Flor-Titã Dourada', 'Força é tudo que resta quando a memória se vai.'],
       ['Kaito', 'Então vamos mostrar que a memória também é uma força!'],
     ],
     outro: [

@@ -1049,8 +1049,8 @@ function spawnProxy(r) {
   const tintBase = boss ? info.color : (T0.tint != null ? T0.tint : realm.enemy);
   const BS = boss ? BOSSES[curAct().realm] : null;
   const tint = new THREE.Color(BS ? BS.tint : tintBase).lerp(new THREE.Color(0xffffff), boss ? (BS ? 0 : 0.2) : (T0.tint != null ? 0.1 : 0.5)).getHex();
-  const mesh = makeSkeleton(BS ? BS.model : T0.model, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run, bsize: BS && BS.size }) || makeEnemy(boss ? info.color : realm.enemy, boss);
-  if (BS) bossLook(mesh, curAct().realm);
+  const mesh = (BS && BS.proc && bossBody(curAct().realm)) || makeSkeleton(BS ? BS.model : T0.model, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run, bsize: BS && BS.size }) || makeEnemy(boss ? info.color : realm.enemy, boss);
+  if (BS && !BS.proc) bossLook(mesh, curAct().realm);
   mesh.position.set(r[2], 0, r[3]); scene.add(mesh);
   const e = { nid: r[0], remote: true, mesh, hp: Math.max(1, r[4]), maxHp: r[5], speed: 0, boss, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? (BS ? BS.r : 1.4) : T0.r, t: Math.random() * 10, dmg: 0, stun: 0, slow: 0, flash: 0, ranged: null, res: boss ? null : T0.res || null, tx: r[2], tz: r[3], elite };
   if (elite) {
@@ -1135,12 +1135,12 @@ const HORDES = {
 
 // ---- chefoes: cada reino tem o seu, com visual e ataques proprios ----
 const BOSSES = {
-  mares:    { model: 'Skeleton_Warrior', size: 4.6, r: 1.5, spd: 1.4, tint: 0x9fe8ff, fx: 0x4fc3ff, moves: ['tide', 'cannon', 'sum:swarm', 'cannon'] },
+  mares:    { proc: true, model: 'Skeleton_Warrior', size: 4.6, r: 1.5, spd: 1.4, tint: 0x9fe8ff, fx: 0x4fc3ff, moves: ['tide', 'cannon', 'sum:swarm', 'cannon'] },
   sombras:  { model: 'Skeleton_Rogue',   size: 3.9, r: 1.2, spd: 1.9, tint: 0x6a4aa0, fx: 0xb085ff, moves: ['blink', 'lines', 'sum:stalker', 'blink'] },
-  arcana:   { model: 'Skeleton_Mage',    size: 4.4, r: 1.3, spd: 1.1, tint: 0x9d8cff, fx: 0x9d8cff, moves: ['rain', 'rain', 'sum:nova', 'erase'] },
-  planalto: { model: 'Skeleton_Warrior', size: 5.6, r: 1.9, spd: 1.2, tint: 0xffd45e, fx: 0xffd45e, moves: ['slam', 'charge', 'charge', 'slam'] },
-  primeva:  { model: 'Skeleton_Minion',  size: 5.2, r: 1.7, spd: 1.0, tint: 0x7dff9b, fx: 0x7dff9b, moves: ['roots', 'poison', 'sum:bomber', 'roots'] },
-  vazio:    { model: 'Skeleton_Mage',    size: 5.6, r: 1.6, spd: 1.5, tint: 0xffffff, fx: 0xffffff, moves: ['erase', 'rain', 'blink', 'charge', 'slam', 'roots', 'sum:summoner'] },
+  arcana:   { proc: true, model: 'Skeleton_Mage',    size: 4.4, r: 1.3, spd: 1.1, tint: 0x9d8cff, fx: 0x9d8cff, moves: ['rain', 'rain', 'sum:nova', 'erase'] },
+  planalto: { proc: true, model: 'Skeleton_Warrior', size: 5.6, r: 1.9, spd: 1.2, tint: 0xffd45e, fx: 0xffd45e, moves: ['slam', 'charge', 'charge', 'slam'] },
+  primeva:  { proc: true, model: 'Skeleton_Minion',  size: 5.2, r: 1.7, spd: 1.0, tint: 0x7dff9b, fx: 0x7dff9b, moves: ['roots', 'poison', 'sum:bomber', 'roots'] },
+  vazio:    { proc: true, model: 'Skeleton_Mage',    size: 5.6, r: 1.6, spd: 1.5, tint: 0xffffff, fx: 0xffffff, moves: ['erase', 'rain', 'blink', 'charge', 'slam', 'roots', 'sum:summoner'] },
 };
 const BNAME = { tide: '🌊 Maré!', cannon: '💣 Canhonaço!', blink: '👤 Sombra!', lines: '🗡 Lâminas!', rain: '☄ Chuva arcana!', erase: '⚪ Apagar!', slam: '💥 Pancada!', charge: '🐂 Investida!', roots: '🌿 Raízes!', poison: '☠ Veneno!' };
 function bossLook(mesh, realm) {
@@ -1150,28 +1150,89 @@ function bossLook(mesh, realm) {
   const spin = new THREE.Group(); spin.position.y = B.size * 0.55; mesh.add(spin); mesh.userData.spinG = spin;
   const orbit = (n, R, mk) => { for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2, m = mk(i); m.position.set(Math.cos(a) * R, Math.sin(i * 2.1) * 0.5, Math.sin(a) * R); m.rotation.y = -a; spin.add(m); } };
   const S = B.size;
-  if (realm === 'mares') {
-    mesh.traverse(o => { if (o.isMesh && o.material) { o.material.transparent = true; o.material.opacity = 0.72; } });
-    add(mesh, new THREE.TorusGeometry(1.7, 0.13, 8, 20), bm(0xc8a24a), 0, S * 0.62, -1.3);
-    orbit(5, 2.7, () => new THREE.Mesh(new THREE.SphereGeometry(0.26, 8, 6), bm(0x9fe8ff)));
-  } else if (realm === 'sombras') {
+  if (realm === 'sombras') {
     add(mesh, new THREE.ConeGeometry(1.5, S * 0.95, 8, 1, true), bm(0x140828, 0.75), 0, S * 0.45, -0.4).material.side = THREE.DoubleSide;
     orbit(4, 2.4, () => new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.7, 0.08), bm(0xb085ff)));
-  } else if (realm === 'arcana') {
-    const t = add(mesh, new THREE.TorusGeometry(1.4, 0.07, 6, 28), bm(0xc9b8ff), 0, S + 0.7, 0); t.rotation.x = Math.PI / 2;
-    orbit(4, 2.8, () => new THREE.Mesh(new THREE.OctahedronGeometry(0.34), bm(0x9d8cff)));
-  } else if (realm === 'planalto') {
-    [-1, 1].forEach(sd => { const k = add(mesh, new THREE.ConeGeometry(0.4, 1.3, 6), bm(0xffc233, 1), sd * 1.5, S * 0.78, 0); k.rotation.z = -sd * 0.5; });
-    const h = add(mesh, new THREE.TorusGeometry(1.0, 0.09, 6, 24), bm(0xffe08a), 0, S + 0.6, 0); h.rotation.x = Math.PI / 2;
-    const ham = new THREE.Group(); ham.position.set(2.2, S * 0.4, 0.4); mesh.add(ham);
-    add(ham, new THREE.CylinderGeometry(0.1, 0.1, 2.6, 6), bm(0x7a5a2a, 1), 0, 0, 0); add(ham, new THREE.BoxGeometry(1.2, 0.8, 0.8), bm(0xffc233, 1), 0, 1.4, 0);
-  } else if (realm === 'primeva') {
-    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, k = add(mesh, new THREE.ConeGeometry(0.16, 1.7, 5), bm(0x5a3b1a, 1), Math.cos(a) * 0.5, S * 0.92, Math.sin(a) * 0.5); k.rotation.z = -Math.cos(a) * 0.7; k.rotation.x = Math.sin(a) * 0.7; }
-    orbit(6, 2.8, () => new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 6), bm(0x7dff9b)));
-  } else if (realm === 'vazio') {
-    [0, 1, 2].forEach(i => { const t = new THREE.Mesh(new THREE.TorusGeometry(2.8, 0.05, 6, 40), bm(0xffffff, 0.8)); t.rotation.set(i * 1.05, i * 0.7, 0); spin.add(t); });
-    add(mesh, new THREE.SphereGeometry(0.9, 14, 10), bm(0x000000, 0.9), 0, S * 0.6, 0.2);
   }
+}
+// corpos procedurais dos chefes que nao sao esqueletos (Rei Abissal, Serafim, Flor-Titã, Árvore-Mãe, Apagador)
+function bossBody(realm) {
+  const g = new THREE.Group(), U = g.userData; U.parts = {};
+  const sm = (c, em, ei) => new THREE.MeshStandardMaterial({ color: c, emissive: em == null ? 0x000000 : em, emissiveIntensity: ei == null ? 0.7 : ei, roughness: 0.6, metalness: 0.1 });
+  const mk = (geo, mat, x, y, z, par) => { const m = new THREE.Mesh(geo, mat); m.position.set(x || 0, y || 0, z || 0); (par || g).add(m); return m; };
+  const grp = (x, y, z, par) => { const o = new THREE.Group(); o.position.set(x || 0, y || 0, z || 0); (par || g).add(o); return o; };
+  const eye = (par, x, y, z, r, col) => { mk(new THREE.SphereGeometry(r, 12, 10), sm(0xffffff, 0xffffff, 0.5), x, y, z, par); mk(new THREE.SphereGeometry(r * 0.5, 10, 8), sm(col || 0x111111), x, y, z + r * 0.72, par); };
+  const spin = grp(0, 2.6, 0); U.spinG = spin;
+  const orbit = (n, R, mk2) => { for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2, m = mk2(i); m.position.set(Math.cos(a) * R, Math.sin(i * 2.1) * 0.5, Math.sin(a) * R); spin.add(m); } };
+
+  if (realm === 'mares') {   // Rei Abissal: peixe-rei com coroa e tridente
+    const body = mk(new THREE.SphereGeometry(1.5, 20, 16), sm(0x2f8fbf, 0x0a3a55, 0.5), 0, 2.4, 0); body.scale.set(1, 1.35, 0.85);
+    const belly = mk(new THREE.SphereGeometry(1.2, 16, 12), sm(0xbfeaf2, 0x2a6a7a, 0.4), 0, 2.0, 0.55); belly.scale.set(0.9, 1.1, 0.6);
+    [-0.65, 0.65].forEach(x => eye(g, x, 3.3, 1.05, 0.45, 0x111111));
+    mk(new THREE.BoxGeometry(1.5, 0.22, 0.3), sm(0x1a0a14), 0, 2.55, 1.28);
+    for (let i = 0; i < 7; i++) { const t = mk(new THREE.ConeGeometry(0.07, 0.24, 5), sm(0xffffff), -0.65 + i * 0.22, 2.42, 1.3); t.rotation.x = Math.PI; }
+    const crest = mk(new THREE.ConeGeometry(0.6, 1.8, 4), sm(0xff6a3a, 0x7a2200, 0.6), 0, 4.2, -0.1); crest.scale.z = 0.25;
+    [-1, 1].forEach(sd => { const f = mk(new THREE.ConeGeometry(0.45, 1.5, 4), sm(0xff6a3a, 0x7a2200, 0.5), sd * 1.75, 2.5, 0); f.rotation.z = -sd * 1.3; f.scale.z = 0.25; U.parts['fin' + sd] = f; });
+    const tail = grp(0, 1.0, -1.1); U.parts.tail = tail; const tf = mk(new THREE.ConeGeometry(1.0, 1.9, 4), sm(0xff6a3a, 0x7a2200, 0.5), 0, -0.2, -0.3, tail); tf.rotation.x = -1.2; tf.scale.x = 0.3; tf.scale.z = 0.2;
+    const crown = grp(0, 4.15, 0.55); mk(new THREE.CylinderGeometry(0.62, 0.55, 0.35, 10), sm(0xffc233, 0xaa7a00, 0.6), 0, 0, 0, crown);
+    for (let i = 0; i < 6; i++) { const a = i / 6 * 6.28; mk(new THREE.ConeGeometry(0.12, 0.45, 5), sm(0xffc233, 0xaa7a00, 0.6), Math.cos(a) * 0.55, 0.35, Math.sin(a) * 0.55, crown); }
+    [-0.55, 0.55].forEach(x => { mk(new THREE.CylinderGeometry(0.22, 0.28, 1.1, 8), sm(0x2f8fbf), x, 0.55, 0.1); const ft = mk(new THREE.ConeGeometry(0.5, 0.15, 3), sm(0x1d6f98), x, 0.08, 0.35); ft.scale.x = 1.4; });
+    const tri = grp(2.35, 1.9, 0.5); U.parts.tri = tri;
+    mk(new THREE.CylinderGeometry(0.07, 0.07, 3.8, 6), sm(0xffc233, 0xaa7a00, 0.5), 0, 0.6, 0, tri);
+    [-0.35, 0, 0.35].forEach(x => mk(new THREE.ConeGeometry(0.1, 0.9, 5), sm(0xfff2a0, 0xaaaa33, 0.7), x, 2.9, 0, tri));
+    orbit(5, 3.0, () => new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.8 })));
+    U.tick = (t) => { tail.rotation.y = Math.sin(t * 3) * 0.5; [-1, 1].forEach(sd => { U.parts['fin' + sd].rotation.z = -sd * (1.3 + Math.sin(t * 5) * 0.25); }); tri.rotation.z = Math.sin(t * 2) * 0.08; };
+  } else if (realm === 'arcana') {   // Serafim Vazio: anjo flutuante com asas e halo
+    const float = grp(0, 0.9, 0); U.parts.fl = float;
+    const robe = mk(new THREE.ConeGeometry(1.35, 3.0, 12, 1, true), sm(0xf4f0ff, 0x9d8cff, 0.35), 0, 1.5, 0, float); robe.material.side = THREE.DoubleSide;
+    mk(new THREE.CylinderGeometry(0.55, 0.9, 1.3, 10), sm(0xffffff, 0x9d8cff, 0.35), 0, 2.9, 0, float);
+    mk(new THREE.SphereGeometry(0.5, 14, 12), sm(0xffe8d6), 0, 3.85, 0, float);
+    mk(new THREE.SphereGeometry(0.55, 12, 8, 0, 6.28, 0, 1.4), sm(0xc9b8ff, 0x7a5cff, 0.6), 0, 3.95, -0.05, float);
+    [-0.2, 0.2].forEach(x => mk(new THREE.SphereGeometry(0.07, 8, 6), sm(0x7ad7ff, 0x3fc3ff, 1), x, 3.9, 0.45, float));
+    const halo = mk(new THREE.TorusGeometry(0.6, 0.07, 8, 28), new THREE.MeshBasicMaterial({ color: 0xffe9a0 }), 0, 4.65, 0, float); halo.rotation.x = Math.PI / 2 - 0.2;
+    U.parts.wings = [];
+    [-1, 1].forEach(sd => { const w = grp(sd * 0.5, 3.1, -0.3, float); for (let i = 0; i < 5; i++) { const f = mk(new THREE.BoxGeometry(0.34, 2.6 - i * 0.28, 0.05), new THREE.MeshBasicMaterial({ color: i % 2 ? 0xffffff : 0xd9ccff, transparent: true, opacity: 0.92 }), sd * (0.9 + i * 0.5), 0.4 - i * 0.18, 0, w); f.rotation.z = -sd * (0.9 + i * 0.12); } U.parts.wings.push([w, sd]); });
+    [-1, 1].forEach(sd => { const a = mk(new THREE.CylinderGeometry(0.16, 0.12, 1.5, 6), sm(0xffffff, 0x9d8cff, 0.3), sd * 1.0, 2.9, 0.35, float); a.rotation.z = sd * 0.35; a.rotation.x = -0.5; });
+    const sw = grp(1.35, 2.6, 0.9, float); mk(new THREE.BoxGeometry(0.16, 2.8, 0.06), new THREE.MeshBasicMaterial({ color: 0xcfe6ff }), 0, 0.9, 0, sw); mk(new THREE.BoxGeometry(0.7, 0.14, 0.1), sm(0xffc233, 0xaa7a00, 0.6), 0, -0.4, 0, sw);
+    orbit(4, 2.9, () => new THREE.Mesh(new THREE.OctahedronGeometry(0.3), new THREE.MeshBasicMaterial({ color: 0xc9b8ff, transparent: true, opacity: 0.85 })));
+    U.tick = (t) => { float.position.y = 0.9 + Math.sin(t * 2) * 0.25; U.parts.wings.forEach(([w, sd]) => { w.rotation.z = sd * (0.05 + Math.sin(t * 4) * 0.22); }); };
+  } else if (realm === 'planalto') {   // Flor-Titã: planta carnívora gigante
+    for (let i = 0; i < 6; i++) { const a = i / 6 * 6.28, l = mk(new THREE.SphereGeometry(1, 10, 8), sm(0x2e9a3a, 0x0c3a10, 0.4), Math.cos(a) * 1.6, 0.5, Math.sin(a) * 1.6); l.scale.set(0.9, 0.18, 1.7); l.rotation.y = -a; l.rotation.z = 0.25; }
+    const stem = grp(0, 0, 0); U.parts.stem = stem;
+    mk(new THREE.CylinderGeometry(0.55, 0.9, 2.3, 10), sm(0x2f8f3a, 0x0c3a10, 0.4), 0, 1.15, 0, stem);
+    const st2 = grp(0, 2.2, 0, stem); U.parts.st2 = st2; mk(new THREE.CylinderGeometry(0.45, 0.55, 2.0, 10), sm(0x37a843, 0x0c3a10, 0.4), 0, 1.0, 0, st2);
+    const head = grp(0, 2.2, 0.2, st2); U.parts.head = head;
+    const lower = mk(new THREE.SphereGeometry(1.5, 18, 10, 0, 6.28, Math.PI / 2, Math.PI / 2), sm(0xd8234a, 0x66101f, 0.6), 0, 0, 0, head); lower.material.side = THREE.DoubleSide;
+    const up = grp(0, 0, -1.4, head); U.parts.up = up;
+    const dome = mk(new THREE.SphereGeometry(1.5, 18, 10, 0, 6.28, 0, Math.PI / 2), sm(0x37a843, 0x0c3a10, 0.4), 0, 0, 1.4, up); dome.material.side = THREE.DoubleSide;
+    mk(new THREE.SphereGeometry(1.35, 14, 8, 0, 6.28, 0, Math.PI / 2), sm(0xff4a6a, 0x881126, 0.7), 0, -0.05, 1.4, up).material.side = THREE.DoubleSide;
+    for (let i = 0; i < 12; i++) { const a = Math.PI + i / 11 * Math.PI; [lower, dome].forEach((h, j) => { const t = mk(new THREE.ConeGeometry(0.11, 0.5, 5), sm(0xffffff), Math.cos(a) * 1.4, 0, Math.sin(a) * -1.4 + (j ? 1.4 : 0), j ? up : head); t.rotation.x = j ? 0 : Math.PI; }); }
+    [-1, 1].forEach(sd => { const v = mk(new THREE.CylinderGeometry(0.1, 0.16, 3.2, 6), sm(0x2f8f3a), sd * 1.3, 1.6, 0.3); v.rotation.z = sd * 0.5; const fl = grp(sd * 2.1, 3.2, 0.3); for (let i = 0; i < 6; i++) { const a = i / 6 * 6.28, p = mk(new THREE.SphereGeometry(0.3, 8, 6), sm(0xffd23a, 0xaa7a00, 0.7), Math.cos(a) * 0.4, Math.sin(a) * 0.4, 0, fl); p.scale.set(1, 1.5, 0.4); } mk(new THREE.SphereGeometry(0.22, 8, 6), sm(0xff8a1a, 0x883300, 0.7), 0, 0, 0.12, fl); });
+    orbit(6, 3.0, () => new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.85 })));
+    U.tick = (t) => { stem.rotation.z = Math.sin(t * 1.3) * 0.08; st2.rotation.x = 0.15 + Math.sin(t * 1.7) * 0.1; U.parts.up.rotation.x = -(0.25 + (Math.sin(t * 2.4) * 0.5 + 0.5) * 0.7); };
+  } else if (realm === 'primeva') {   // Árvore-Mãe: arvore ancia com rosto e bracos de galho
+    mk(new THREE.CylinderGeometry(1.1, 1.8, 4.2, 12), sm(0x6b4a26, 0x1a0f05, 0.3), 0, 2.4, 0);
+    for (let i = 0; i < 5; i++) { const a = i / 5 * 6.28, r = mk(new THREE.ConeGeometry(0.5, 2.2, 6), sm(0x5a3b1a), Math.cos(a) * 1.7, 0.5, Math.sin(a) * 1.7); r.rotation.z = Math.cos(a) * 1.0; r.rotation.x = -Math.sin(a) * 1.0; }
+    [-0.5, 0.5].forEach(x => { mk(new THREE.SphereGeometry(0.24, 10, 8), sm(0x7dff9b, 0x3dff6b, 1.2), x, 3.5, 0.95); });
+    mk(new THREE.BoxGeometry(0.9, 0.35, 0.3), sm(0x1a0f05), 0, 2.7, 1.05);
+    mk(new THREE.SphereGeometry(0.2, 8, 6), sm(0x7dff9b, 0x3dff6b, 1), 0, 2.7, 1.2);
+    const can = grp(0, 5.0, 0); [[0, 0, 0, 2.3], [-1.6, -0.3, 0.4, 1.7], [1.6, -0.2, -0.3, 1.8], [0.3, 0.8, -1.2, 1.6], [-0.2, 0.2, 1.4, 1.5]].forEach(c => mk(new THREE.SphereGeometry(c[3], 12, 10), sm(0x2f9a3a, 0x0c3a10, 0.4), c[0], c[1], c[2], can));
+    U.parts.arms = [];
+    [-1, 1].forEach(sd => { const arm = grp(sd * 1.1, 3.8, 0); const b = mk(new THREE.CylinderGeometry(0.2, 0.4, 3.2, 7), sm(0x6b4a26), sd * 1.5, -0.2, 0.3, arm); b.rotation.z = sd * 1.0; for (let i = 0; i < 3; i++) { const tw = mk(new THREE.ConeGeometry(0.1, 1.0, 5), sm(0x5a3b1a), sd * 3.1, -0.9 + i * 0.1, 0.3 + (i - 1) * 0.35, arm); tw.rotation.z = sd * 1.5; } U.parts.arms.push([arm, sd]); });
+    for (let i = 0; i < 5; i++) { const a = i / 5 * 6.28 + 0.4; mk(new THREE.CylinderGeometry(0.04, 0.04, 1.6, 4), sm(0x2f8f3a), Math.cos(a) * 2.0, 4.5, Math.sin(a) * 2.0, can); }
+    orbit(7, 3.2, () => new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 6), new THREE.MeshBasicMaterial({ color: 0x9dff9b, transparent: true, opacity: 0.85 })));
+    U.tick = (t) => { U.parts.arms.forEach(([a, sd]) => { a.rotation.z = sd * Math.sin(t * 1.6) * 0.18; }); can.rotation.z = Math.sin(t * 0.9) * 0.03; };
+  } else if (realm === 'vazio') {   // O Apagador: entidade flutuante meio branca meio negra com um grande olho
+    const core = grp(0, 3.3, 0); U.parts.core = core;
+    mk(new THREE.SphereGeometry(1.7, 24, 18, 0, Math.PI), sm(0xf5f5f5, 0xffffff, 0.8), 0, 0, 0, core);
+    mk(new THREE.SphereGeometry(1.7, 24, 18, Math.PI, Math.PI), sm(0x05050a, 0x2a1040, 0.5), 0, 0, 0, core);
+    const ey = grp(0, 0.1, 1.55, core); mk(new THREE.SphereGeometry(0.75, 16, 12), sm(0xffffff, 0xffffff, 0.9), 0, 0, 0, ey); mk(new THREE.SphereGeometry(0.4, 12, 10), sm(0x000000), 0, 0, 0.55, ey); U.parts.eye = ey;
+    for (let i = 0; i < 9; i++) { const a = i / 9 * 6.28, t = mk(new THREE.ConeGeometry(0.26, 3.2, 6), sm(i % 2 ? 0xffffff : 0x0a0a12, i % 2 ? 0xdddddd : 0x2a1040, 0.6), Math.cos(a) * 0.9, 1.3, Math.sin(a) * 0.9); t.rotation.x = Math.PI; t.rotation.z = Math.cos(a) * 0.35; t.rotation.x = Math.PI - Math.sin(a) * 0.35; (U.parts.tent = U.parts.tent || []).push([t, a]); }
+    [0, 1, 2].forEach(i => { const t = new THREE.Mesh(new THREE.TorusGeometry(3.0, 0.05, 6, 44), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 })); t.rotation.set(i * 1.05, i * 0.7, 0); spin.add(t); });
+    orbit(5, 3.4, () => new THREE.Mesh(new THREE.OctahedronGeometry(0.28), new THREE.MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.9 })));
+    U.tick = (t) => { core.position.y = 3.3 + Math.sin(t * 1.6) * 0.3; core.rotation.y = Math.sin(t * 0.7) * 0.4; U.parts.tent.forEach(([m, a]) => { m.rotation.z = Math.cos(a) * 0.35 + Math.sin(t * 2 + a) * 0.18; }); };
+  } else return null;
+  shadowAll(g); return g;
 }
 const BMOVES = {
   tide(e, p, ep) { for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; addDanger(ep.x + Math.cos(a) * 7, ep.z + Math.sin(a) * 7, 2.6, 1.3, e.dmg * 0.8, 0x4fc3ff); } },
@@ -1222,8 +1283,8 @@ function spawnEnemy(boss, info, forceType, at) {
   const tintBase = boss ? (BS ? BS.tint : info.color) : (T0.tint != null ? T0.tint : realm.enemy);
   const tint = new THREE.Color(tintBase).lerp(new THREE.Color(0xffffff), boss ? (BS ? 0 : 0.2) : (T0.tint != null ? 0.1 : 0.5)).getHex();
   const kind = BS ? BS.model : T0.model;
-  const mesh = makeSkeleton(kind, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run, bsize: BS && BS.size }) || makeEnemy(boss ? info.color : realm.enemy, boss);
-  if (BS) bossLook(mesh, curAct().realm);
+  const mesh = (BS && BS.proc && bossBody(curAct().realm)) || makeSkeleton(kind, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run, bsize: BS && BS.size }) || makeEnemy(boss ? info.color : realm.enemy, boss);
+  if (BS && !BS.proc) bossLook(mesh, curAct().realm);
   mesh.position.set(x, 0, z); scene.add(mesh);
   const lv = zoneLv();
   // o mundo acompanha o jogador: passar do nível da zona deixa os bichos mais fortes
@@ -2471,7 +2532,7 @@ function update(dt) {
     if (melee && d < e.radius + 0.5) { if (tg.id) hurtRemote(e, tg.id); else hitPlayer(e); if (e.mesh.userData.glb && T > (e.atkAt || 0)) { e.atkAt = T + 1.0; playOnce(e.mesh, 'atk', 0.6); } }
   });
   updateDangers();
-  enemies.forEach(e => { const sg = e.mesh.userData && e.mesh.userData.spinG; if (sg) sg.rotation.y = T * 1.6; });
+  enemies.forEach(e => { const ud = e.mesh.userData; if (ud && ud.spinG) ud.spinG.rotation.y = T * 1.6; if (ud && ud.tick) ud.tick(T); });
   for (let i = dying.length - 1; i >= 0; i--) { const dd = dying[i]; animateHero(dd.mesh, dt, {}); if (T >= dd.until) { scene.remove(dd.mesh); dying.splice(i, 1); } }
 
   // ataque automático
