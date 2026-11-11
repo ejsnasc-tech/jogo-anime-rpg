@@ -1047,10 +1047,12 @@ function spawnProxy(r) {
   const boss = !!(r[6] & 2), elite = !!(r[6] & 1), tk = boss ? 'warrior' : r[1], T0 = ETYPES[tk]; if (!T0) return null;
   const realm = REALMS[curAct().realm], info = curAct().boss;
   const tintBase = boss ? info.color : (T0.tint != null ? T0.tint : realm.enemy);
-  const tint = new THREE.Color(tintBase).lerp(new THREE.Color(0xffffff), boss ? 0.2 : (T0.tint != null ? 0.1 : 0.5)).getHex();
-  const mesh = makeSkeleton(T0.model, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run }) || makeEnemy(boss ? info.color : realm.enemy, boss);
+  const BS = boss ? BOSSES[curAct().realm] : null;
+  const tint = new THREE.Color(BS ? BS.tint : tintBase).lerp(new THREE.Color(0xffffff), boss ? (BS ? 0 : 0.2) : (T0.tint != null ? 0.1 : 0.5)).getHex();
+  const mesh = makeSkeleton(BS ? BS.model : T0.model, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run, bsize: BS && BS.size }) || makeEnemy(boss ? info.color : realm.enemy, boss);
+  if (BS) bossLook(mesh, curAct().realm);
   mesh.position.set(r[2], 0, r[3]); scene.add(mesh);
-  const e = { nid: r[0], remote: true, mesh, hp: Math.max(1, r[4]), maxHp: r[5], speed: 0, boss, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? 1.4 : T0.r, t: Math.random() * 10, dmg: 0, stun: 0, slow: 0, flash: 0, ranged: null, res: boss ? null : T0.res || null, tx: r[2], tz: r[3], elite };
+  const e = { nid: r[0], remote: true, mesh, hp: Math.max(1, r[4]), maxHp: r[5], speed: 0, boss, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? (BS ? BS.r : 1.4) : T0.r, t: Math.random() * 10, dmg: 0, stun: 0, slow: 0, flash: 0, ranged: null, res: boss ? null : T0.res || null, tx: r[2], tz: r[3], elite };
   if (elite) {
     e.radius *= 1.3; mesh.scale.multiplyScalar(1.35);
     mesh.traverse(o => { if (o.isMesh && o.material) { if (o.material.emissive) o.material.emissive.setHex(0x664400); if (o.material.color) o.material.color.setHex(0xffd36b); } });
@@ -1130,6 +1132,77 @@ const HORDES = {
   primeva: { name: 'Bestas da Floresta', sub: 'explosivos, enxames e veneno', w: (st) => ({ bomber: 28, swarm: 22, spitter: 20, minion: 12, brute: st >= 3 ? 8 : 0 }) },
   vazio: { name: 'Eco do Vazio', sub: 'tudo ao mesmo tempo', w: () => ({ stalker: 14, nova: 14, charger: 14, bomber: 12, summoner: 10, swarm: 14, spitter: 10, brute: 8 }) },
 };
+
+// ---- chefoes: cada reino tem o seu, com visual e ataques proprios ----
+const BOSSES = {
+  mares:    { model: 'Skeleton_Warrior', size: 4.6, r: 1.5, spd: 1.4, tint: 0x9fe8ff, fx: 0x4fc3ff, moves: ['tide', 'cannon', 'sum:swarm', 'cannon'] },
+  sombras:  { model: 'Skeleton_Rogue',   size: 3.9, r: 1.2, spd: 1.9, tint: 0x6a4aa0, fx: 0xb085ff, moves: ['blink', 'lines', 'sum:stalker', 'blink'] },
+  arcana:   { model: 'Skeleton_Mage',    size: 4.4, r: 1.3, spd: 1.1, tint: 0x9d8cff, fx: 0x9d8cff, moves: ['rain', 'rain', 'sum:nova', 'erase'] },
+  planalto: { model: 'Skeleton_Warrior', size: 5.6, r: 1.9, spd: 1.2, tint: 0xffd45e, fx: 0xffd45e, moves: ['slam', 'charge', 'charge', 'slam'] },
+  primeva:  { model: 'Skeleton_Minion',  size: 5.2, r: 1.7, spd: 1.0, tint: 0x7dff9b, fx: 0x7dff9b, moves: ['roots', 'poison', 'sum:bomber', 'roots'] },
+  vazio:    { model: 'Skeleton_Mage',    size: 5.6, r: 1.6, spd: 1.5, tint: 0xffffff, fx: 0xffffff, moves: ['erase', 'rain', 'blink', 'charge', 'slam', 'roots', 'sum:summoner'] },
+};
+const BNAME = { tide: '🌊 Maré!', cannon: '💣 Canhonaço!', blink: '👤 Sombra!', lines: '🗡 Lâminas!', rain: '☄ Chuva arcana!', erase: '⚪ Apagar!', slam: '💥 Pancada!', charge: '🐂 Investida!', roots: '🌿 Raízes!', poison: '☠ Veneno!' };
+function bossLook(mesh, realm) {
+  const B = BOSSES[realm]; if (!B) return;
+  const bm = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o == null ? 0.9 : o, depthWrite: false });
+  const add = (g, geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); g.add(m); return m; };
+  const spin = new THREE.Group(); spin.position.y = B.size * 0.55; mesh.add(spin); mesh.userData.spinG = spin;
+  const orbit = (n, R, mk) => { for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2, m = mk(i); m.position.set(Math.cos(a) * R, Math.sin(i * 2.1) * 0.5, Math.sin(a) * R); m.rotation.y = -a; spin.add(m); } };
+  const S = B.size;
+  if (realm === 'mares') {
+    mesh.traverse(o => { if (o.isMesh && o.material) { o.material.transparent = true; o.material.opacity = 0.72; } });
+    add(mesh, new THREE.TorusGeometry(1.7, 0.13, 8, 20), bm(0xc8a24a), 0, S * 0.62, -1.3);
+    orbit(5, 2.7, () => new THREE.Mesh(new THREE.SphereGeometry(0.26, 8, 6), bm(0x9fe8ff)));
+  } else if (realm === 'sombras') {
+    add(mesh, new THREE.ConeGeometry(1.5, S * 0.95, 8, 1, true), bm(0x140828, 0.75), 0, S * 0.45, -0.4).material.side = THREE.DoubleSide;
+    orbit(4, 2.4, () => new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.7, 0.08), bm(0xb085ff)));
+  } else if (realm === 'arcana') {
+    const t = add(mesh, new THREE.TorusGeometry(1.4, 0.07, 6, 28), bm(0xc9b8ff), 0, S + 0.7, 0); t.rotation.x = Math.PI / 2;
+    orbit(4, 2.8, () => new THREE.Mesh(new THREE.OctahedronGeometry(0.34), bm(0x9d8cff)));
+  } else if (realm === 'planalto') {
+    [-1, 1].forEach(sd => { const k = add(mesh, new THREE.ConeGeometry(0.4, 1.3, 6), bm(0xffc233, 1), sd * 1.5, S * 0.78, 0); k.rotation.z = -sd * 0.5; });
+    const h = add(mesh, new THREE.TorusGeometry(1.0, 0.09, 6, 24), bm(0xffe08a), 0, S + 0.6, 0); h.rotation.x = Math.PI / 2;
+    const ham = new THREE.Group(); ham.position.set(2.2, S * 0.4, 0.4); mesh.add(ham);
+    add(ham, new THREE.CylinderGeometry(0.1, 0.1, 2.6, 6), bm(0x7a5a2a, 1), 0, 0, 0); add(ham, new THREE.BoxGeometry(1.2, 0.8, 0.8), bm(0xffc233, 1), 0, 1.4, 0);
+  } else if (realm === 'primeva') {
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, k = add(mesh, new THREE.ConeGeometry(0.16, 1.7, 5), bm(0x5a3b1a, 1), Math.cos(a) * 0.5, S * 0.92, Math.sin(a) * 0.5); k.rotation.z = -Math.cos(a) * 0.7; k.rotation.x = Math.sin(a) * 0.7; }
+    orbit(6, 2.8, () => new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 6), bm(0x7dff9b)));
+  } else if (realm === 'vazio') {
+    [0, 1, 2].forEach(i => { const t = new THREE.Mesh(new THREE.TorusGeometry(2.8, 0.05, 6, 40), bm(0xffffff, 0.8)); t.rotation.set(i * 1.05, i * 0.7, 0); spin.add(t); });
+    add(mesh, new THREE.SphereGeometry(0.9, 14, 10), bm(0x000000, 0.9), 0, S * 0.6, 0.2);
+  }
+}
+const BMOVES = {
+  tide(e, p, ep) { for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; addDanger(ep.x + Math.cos(a) * 7, ep.z + Math.sin(a) * 7, 2.6, 1.3, e.dmg * 0.8, 0x4fc3ff); } },
+  cannon(e, p) { for (let i = 0; i < 3; i++) addDanger(p.x + (Math.random() - 0.5) * 6, p.z + (Math.random() - 0.5) * 6, 2.8, 0.8 + i * 0.45, e.dmg * 0.8, 0x9fe8ff); },
+  slam(e, p, ep) { addDanger(ep.x, ep.z, 7, 1.2, e.dmg * 1.2, 0xffd45e); },
+  charge(e, p, ep, c) {
+    e.bst = 'wind'; e.bAt = T + 1.0; e.dx = c.vx / c.d; e.dz = c.vz / c.d; glowEnemy(e, 0xff2200);
+    const t = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 16), new THREE.MeshBasicMaterial({ color: 0xff3300, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false }));
+    t.rotation.x = -Math.PI / 2; t.rotation.z = Math.atan2(e.dx, e.dz) + Math.PI; t.position.set(ep.x + e.dx * 8, walkY(ep.x, ep.z) + 0.15, ep.z + e.dz * 8); scene.add(t); e.tele = t;
+  },
+  blink(e, p, ep) { ringFx(ep, 0xb085ff, 3, 0.4); ep.x = p.x - Math.sin(facing) * 3; ep.z = p.z - Math.cos(facing) * 3; ringFx(ep, 0xb085ff, 3, 0.4); addDanger(ep.x, ep.z, 3.6, 0.55, e.dmg, 0xb085ff); },
+  lines(e, p, ep, c) { for (let i = 1; i <= 5; i++) addDanger(ep.x + c.vx / c.d * i * 3.2, ep.z + c.vz / c.d * i * 3.2, 1.9, 0.5 + i * 0.22, e.dmg * 0.9, 0xb085ff); },
+  rain(e, p) { for (let i = 0; i < 6; i++) { const a = Math.random() * 6.28, r = Math.random() * 6; addDanger(p.x + Math.cos(a) * r, p.z + Math.sin(a) * r, 2.5, 0.9 + i * 0.25, e.dmg * 0.8, 0x9d8cff); } },
+  erase(e, p) { addDanger(p.x, p.z, 5, 1.0, e.dmg * 1.3, 0xffffff); for (let i = 0; i < 5; i++) { const a = i / 5 * 6.28; addDanger(p.x + Math.cos(a) * 8, p.z + Math.sin(a) * 8, 2.4, 1.4, e.dmg * 0.8, 0xdddddd); } },
+  roots(e, p, ep, c) { for (let i = 1; i <= 5; i++) addDanger(ep.x + c.vx / c.d * i * 3.0, ep.z + c.vz / c.d * i * 3.0, 1.7, 0.4 + i * 0.25, e.dmg * 0.5, 0x7dff9b, 3.5); },
+  poison(e, p) { addDanger(p.x, p.z, 3.6, 0.7, e.dmg * 0.4, 0x7bdc3a, 5); },
+};
+function bossBrain(e, o, vx, vz, d) {
+  const B = BOSSES[e.bk]; if (!B) return;
+  const ep = e.mesh.position, p = player.position, mad = e.hp < e.maxHp * 0.5;
+  if (mad && !e.mad) { e.mad = true; e.speed *= 1.25; e.dmg *= 1.2; ringFx(ep, B.fx, 6, 0.6); shake = 0.5; screenFlash(B.fx, 0.35, 400); ftAt(ep, '🔥 ENFURECIDO!', '#ff4757', 3); }
+  if (e.bst === 'wind') { o.mv = 0; o.melee = false; if (T >= e.bAt) { e.bst = 'dash'; e.bAt = T + 0.7; if (e.tele) { scene.remove(e.tele); e.tele = null; } } return; }
+  if (e.bst === 'dash') { o.dir = { x: e.dx, z: e.dz }; o.spd = 5.5; o.melee = false; if (d < e.radius + 1) hitPlayer(e); if (T >= e.bAt) { e.bst = null; glowEnemy(e, 0); } return; }
+  if (T >= e.cdAt && d < 32) {
+    e.cdAt = T + (mad ? 2.2 : 3.4) + Math.random();
+    const mv = B.moves[Math.floor(Math.random() * B.moves.length)];
+    if (mv.startsWith('sum:')) { if (enemies.length < 30) { ringFx(ep, B.fx, 4, 0.6); for (let i = 0; i < 3; i++) { const a = i / 3 * 6.28; spawnEnemy(false, null, mv.slice(4), { x: ep.x + Math.cos(a) * 3.5, z: ep.z + Math.sin(a) * 3.5 }); } ftAt(ep, '👥 Reforços!', '#ffd166', 3); } }
+    else { BMOVES[mv](e, p, ep, { vx, vz, d }); ftAt(ep, BNAME[mv] || '', '#ff9f1c', 3); }
+    if (e.mesh.userData.glb) playOnce(e.mesh, 'atk', 0.6);
+  }
+}
 // quanto mais avançado o ato / estágio, mais variedade e mais atiradores
 function pickEType() {
   const act = state.act, st = state.endless ? 5 : state.stage, H = HORDES[ACTS[act].realm];
@@ -1145,10 +1218,12 @@ function spawnEnemy(boss, info, forceType, at) {
   const x = THREE.MathUtils.clamp(at ? at.x : anc.x + Math.cos(a) * d, -WORLD, WORLD), z = THREE.MathUtils.clamp(at ? at.z : anc.z + Math.sin(a) * d, -WORLD, WORLD);
   const realm = REALMS[curAct().realm];
   const tk = boss ? 'warrior' : (forceType || pickEType()), T0 = ETYPES[tk];
-  const tintBase = boss ? info.color : (T0.tint != null ? T0.tint : realm.enemy);
-  const tint = new THREE.Color(tintBase).lerp(new THREE.Color(0xffffff), boss ? 0.2 : (T0.tint != null ? 0.1 : 0.5)).getHex();
-  const kind = T0.model;
-  const mesh = makeSkeleton(kind, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run }) || makeEnemy(boss ? info.color : realm.enemy, boss);
+  const BS = boss ? BOSSES[curAct().realm] : null;
+  const tintBase = boss ? (BS ? BS.tint : info.color) : (T0.tint != null ? T0.tint : realm.enemy);
+  const tint = new THREE.Color(tintBase).lerp(new THREE.Color(0xffffff), boss ? (BS ? 0 : 0.2) : (T0.tint != null ? 0.1 : 0.5)).getHex();
+  const kind = BS ? BS.model : T0.model;
+  const mesh = makeSkeleton(kind, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run, bsize: BS && BS.size }) || makeEnemy(boss ? info.color : realm.enemy, boss);
+  if (BS) bossLook(mesh, curAct().realm);
   mesh.position.set(x, 0, z); scene.add(mesh);
   const lv = zoneLv();
   // o mundo acompanha o jogador: passar do nível da zona deixa os bichos mais fortes
@@ -1156,7 +1231,7 @@ function spawnEnemy(boss, info, forceType, at) {
   const base = (18 + lv * 7) * (1 + state.act * 0.3) * 2.4 * catchup;
   const hpv = boss ? base * 14 * (state.endless ? 1.5 : 1) * 1.3 * rmN : base * T0.hp;
   const dmgBase = ((6 + lv * 0.8) * (1 + state.act * 0.12)) * 1.6 * catchD;
-  const e = { nid: ++nidSeq, mesh, hp: hpv, maxHp: hpv, speed: boss ? 1.5 : (1.9 + Math.random() * 1.0) * T0.spd, boss: !!boss, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? 1.4 : T0.r, t: Math.random() * 10, dmg: dmgBase * (boss ? 1.6 : T0.dmg), stun: 0, slow: 0, flash: 0, ranged: boss ? null : T0.ranged || null, res: boss ? null : T0.res || null, shotAt: T + 1 + Math.random() * 2, beh: boss ? null : T0.beh || null, cdAt: T + 1 + Math.random() * 3 };
+  const e = { nid: ++nidSeq, mesh, hp: hpv, maxHp: hpv, speed: boss ? 1.5 * (BS ? BS.spd / 1.2 : 1) : (1.9 + Math.random() * 1.0) * T0.spd, boss: !!boss, bk: boss ? curAct().realm : null, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? (BS ? BS.r : 1.4) : T0.r, t: Math.random() * 10, dmg: dmgBase * (boss ? 1.6 : T0.dmg), stun: 0, slow: 0, flash: 0, ranged: boss ? null : T0.ranged || null, res: boss ? null : T0.res || null, shotAt: T + 1 + Math.random() * 2, beh: boss ? (BS ? 'boss' : null) : T0.beh || null, cdAt: T + 1 + Math.random() * 3 };
   if (dg) { e.hp = e.maxHp = e.hp * 1.35; e.dmg *= 1.3; }
   if (!boss && !forceType && Math.random() < 0.04 + state.act * 0.01 + (night > 0.55 ? 0.03 : 0) + (dg ? 0.12 : 0)) {
     e.elite = true; e.hp = e.maxHp = e.hp * 4; e.dmg *= 1.4; e.radius *= 1.3; mesh.scale.multiplyScalar(1.35);
@@ -1358,6 +1433,7 @@ function behave(e, tg, vx, vz, d) {
   } else if (b === 'nova') {   // marca uma area no chao: saia de la
     keep(8, 12);
     if (T >= e.cdAt) { e.cdAt = T + 4.2 + Math.random(); addDanger(p.x, p.z, 3.4, 1.1, e.dmg * 1.3, 0x4fc3ff); if (e.mesh.userData.glb) playOnce(e.mesh, 'atk', 0.6); }
+  } else if (b === 'boss') { bossBrain(e, o, vx, vz, d);
   } else if (b === 'spitter') {   // cospe uma poca que fica queimando
     keep(7, 11);
     if (T >= e.cdAt) { e.cdAt = T + 3.6 + Math.random(); addDanger(p.x, p.z, 2.6, 0.7, e.dmg * 0.4, 0x7bdc3a, 4.5); if (e.mesh.userData.glb) playOnce(e.mesh, 'atk', 0.6); }
@@ -2395,6 +2471,7 @@ function update(dt) {
     if (melee && d < e.radius + 0.5) { if (tg.id) hurtRemote(e, tg.id); else hitPlayer(e); if (e.mesh.userData.glb && T > (e.atkAt || 0)) { e.atkAt = T + 1.0; playOnce(e.mesh, 'atk', 0.6); } }
   });
   updateDangers();
+  enemies.forEach(e => { const sg = e.mesh.userData && e.mesh.userData.spinG; if (sg) sg.rotation.y = T * 1.6; });
   for (let i = dying.length - 1; i >= 0; i--) { const dd = dying[i]; animateHero(dd.mesh, dt, {}); if (T >= dd.until) { scene.remove(dd.mesh); dying.splice(i, 1); } }
 
   // ataque automático

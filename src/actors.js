@@ -190,7 +190,7 @@ export function makeSkeleton(kind, tint, boss, o) {
   o = o || {};
   const L = loaded[kind]; if (!L) return null;
   const root = skClone(L.scene), g = new THREE.Group(); g.add(root);
-  root.scale.setScalar((boss ? 4.2 : (o.size || (kind === 'Skeleton_Warrior' ? 1.9 : 1.6))) / L.height);
+  root.scale.setScalar((boss ? (o.bsize || 4.2) : (o.size || (kind === 'Skeleton_Warrior' ? 1.9 : 1.6))) / L.height);
   const mat = L.mat.clone(); if (tint != null) mat.color.setHex(tint);
   root.traverse(o => { if (o.isMesh) { o.material = mat; o.castShadow = true; o.frustumCulled = false; } });
   g.userData = newUserData(L.clips, { idle: 'Idle_Combat', run: o.run || 'Walking_A', atk: o.atk || '1H_Melee_Attack_Chop', ult: 'Idle' }, { enemy: true });
