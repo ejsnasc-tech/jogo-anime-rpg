@@ -445,7 +445,7 @@ const enemies = [], dying = [], bullets = [], effects = [], zones = [], timers =
 let rmCur = null, rmHost = null, rmN = 1, nidSeq = 0, snapAt = 0;
 const isHost = () => !rmCur || !rmHost || rmHost === netId;
 let lastShot = 0, invuln = 0, switchReady = 0, bearUntil = 0, overload = 0, shake = 0, walkT = 0, spawnTimer = 0;
-const skillReady = {};
+const skillReady = {}, ultLen = {};
 let ev = null, nextEvT = 150 + Math.random() * 100, dayT = 0.3, night = 0, weather = 'clear', weatherLeft = 200, rainPts = null, isNight = false;
 let bossRef = null;
 let panelOpen = false, dialogOpen = false, creatorOpen = false;
@@ -1634,7 +1634,7 @@ function heal(v) {
 function useSkill() {
   if (isPaused() || T < (skillReady[hero.id] || 0)) return;
   const cls = hero.cls, def = CLASSES[cls], p = player.position, dmg = atkPower();
-  skillReady[hero.id] = T + def.ultCd * (1 - sk('arcane') * 0.08); playOnce(player, 'ult', 1.0);
+  ultLen[hero.id] = def.ultCd * (1 - sk('arcane') * 0.08); skillReady[hero.id] = T + ultLen[hero.id]; playOnce(player, 'ult', 1.0);
   { const c = '#' + new THREE.Color(hero.color).getHexString(); screenFlash(c, 0.4, 420); vfx.flash(p, hero.color, 7, 0.4, 1.3); }
   const fwd = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
   if (cls === 'warrior') {
@@ -2641,6 +2641,8 @@ function update(dt) {
   const cd = Math.max(0, (skillReady[hero.id] || 0) - T);
   $('skill').style.opacity = cd > 0 ? 0.45 : 1; updateSkillLabel(false, cd);
   $('hpbar').style.width = Math.max(0, hp / maxHp * 100) + '%';
+  { const tx = Math.max(0, Math.ceil(hp)) + '/' + Math.round(maxHp), el_ = $('hptxt'); if (el_._v !== tx) { el_._v = tx; el_.textContent = tx; }
+    const mp_ = $('mpbar'), pc = cd > 0 ? Math.max(0, Math.min(100, (1 - cd / (ultLen[hero.id] || cd)) * 100)) : 100; mp_.style.width = pc + '%'; mp_.classList.toggle('full', cd <= 0); }
   $('shieldbar').style.width = Math.min(100, shield / maxHp * 100) + '%';
 }
 

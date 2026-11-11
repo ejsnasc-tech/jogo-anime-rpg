@@ -46,7 +46,6 @@
   canvas { display:block; width:100%; height:100%; touch-action:none; }
   .stroke { text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000; }
 
-  #hud { position:fixed; top:0; left:0; right:0; padding:calc(env(safe-area-inset-top) + 8px) 12px 6px; background:rgba(0,0,0,.45); pointer-events:none; z-index:10; }
   #skills { position:fixed; top:calc(env(safe-area-inset-top) + 86px); left:8px; max-width:70%; display:flex; flex-wrap:wrap; gap:3px; z-index:9; pointer-events:none; font-size:clamp(11px,3vw,14px); }
   #skills .chip { background:rgba(0,0,0,.55); border-radius:8px; padding:1px 6px; color:#fff; }
   #skillbar { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom) + 16px); display:grid; grid-template-columns:repeat(5,38px); gap:4px; z-index:19; }
@@ -73,7 +72,6 @@
   body.phone.portrait #rothint.show { display:block; }
   /* celular deitado: pouca altura */
   body.phone.land #topbtns { max-height:calc(100dvh - 76px); }
-  body.phone.land #hud .row { font-size:12px; }
   body.phone.land #minimap { width:64px; height:64px; top:calc(env(safe-area-inset-top) + 100px); }
   body.phone.land #menu { top:auto; bottom:calc(env(safe-area-inset-bottom) + 70px); transform:none; flex-direction:row; left:8px; }
   body.phone.land #team { left:auto; right:90px; flex-direction:row-reverse; bottom:calc(env(safe-area-inset-bottom) + 10px); }
@@ -85,15 +83,6 @@
   body.phone.land #card { max-height:calc(100dvh - 90px); }
   body.phone.land #panel { padding-top:calc(env(safe-area-inset-top) + 50px); padding-bottom:20px; }
   /* ===== modo CELULAR (body.phone): HUD compacto, menos ícones na tela. PC continua como antes ===== */
-  body.phone #hud { padding:calc(env(safe-area-inset-top) + 4px) 8px 4px; }
-  body.phone #hud .row { font-size:13px; gap:6px; }
-  body.phone #hud .row span { white-space:nowrap; }
-  body.phone #hname { overflow:hidden; text-overflow:ellipsis; max-width:44%; }
-  body.phone #hname img { width:22px !important; height:22px !important; margin-right:4px !important; }
-  body.phone #hpwrap { height:10px; margin-top:3px; border-width:1px; }
-  body.phone #stage { margin-top:2px; font-size:10px; }
-  body.phone #leftbtns { top:calc(env(safe-area-inset-top) + 66px); }
-  body.phone #leftbtns button { height:32px; font-size:11px; padding:0 9px; }
   body.phone #topbtns { top:calc(env(safe-area-inset-top) + 66px); gap:5px !important; }
   body.phone #topbtns button { width:42px; height:42px; border-width:2px; }
   body.phone #topbtns button .i { font-size:17px; }
@@ -136,9 +125,6 @@
     #menu { gap:7px; }
   }
   #talk { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom) + 150px); display:none; z-index:21; height:54px; padding:0 22px; border-radius:27px; background:#e67e22; border:3px solid #fff; color:#fff; font:inherit; font-size:17px; cursor:pointer; }
-  #leftbtns { position:fixed; top:calc(env(safe-area-inset-top) + 96px); left:8px; display:flex; gap:6px; z-index:19; }
-  #leftbtns button { height:38px; border-radius:19px; border:2px solid #fff; color:#fff; font:inherit; font-size:13px; padding:0 12px; cursor:pointer; }
-  #leftbtns button { box-shadow:0 2px 6px rgba(0,0,0,.4); }
   #chatlog { position:fixed; left:8px; bottom:calc(env(safe-area-inset-bottom) + 176px); max-width:62%; z-index:8; pointer-events:none; display:flex; flex-direction:column; gap:3px; font:700 12px Arial,sans-serif; }
   #chatlog .cl { background:rgba(10,16,30,.72); color:#fff; padding:3px 8px; border-radius:8px; word-break:break-word; }
   #chatlog .cl.me { background:rgba(41,128,185,.8); }
@@ -221,11 +207,6 @@
   .det-note { margin-top:4px; font-size:11px; color:#9fb0cf; }
   .dragghost { position:fixed; width:72px; height:72px; transform:translate(-50%,-60%) rotate(-6deg); z-index:200; pointer-events:none; border-radius:12px; box-shadow:0 10px 24px rgba(0,0,0,.7); opacity:.95; }
   #minimap { position:fixed; left:8px; top:calc(env(safe-area-inset-top) + 142px); width:104px; height:104px; z-index:18; cursor:pointer; }
-  #hud .row { display:flex; justify-content:space-between; gap:8px; font-size:clamp(14px,4vw,22px); }
-  #hpwrap { margin-top:6px; height:16px; background:rgba(0,0,0,.6); border-radius:8px; overflow:hidden; border:2px solid #000; position:relative; }
-  #hpbar { height:100%; width:100%; background:#2ecc71; transition:width .1s; }
-  #shieldbar { position:absolute; left:0; top:0; height:100%; width:0; background:rgba(120,200,255,.75); }
-  #stage { margin-top:4px; font-size:clamp(11px,3vw,15px); color:#ffe9a8; text-align:center; }
 
   #bossbar { position:fixed; left:14px; right:14px; top:calc(env(safe-area-inset-top) + 86px); z-index:10; display:none; pointer-events:none; text-align:center; font-size:14px; }
   #bossbar .bg { height:14px; background:rgba(0,0,0,.65); border:2px solid #000; border-radius:8px; overflow:hidden; margin-top:2px; }
@@ -325,14 +306,52 @@
   @keyframes rise { to { transform:translate(-50%,-190%); opacity:0; } }
   #toast { position:fixed; top:28%; left:50%; transform:translateX(-50%); z-index:40; font-size:22px; color:#7CFC00; text-align:center; pointer-events:none; width:90%; }
   .rotb { width:48px; height:48px; border-radius:50%; border:3px solid #fff; background:rgba(30,50,100,.75); color:#fff; font-size:24px; }
+
+  /* ===== HUD compacto: vida (vermelho) e carga da ULT (azul/roxo) em barras curtas ===== */
+  #hud { position:fixed; top:0; left:0; right:0; padding:calc(env(safe-area-inset-top) + 8px) 12px 0; display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-start; gap:4px 8px; pointer-events:none; z-index:10; }
+  #hl { display:flex; flex-direction:column; gap:4px; min-width:0; max-width:60%; }
+  #hname { display:flex; align-items:center; gap:6px; background:rgba(0,0,0,.5); border-radius:20px; padding:2px 12px 2px 3px; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-shadow:0 0 3px #000,0 1px 2px #000; }
+  #hname img { width:30px !important; height:30px !important; margin:0 !important; flex:none; }
+  #hbars { display:flex; flex-direction:column; gap:3px; width:200px; }
+  .bw { display:flex; align-items:center; gap:4px; }
+  .bw i { font-style:normal; font-size:14px; width:18px; text-align:center; text-shadow:0 0 3px #000; flex:none; }
+  .bt { position:relative; flex:1; height:16px; background:rgba(0,0,0,.65); border:2px solid #000; border-radius:9px; overflow:hidden; }
+  .bt.thin { height:9px; }
+  #hpbar { height:100%; width:100%; background:linear-gradient(#ff6b7a,#d91e36); transition:width .12s; }
+  #shieldbar { position:absolute; left:0; top:0; height:100%; width:0; background:rgba(150,215,255,.8); }
+  #mpbar { height:100%; width:0; background:linear-gradient(#7aa5ff,#9b4dff); transition:width .2s; }
+  #mpbar.full { animation:mpfull 1s ease-in-out infinite; }
+  @keyframes mpfull { 50% { filter:brightness(1.6); } }
+  #hptxt { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:10px; line-height:1; color:#fff; text-shadow:0 0 3px #000,0 0 3px #000; }
+  #hr { display:flex; gap:5px; flex-wrap:wrap; justify-content:flex-end; font-size:14px; }
+  #hr span { background:rgba(0,0,0,.5); border-radius:14px; padding:2px 8px; white-space:nowrap; text-shadow:0 0 3px #000; }
+  #stage { width:100%; text-align:center; font-size:clamp(10px,2.6vw,14px); color:#ffe9a8; }
+  body.phone #hud { padding:calc(env(safe-area-inset-top) + 4px) 8px 0; }
+  body.phone #hname { font-size:12px; padding-right:9px; }
+  body.phone #hname img { width:22px !important; height:22px !important; }
+  body.phone #hbars { width:128px; }
+  body.phone .bt { height:13px; border-width:1px; }
+  body.phone .bt.thin { height:7px; }
+  body.phone .bw i { font-size:11px; width:14px; }
+  body.phone #hptxt { font-size:9px; }
+  body.phone #hr { font-size:11px; gap:3px; }
+  body.phone #hr span { padding:1px 6px; }
+  body.phone #stage { font-size:9.5px; }
+  body.phone #topbtns { top:calc(env(safe-area-inset-top) + 88px); }
+  body.phone #minimap { top:calc(env(safe-area-inset-top) + 90px); }
+  body.phone #menu { top:calc(env(safe-area-inset-top) + 176px); }
+  body.phone #bossbar { top:calc(env(safe-area-inset-top) + 90px); }
+  body.phone.land #hbars { width:150px; }
 </style>
 </head>
 <body>
 <div id="game"></div>
 
 <div id="hud">
-  <div class="row stroke"><span id="hname"></span><span id="hgems"></span><span id="hgold"></span><span id="hcash"></span></div>
-  <div id="hpwrap"><div id="hpbar"></div><div id="shieldbar"></div></div>
+  <div id="hl"><div id="hname"></div>
+    <div id="hbars"><div class="bw" title="Vida"><i>❤️</i><div class="bt"><div id="hpbar"></div><div id="shieldbar"></div><b id="hptxt"></b></div></div>
+    <div class="bw" title="Carga da ULT"><i>💠</i><div class="bt thin"><div id="mpbar"></div></div></div></div></div>
+  <div id="hr" class="stroke"><span id="hgems"></span><span id="hgold"></span><span id="hcash"></span></div>
   <div id="stage" class="stroke"></div>
 </div>
 <div id="skillbar"></div>
