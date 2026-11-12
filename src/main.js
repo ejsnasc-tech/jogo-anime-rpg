@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CLASSES, CLASS_MODELS, REALMS, RARITY, HEROES, ACTS, INTRO, ENDING, PREMADE, buildPlayerHero, portraitUrl, BASE } from './data.js';
+import { ULT_LV, ULT_EVO, CLASSES, CLASS_MODELS, REALMS, RARITY, HEROES, ACTS, INTRO, ENDING, PREMADE, buildPlayerHero, portraitUrl, BASE } from './data.js';
 import { std, metal, glow, shadowAll } from './models.js';
 import { makeHero, makeSkeleton, animateHero, playOnce, preloadModels } from './actors.js';
 import { openCreator, CLASS_LIST } from './creator.js';
@@ -670,7 +670,7 @@ function updateAllies(dt) {
 
 let skillLabel = '';
 function updateSkillLabel(force, cd) {
-  const label = cd > 0 ? String(Math.ceil(cd)) : CLASSES[hero.cls].icon + '<br>ULT';
+  const label = cd > 0 ? String(Math.ceil(cd)) : CLASSES[hero.cls].icon + '<br>ULT' + (ultTier() ? '<br>' + '★'.repeat(ultTier()) : '');
   if (!force && label === skillLabel) return;
   skillLabel = label; $('skill').innerHTML = label;
 }
@@ -1014,7 +1014,7 @@ function openIndex() {
   const er = a.realm;
   rows.push({ text: 'Inimigos deste reino: ' + REALMS[er].icon + ' ' + REALMS[er].name + '\nVantagem: heróis de ' + Object.keys(REALMS).filter(k => REALMS[k].strong === er).map(k => REALMS[k].name).join(', ') + ' (+25% dano)' });
   rows.push({ head: true, text: '⚔️ CLASSES' });
-  Object.values(CLASSES).forEach(c => rows.push({ text: c.icon + ' ' + c.name + ' — ' + c.role + '\n' + c.desc + '\nULT: ' + c.ult }));
+  Object.entries(CLASSES).forEach(([k, c0]) => { const c = Object.assign({ k }, c0); rows.push({ text: c.icon + ' ' + c.name + ' — ' + c.role + '\n' + c.desc + '\nULT: ' + c.ult + '  →  Nv.' + ULT_LV[0] + ': ' + ULT_EVO[c.k][0].name + '  →  Nv.' + ULT_LV[1] + ': ' + ULT_EVO[c.k][1].name }); });
   rows.push({ head: true, text: '👹 MONSTROS E FRAQUEZAS' });
   rows.push({ text: 'Classes FÍSICAS (Guerreiro, Paladino, Assassino, Arqueiro) e MÁGICAS (Mago, Feiticeiro, Druida) causam dano diferente em cada monstro.\n💀 Esqueleto e Corredor: normais\n🛡 Guerreiro: resiste um pouco a físico\n🪨 Bruto: resiste MUITO a físico (-30%), fraco a mágico (+30%)\n🏹 Arqueiro: aguenta um pouco mais de físico\n🔮 Mago: fraco a físico (+30%), resiste a mágico (-30%)\n★ Elite: 4× vida e mais loot. Aparece mais à noite e nas masmorras.' });
   rows.push({ head: true, text: '🧑‍🤝‍🧑 HERÓIS' });
@@ -1060,6 +1060,7 @@ function toggleMount() {
   if (!mounted) player.position.y = 0;
 }
 
+$('b-mount').onclick = () => { if (!dialogOpen && !picking && !invOpen) openPets(); };
 $('b-crew').onclick = () => { if (!dialogOpen && !picking) openCrew(); };
 $('b-bag').onclick = () => { if (!dialogOpen && !picking && !invOpen) openProfile(); };
 $('b-index').onclick = () => { if (!dialogOpen && !picking) openIndex(); };
@@ -1425,7 +1426,7 @@ function onKill(e) {
   if (Math.random() < 0.05 + sk('greed') * 0.01) state.gems++;
   if (sk('vamp')) heal(maxHp * 0.01 * sk('vamp'));
   state.xp++;
-  if (state.xp >= xpNeed()) { state.xp = 0; state.level++; state.skillPts++; ftAt(player.position, 'LEVEL UP!', '#7CFC00', 2.8); }
+  if (state.xp >= xpNeed()) { state.xp = 0; state.level++; state.skillPts++; ftAt(player.position, 'LEVEL UP!', '#7CFC00', 2.8); if (ULT_LV.includes(state.level)) timers.push({ at: T + 1.2, fn: () => { toast('🌟 Sua ULT evoluiu: ' + ultName() + '!'); updateSkillLabel(true, 0); } }); }
   if (e.boss && dg) dgBossDone();
   else if (e.boss) {
     if (state.endless) { track('boss'); bossRef = null; $('bossbar').style.display = 'none'; state.gems += 5; state.gold += 200 * state.level; toast('🏆 Chefe derrotado! +5💎'); }
@@ -1619,7 +1620,7 @@ const ELEMENTS = [{ k: 'fire', c: 0xff6a2f }, { k: 'ice', c: 0x7fdcff }, { k: 'b
 
 function doAttack(target) {
   const p = player.position, cls = hero.cls, dmg = atkPower(), tp = target.mesh.position, bear = T < bearUntil;
-  if (bear) meleeArc(target, 3.6, Math.PI * 0.8, dmg, 1.5);
+  if (bear) meleeArc(target, 3.6 + ultTier() * 1.2, Math.PI * (0.8 + ultTier() * 0.2), dmg, 1.5);
   else if (cls === 'warrior') meleeArc(target, hero.range + 0.6, Math.PI * 0.67, dmg, 1.3);
   else if (cls === 'paladin') { meleeArc(target, hero.range + 0.6, Math.PI * 0.67, dmg, 1.0); heal(1.5 + state.level * 0.15 + maxHp * 0.003 * sk('holy')); }
   else if (cls === 'assassin') {
@@ -1654,46 +1655,72 @@ function heal(v) {
   hp = Math.min(maxHp, hp + v); ftAt(player.position, '+' + Math.round(v), '#7CFC00', 2.4); vfx.rise(player.position, 0x8cff8c, v > maxHp * 0.1 ? 26 : 5, 0.9, 2.4, 0.32);
 }
 
+const ultTier = () => (state.level >= ULT_LV[1] ? 2 : state.level >= ULT_LV[0] ? 1 : 0);
+const ultName = () => { const t = ultTier(); return t ? ULT_EVO[hero.cls][t - 1].name : CLASSES[hero.cls].ult; };
+function meteorAt(tp, r, d, big) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(big ? 1.2 : 0.9, 14, 12), glow(0xff5a1f)); m.position.set(tp.x, 22, tp.z); m.add(vfx.glowSprite(0xff8a2a, big ? 6 : 4.5));
+  addEffect(m, 0.8, (k) => { m.position.y = 22 * (1 - k) + 0.5; for (let i = 0; i < 3; i++) vfx.trail(m.position, i ? 0xffc060 : 0xff5a1f, 1.5); }, () => { explode(tp, r, d, 0xff5a1f); if (big) shake = 0.5; vfx.flash(tp, 0xffd27a, big ? 18 : 10, 0.5, 1.5); vfx.shock(tp, 0xff6a1f, r * 1.2, 0.7); vfx.burst(tp, { color: 0xff7a2a, n: big ? 70 : 36, speed: 12, up: 1.3, size: 0.95, life: 1.0, grav: 9 }); vfx.scorch(tp, r * 0.8, 4); if (big) screenFlash('#ffb060', 0.45, 500); });
+  ringFx(tp, 0xff5a1f, r, 0.8);
+}
 function useSkill() {
   if (isPaused() || T < (skillReady[hero.id] || 0)) return;
-  const cls = hero.cls, def = CLASSES[cls], p = player.position, dmg = atkPower();
+  const cls = hero.cls, def = CLASSES[cls], p = player.position, dmg = atkPower(), U = ultTier();
   ultLen[hero.id] = def.ultCd * (1 - sk('arcane') * 0.08); skillReady[hero.id] = T + ultLen[hero.id]; playOnce(player, 'ult', 1.0);
   { const c = '#' + new THREE.Color(hero.color).getHexString(); screenFlash(c, 0.4, 420); vfx.flash(p, hero.color, 7, 0.4, 1.3); }
   const fwd = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
   if (cls === 'warrior') {
-    ringFx(p, hero.color, 7, 0.5); shake = 0.35; vfx.shock(p, 0xffc36b, 8, 0.6); vfx.burst(p, { color: 0xffc36b, n: 44, speed: 10, up: 0.3, size: 0.75, life: 0.8 }); vfx.column(p, 0xffd28a, 6, 6, 0.5); vfx.scorch(p, 4, 1.8);
-    enemies.slice().forEach(e => { if (dist2(e.mesh.position, p) < 7) { e.stun = 2.5; damageEnemy(e, dmg * 2); } });
-    shield = Math.round(maxHp * 0.25); shieldUntil = T + 6; toast('🛡️ Grito de Guerra!');
+    const R = [7, 9, 11][U], waves = [1, 2, 3][U], sd = [2.5, 3, 3.5][U];
+    ringFx(p, hero.color, R, 0.5); shake = 0.35 + U * 0.1; vfx.shock(p, 0xffc36b, R + 1, 0.6); vfx.burst(p, { color: 0xffc36b, n: 44 + U * 30, speed: 10, up: 0.3, size: 0.75, life: 0.8 }); vfx.column(p, 0xffd28a, 6 + U * 2, 6, 0.5); vfx.scorch(p, 4 + U, 1.8);
+    for (let w = 0; w < waves; w++) timers.push({ at: T + w * 0.35, fn: () => {
+      if (w) { ringFx(player.position, 0xffa94d, R, 0.5); vfx.shock(player.position, 0xffc36b, R, 0.5); shake = 0.3; }
+      enemies.slice().forEach(e => { if (dist2(e.mesh.position, player.position) < R) { e.stun = sd; damageEnemy(e, Math.round(dmg * (w ? 1.3 : 2))); } });
+    } });
+    shield = Math.round(maxHp * [0.25, 0.35, 0.5][U]); shieldUntil = T + 6 + U * 2; toast('🛡️ ' + ultName() + '!');
   } else if (cls === 'paladin') {
-    ringFx(p, 0xffe08a, 7, 0.6); shake = 0.3; vfx.column(p, 0xffe9a0, 16, 6, 1.0); vfx.rise(p, 0xfff0a0, 40, 4, 5, 0.5); heal(maxHp * 0.35); shield = Math.round(maxHp * 0.15); shieldUntil = T + 5;
-    enemies.slice().forEach(e => { if (dist2(e.mesh.position, p) < 6.5) damageEnemy(e, Math.round(dmg * 2.5)); });
-    toast('✨ Luz Sagrada!');
+    const R = [6.5, 9, 12][U], pulses = [1, 2, 3][U];
+    ringFx(p, 0xffe08a, R, 0.6); shake = 0.3 + U * 0.1; vfx.column(p, 0xffe9a0, 16 + U * 6, 6 + U * 2, 1.0); vfx.rise(p, 0xfff0a0, 40 + U * 30, 4, 5, 0.5); heal(maxHp * [0.35, 0.5, 0.7][U]); shield = Math.round(maxHp * [0.15, 0.25, 0.4][U]); shieldUntil = T + 5 + U * 2;
+    for (let w = 0; w < pulses; w++) timers.push({ at: T + w * 0.5, fn: () => {
+      const pp = player.position; if (w) { ringFx(pp, 0xffe08a, R, 0.5); vfx.column(pp, 0xffe9a0, 12, 5, 0.6); }
+      enemies.slice().forEach(e => { if (dist2(e.mesh.position, pp) < R) { damageEnemy(e, Math.round(dmg * [2.5, 3, 3.6][U])); if (U) vfx.column(e.mesh.position, 0xfff0a0, 8, 2, 0.5); } });
+    } });
+    toast('✨ ' + ultName() + '!');
   } else if (cls === 'assassin') {
-    invuln = T + 1.3; toast('🗡️ Dança das Sombras!');
-    for (let i = 0; i < 6; i++) timers.push({ at: T + i * 0.18, fn: () => {
-      const pool = enemies.filter(e => dist2(e.mesh.position, player.position) < 14); if (!pool.length) return;
+    invuln = T + [1.3, 1.9, 2.5][U]; toast('🗡️ ' + ultName() + '!');
+    const N = [6, 9, 15][U], gap = [0.18, 0.16, 0.12][U];
+    for (let i = 0; i < N; i++) timers.push({ at: T + i * gap, fn: () => {
+      const pool = enemies.filter(e => dist2(e.mesh.position, player.position) < 14 + U * 3); if (!pool.length) return;
       const t = pool[Math.floor(Math.random() * pool.length)], tp = t.mesh.position, pp = player.position;
       ringFx(pp, hero.color, 1.5, 0.3); vfx.burst(pp, { color: 0x9b59ff, n: 16, speed: 4, size: 0.6, life: 0.5, grav: 0 });
       pp.x = THREE.MathUtils.clamp(tp.x + 1.1, -WORLD, WORLD); pp.z = THREE.MathUtils.clamp(tp.z, -WORLD, WORLD);
-      const crit = Math.random() < 0.35; vfx.slash(tp, Math.random() * 6.28, 2.4, Math.PI * 1.1, 0xd9a6ff, 0.25, 1.1); vfx.slash(tp, Math.random() * 6.28, 2.0, Math.PI * 0.9, 0xffffff, 0.2, 1.0); damageEnemy(t, Math.round(dmg * 1.6 * (crit ? 2 : 1)), crit); ringFx(tp, 0xffffff, 2, 0.25);
+      const crit = Math.random() < 0.35; vfx.slash(tp, Math.random() * 6.28, 2.4, Math.PI * 1.1, 0xd9a6ff, 0.25, 1.1); vfx.slash(tp, Math.random() * 6.28, 2.0, Math.PI * 0.9, 0xffffff, 0.2, 1.0); damageEnemy(t, Math.round(dmg * [1.6, 1.9, 2.1][U] * (crit ? 2 : 1)), crit); ringFx(tp, 0xffffff, 2, 0.25);
     } });
   } else if (cls === 'mage') {
     const t = nearestEnemy(p, 14), tp = t ? t.mesh.position.clone() : p.clone().addScaledVector(fwd, 5);
-    const m = new THREE.Mesh(new THREE.SphereGeometry(1.2, 14, 12), glow(0xff5a1f)); m.position.set(tp.x, 22, tp.z); m.add(vfx.glowSprite(0xff8a2a, 6));
-    addEffect(m, 0.8, (k) => { m.position.y = 22 * (1 - k) + 0.5; for (let i = 0; i < 3; i++) vfx.trail(m.position, i ? 0xffc060 : 0xff5a1f, 1.5); }, () => { explode(tp, 6.5, dmg * 6, 0xff5a1f); shake = 0.5; vfx.flash(tp, 0xffd27a, 18, 0.5, 1.5); vfx.shock(tp, 0xff6a1f, 8, 0.7); vfx.burst(tp, { color: 0xff7a2a, n: 70, speed: 12, up: 1.3, size: 0.95, life: 1.0, grav: 9 }); vfx.scorch(tp, 5, 4); screenFlash('#ffb060', 0.45, 500); });
-    ringFx(tp, 0xff5a1f, 6.5, 0.8); toast('☄️ Meteoro!');
+    if (!U) { meteorAt(tp, 6.5, dmg * 6, true); toast('☄️ Meteoro!'); }
+    else {
+      const N = U === 1 ? 6 : 12, spread = U === 1 ? 6 : 9, r = U === 1 ? 5 : 5.5, d = dmg * (U === 1 ? 4.2 : 4.6);
+      for (let i = 0; i < N; i++) timers.push({ at: T + i * (U === 1 ? 0.2 : 0.14), fn: () => {
+        const a = Math.random() * 6.28, rr = i ? Math.sqrt(Math.random()) * spread : 0;
+        meteorAt({ x: tp.x + Math.cos(a) * rr, z: tp.z + Math.sin(a) * rr }, r, Math.round(d), i % 3 === 0);
+      } });
+      toast('☄️ ' + ultName() + '!');
+    }
   } else if (cls === 'sorcerer') {
-    const mult = 3 + overload / 20; ringFx(p, hero.color, 9, 0.6); shake = 0.4; vfx.spiral(p, hero.color, 9, 60); vfx.spiral(p, 0xffffff, 6, 30); vfx.shock(p, hero.color, 10, 0.8);
-    enemies.slice().forEach(e => { if (dist2(e.mesh.position, p) < 9) damageEnemy(e, Math.round(dmg * mult)); });
-    overload = 0; toast('🌀 Sobrecarga liberada!');
+    const mult = 3 + overload / 20, R = [9, 11.5, 14][U], pulses = [1, 2, 3][U];
+    for (let w = 0; w < pulses; w++) timers.push({ at: T + w * 0.4, fn: () => {
+      const pp = player.position; ringFx(pp, hero.color, R, 0.6); shake = 0.4; vfx.spiral(pp, hero.color, R, 60); vfx.spiral(pp, 0xffffff, R * 0.7, 30); vfx.shock(pp, hero.color, R + 1, 0.8);
+      enemies.slice().forEach(e => { if (dist2(e.mesh.position, pp) < R) damageEnemy(e, Math.round(dmg * mult * (w ? 0.7 : 1))); });
+    } });
+    overload = 0; toast('🌀 ' + (U ? ultName() : 'Sobrecarga liberada') + '!');
   } else if (cls === 'druid') {
-    bearUntil = T + 6; toast('🐻 Forma de Urso!'); heal(maxHp * 0.15); ringFx(p, 0x7CFC00, 5, 0.6); vfx.rise(p, 0x7CFC00, 44, 3.5, 4, 0.5); vfx.burst(p, { color: 0xb6ff6a, n: 30, speed: 7, up: 0.9, size: 0.55, life: 0.9, grav: 2 }); vfx.column(p, 0x9bff6a, 8, 4, 0.7);
+    bearUntil = T + [6, 9, 12][U]; toast('🐻 ' + (U ? ultName() : 'Forma de Urso') + '!'); heal(maxHp * [0.15, 0.3, 0.5][U]); ringFx(p, 0x7CFC00, 5 + U * 3, 0.6); if (U) enemies.forEach(e => { if (dist2(e.mesh.position, p) < 6 + U * 3) e.stun = 1.5 + U; }); vfx.rise(p, 0x7CFC00, 44, 3.5, 4, 0.5); vfx.burst(p, { color: 0xb6ff6a, n: 30, speed: 7, up: 0.9, size: 0.55, life: 0.9, grav: 2 }); vfx.column(p, 0x9bff6a, 8, 4, 0.7);
   } else if (cls === 'archer') {
     const t = nearestEnemy(p, 14), tp = t ? t.mesh.position.clone() : p.clone().addScaledVector(fwd, 5);
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 40), new THREE.MeshBasicMaterial({ color: 0xfff3a0, transparent: true, opacity: 0.45, side: THREE.DoubleSide }));
-    ring.rotation.x = -Math.PI / 2; ring.position.set(tp.x, 0.15, tp.z); ring.scale.setScalar(5); scene.add(ring);
-    vfx.shock(tp, 0xfff3a0, 5.5, 0.6); vfx.flash(tp, 0xfff3a0, 8, 0.3, 1);
-    zones.push({ x: tp.x, z: tp.z, r: 5, until: T + 4, next: T, dmg: Math.round(dmg * 1.2), ring }); toast('🏹 Chuva de Flechas!');
+    const ZR = [5, 7, 9.5][U];
+    ring.rotation.x = -Math.PI / 2; ring.position.set(tp.x, 0.15, tp.z); ring.scale.setScalar(ZR); scene.add(ring);
+    vfx.shock(tp, 0xfff3a0, ZR + 0.5, 0.6); vfx.flash(tp, 0xfff3a0, 8, 0.3, 1);
+    zones.push({ x: tp.x, z: tp.z, r: ZR, until: T + [4, 5.5, 7][U], next: T, dmg: Math.round(dmg * [1.2, 1.6, 2.2][U]), ring }); toast('🏹 ' + ultName() + '!');
   }
 }
 
@@ -2990,6 +3017,18 @@ function runSelfTest() {
       state.level = 3; profReady = 0; changeProf(c0); if (state.level !== 7 || state.skills.might !== 2) throw new Error('vocacao nao restaurou o progresso');
       profReady = 0; changeProf(other); if (state.level !== 3) throw new Error('segunda vocacao perdeu o progresso'); profReady = 0; changeProf(c0); openProfs(); closePanel(); }
     out.push('vocacoes: ok');
+    // ULTs evoluidas (nivel 50 e 100) de todas as classes
+    { const cls0 = hero.cls, lv0 = state.level; spawnEnemy(false); spawnEnemy(false);
+      for (const c of Object.keys(CLASSES)) for (const lv of [1, 50, 100]) {
+        hero.cls = c; state.level = lv; skillReady[hero.id] = 0; invuln = 0; shield = 0; bearUntil = 0;
+        if (ultTier() !== (lv >= 100 ? 2 : lv >= 50 ? 1 : 0)) throw new Error('ultTier ' + c + lv);
+        useSkill(); if (!(skillReady[hero.id] > T)) throw new Error('ult nao disparou ' + c + lv);
+        if (lv >= 50 && ultName() === CLASSES[c].ult) throw new Error('ult sem nome evoluido ' + c);
+        timers.splice(0).forEach(t => t.fn()); updateSkillLabel(true, 0);
+      }
+      hero.cls = cls0; state.level = lv0; skillReady[hero.id] = 0; bearUntil = 0; }
+    out.push('ults evoluidas (7 classes x nv1/50/100): ok');
+
     // casa ampliada e andares
     { const pl = PLOTS.find(x => x.kind === 'house'); state.homes[pl.id] = { furn: [], sz: 0, fls: 1 }; enterHome(pl); const hw0 = homeRoom.hw; leaveHome();
       state.homes[pl.id].sz = 2; state.homes[pl.id].fls = 2; enterHome(pl); if (!(homeRoom.hw > hw0) || homeRoom.fls !== 2) throw new Error('casa nao ampliou');

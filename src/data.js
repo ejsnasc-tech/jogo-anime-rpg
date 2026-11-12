@@ -264,3 +264,15 @@ export const ACTS = [
 export const PORTRAITS = { UnirallArqueira: 'mira', UnirallAssassino: 'kuro', UnirallDruida: 'brenn', UnirallFeiticeira: 'lilith', UnirallGuerreira: 'rubi', UnirallMago: 'aster', UnirallPaladino: 'seren', Unirall1: 'kael', Unirall2: 'dante' };
 export const BASE = (import.meta.env && import.meta.env.BASE_URL) || './';
 export const portraitUrl = (model) => PORTRAITS[model] ? BASE + 'img/portraits/' + PORTRAITS[model] + '.webp' : null;
+
+// Evolucao das ULTs: nivel 50 e nivel 100 viram magias mais fortes (nome, icone, descricao)
+export const ULT_LV = [50, 100];
+export const ULT_EVO = {
+  warrior:  [{ name: 'Grito Titânico', desc: 'Onda dupla, área maior, atordoa por mais tempo e escudo de 35%.' }, { name: 'Fúria do Colosso', desc: 'Três ondas de impacto enormes, atordoamento longo e escudo de 50%.' }],
+  paladin:  [{ name: 'Julgamento Divino', desc: 'Pilares de luz caem sobre os inimigos, cura 50% e escudo maior.' }, { name: 'Ascensão Celestial', desc: 'Três pulsos de luz gigantes: cura 70%, escudo forte e muito dano em área.' }],
+  assassin: [{ name: 'Tempestade de Lâminas', desc: '9 golpes críticos, fica invulnerável por mais tempo.' }, { name: 'Dança da Morte', desc: '15 golpes devastadores em enxame, quase 2,5 s de invulnerabilidade.' }],
+  mage:     [{ name: 'Chuva de Meteoros', desc: 'Vários meteoros caem numa área bem maior.' }, { name: 'Apocalipse Flamejante', desc: 'Uma tempestade de 10 meteoros destrói tudo numa área enorme.' }],
+  sorcerer: [{ name: 'Sobrecarga Total', desc: 'Explosão arcana maior, com onda extra.' }, { name: 'Colapso Arcano', desc: 'Três explosões em cadeia numa área gigante.' }],
+  druid:    [{ name: 'Urso Ancestral', desc: 'Urso por mais tempo, ataque maior, prende os inimigos e cura 30%.' }, { name: 'Espírito da Natureza', desc: 'Urso colossal por 12 s, enraíza tudo por perto e cura 50%.' }],
+  archer:   [{ name: 'Tempestade de Flechas', desc: 'Chuva maior, mais longa e com mais dano.' }, { name: 'Eclipse de Flechas', desc: 'Chuva enorme por 7 s que varre a área toda.' }],
+};
