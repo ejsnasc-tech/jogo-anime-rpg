@@ -166,6 +166,9 @@
   .slot .pl { position:absolute; top:1px; right:4px; font:900 12px Arial; color:#ffe9a8; text-shadow:0 0 3px #000,0 0 3px #000; }
   .slot.sel { outline:3px solid #fff; }
   .slot.target { outline:3px solid #7CFC00; animation:pulse .8s infinite alternate; z-index:3; }
+  .slot.ready { border-color:#ffe36b !important; animation:readyglow 1s ease-in-out infinite alternate; z-index:3; }
+  .slot .rd { position:absolute; top:-1px; left:2px; font-size:14px; text-shadow:0 0 3px #000; pointer-events:none; }
+  @keyframes readyglow { from { box-shadow:0 0 4px 1px rgba(255,227,107,.5), inset 0 2px 8px #000; transform:translate(-50%,-50%) scale(1); } to { box-shadow:0 0 18px 6px rgba(255,227,107,.95), inset 0 2px 8px #000; transform:translate(-50%,-50%) scale(1.1); } }
   @keyframes pulse { from { box-shadow:0 0 4px #7CFC00, inset 0 2px 8px #000; } to { box-shadow:0 0 18px #7CFC00, inset 0 2px 8px #000; } }
   .tot { margin-top:6px; padding:5px 8px; background:rgba(0,0,0,.35); border-radius:8px; font-size:clamp(10px,2.7vw,12px); font-weight:700; color:#dbe4f7; line-height:1.45; }
   .tray { grid-area:tray; background:rgba(255,255,255,.05); border-radius:12px; padding:8px; }

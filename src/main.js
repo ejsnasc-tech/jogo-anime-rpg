@@ -1917,12 +1917,17 @@ function openSetPicker(back, slots, pick) {
   ]);
   const man = el('div', 'mannequin', null, $('card')); man.style.cssText = 'height:300px;min-height:300px;margin:6px 0;--ss:58px';
   man.insertAdjacentHTML('beforeend', FIGURE('#' + hero.color.toString(16).padStart(6, '0')));
+  let anyReady = false;
   Object.keys(DOLL_POS).filter(k => slots.includes(k)).forEach(key => {
     const it = equippedAt(key), b = el('button', 'slot', null, man);
     b.style.left = (slots.length <= 2 ? [30, 70][slots.indexOf(key)] : DOLL_POS[key][0]) + '%'; b.style.top = (slots.length <= 2 ? 50 : DOLL_POS[key][1]) + '%';
-    if (it) { b.style.borderColor = RAR[it.rar].color; artImg(itemArt(it), b); if (it.plus) el('span', 'pl', '+' + it.plus, b); b.onclick = () => pick(key); }
+    if (it) {
+      b.style.borderColor = RAR[it.rar].color; artImg(itemArt(it), b); if (it.plus) el('span', 'pl', '+' + it.plus, b); b.onclick = () => pick(key);
+      const st = craft.improveState(it); if (st) { b.classList.add('ready'); el('span', 'rd', st === 'evo' ? '⭐' : '🔨', b); anyReady = true; }
+    }
     else { artImg(ghostArt(ghostKey(key)), b); el('small', '', slotLabel(key), b); b.onclick = () => toast('Nada equipado em ' + slotLabel(key) + '. Equipe uma peça primeiro (botão EQUIP).'); }
   });
+  el('div', 'prow', anyReady ? '✨ As peças que piscam podem ser melhoradas agora:  ⭐ evoluir de nível   🔨 refinar' : 'Nenhuma peça pode ser melhorada agora. Junte mais peças iguais, ouro e materiais.', $('card')).style.cssText = 'font-size:13px;opacity:.9;justify-content:center;text-align:center';
 }
 function openNpcMenu(n) {
   if (isPaused()) return;

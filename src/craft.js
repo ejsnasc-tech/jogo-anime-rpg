@@ -29,6 +29,13 @@ export function initCraft(c) {
   const fodder = (it) => state.items.filter(i => i.uid !== it.uid && i.slot === it.slot && (i.kind || '') === (it.kind || '') && i.tier === it.tier && !isEquipped(i))
     .sort((a, b) => a.rar - b.rar || a.plus - b.plus);
   const worn = (slot) => state.items.find(i => i.uid === state.equip[slot]);
+  // o que dá para fazer agora com a peça: 'evo' (evoluir de nível), 'ref' (refinar +1) ou null
+  function improveState(it) {
+    if (!it) return null; const mi = matIdx(it), mats = state.mats[mi] || 0;
+    if (it.tier < MAXLV - 1) { const c = evoCost(it); if (fodder(it).length + 1 >= evoNeed(it) && ((state.gold >= c.gold && mats >= c.mats) || state.cash >= c.ky)) return 'evo'; }
+    if (it.plus < MAX_PLUS) { const c = upgradeCost(it); if ((state.gold >= c.gold && mats >= c.mat) || state.cash >= refineKy(c)) return 'ref'; }
+    return null;
+  }
   const lvTxt = (it) => 'Nível ' + (it.tier + 1) + '/' + MAXLV;
 
   function openEquipUp(back, slots, slot, msg) {
@@ -131,5 +138,5 @@ export function initCraft(c) {
     openPanel('🔧 ENCAIXES', rows);
   }
 
-  return { openCraft, openEquipUp, openForge, openGems, openSocket, giveGem };
+  return { improveState, openCraft, openEquipUp, openForge, openGems, openSocket, giveGem };
 }
