@@ -103,6 +103,90 @@ export const DISTRICTS = [
   { id: 'predios', name: 'Bairro dos Prédios', icon: '🏢', x: 78, z: 82, test: (x, z) => { const a = (Math.atan2(z, x) / D2R + 360) % 360, r = Math.hypot(x, z); return r > 34 && r < 135 && a > 8 && a < 92; } },
 ];
 
+// ---- colisao: casas, predios, lojas, barracas, castelo etc. sao solidos (o heroi contorna) ----
+const SOLIDS = [];   // retangulos girados {x,z,c,s,hw,hd} ou circulos {x,z,r}
+const addBox = (x, z, ry, lx, lz, hw, hd) => { const c = Math.cos(ry), s = Math.sin(ry); SOLIDS.push({ x: x + lx * c + lz * s, z: z - lx * s + lz * c, c, s, hw, hd }); };
+const addCirc = (x, z, r) => SOLIDS.push({ x, z, r });
+(() => {
+  PLOTS.forEach(p => {
+    addBox(p.x, p.z, p.ry, 0, 0, p.w / 2 + 0.7, p.d / 2 + 0.7);
+    if (p.v === 4) addBox(p.x, p.z, p.ry, p.w / 2 + 1.8, -0.5, 2, p.d * 0.35 + 0.2);
+    if (p.v === 3) addCirc(p.x + (-p.w / 2) * Math.cos(p.ry) + (p.d / 2 - 0.2) * Math.sin(p.ry), p.z + (p.w / 2) * Math.sin(p.ry) + (p.d / 2 - 0.2) * Math.cos(p.ry), 1.8);
+  });
+  [[42, -17.5, 0], [56, -17.5, 0], [82, -17.5, 0], [98, -17.5, 0], [49, 17.5, Math.PI], [60, 17.5, Math.PI], [99, 17.5, Math.PI], [38, 17.5, Math.PI], [86, 17.5, Math.PI]].forEach(([x, z, ry]) => addBox(x, z, ry, 0, 0, 5.4, 3.9));
+  NPC_DEFS.forEach(d => addBox(d.pos[0] - Math.sin(d.ry) * 2.4, d.pos[1] - Math.cos(d.ry) * 2.4, d.ry, 0, 0, 2.5, 1));
+  [[92, 8.3, Math.PI], [105, 8.3, Math.PI], [70, -8.4, 0]].forEach(([x, z, ry]) => addBox(x, z, ry, 0, 0, 2.5, 1));
+  LAND.forEach(l => {
+    const ry = Math.atan2(-l.x, -l.z);
+    if (l.k === 'tavern') addBox(l.x, l.z, ry, 0, 0, 7.7, 5.4);
+    else if (l.k === 'chapel') { addBox(l.x, l.z, ry, 0, 1, 4.7, 6.7); addBox(l.x, l.z, ry, 0, 8.2, 2.7, 2.7); }
+    else if (l.k === 'clock') addBox(l.x, l.z, ry, 0, 0, 3.4, 3.4);
+    else if (l.k === 'guild') addBox(l.x, l.z, ry, 0, 0, 9.2, 4.7);
+  });
+  addBox(CASTLE.x, CASTLE.z, 0, 0, 0, 24.5, 12.5); addBox(CASTLE.x, CASTLE.z, 0, 0, 5, 31.5, 6.5); addBox(CASTLE.x, CASTLE.z, 0, 0, -17, 30, 5); addBox(CASTLE.x, CASTLE.z, 0, 0, 13, 8.5, 4.7);
+  addCirc(ACAD.x, ACAD.z, 7); addBox(ACAD.x, ACAD.z, 0, 0, 10, 8.7, 4.7);
+  addCirc(FARM.x, FARM.z, 5); addBox(FARM.x, FARM.z, 0, -12, 12, 4.5, 4);
+  addCirc(0, 0, 7.2); addCirc(GATE_SQ.x, GATE_SQ.z, 3.3); addCirc(LAKE.x, LAKE.z, LAKE.r - 0.5); addCirc(108, 0, 2);
+  [[-14, 14], [14, 14], [-14, -14], [14, -14]].forEach(([x, z]) => addCirc(x, z, 1.7));
+  addCirc(82, -44, 3.9);
+})();
+export function pushOutCity(p, R = 0.6) {
+  for (let it = 0; it < 2; it++) for (let i = 0; i < SOLIDS.length; i++) {
+    const s = SOLIDS[i];
+    if (s.r !== undefined) { const dx = p.x - s.x, dz = p.z - s.z, d = Math.hypot(dx, dz), lim = s.r + R; if (d < lim) { const k = d > 1e-6 ? lim / d : 0; if (k) { p.x = s.x + dx * k; p.z = s.z + dz * k; } else p.x += lim; } continue; }
+    const ox = p.x - s.x, oz = p.z - s.z; if (Math.abs(ox) > s.hw + s.hd + R + 1 && Math.abs(oz) > s.hw + s.hd + R + 1) continue;
+    const lx = ox * s.c - oz * s.s, lz = ox * s.s + oz * s.c;
+    if (Math.abs(lx) > s.hw + R || Math.abs(lz) > s.hd + R) continue;
+    const cx = Math.max(-s.hw, Math.min(s.hw, lx)), cz = Math.max(-s.hd, Math.min(s.hd, lz)), ddx = lx - cx, ddz = lz - cz, d = Math.hypot(ddx, ddz);
+    let nx, nz;
+    if (d > 1e-6) { if (d >= R) continue; nx = lx + ddx / d * (R - d); nz = lz + ddz / d * (R - d); }
+    else { const px = s.hw - Math.abs(lx), pz = s.hd - Math.abs(lz); if (px < pz) { nx = Math.sign(lx || 1) * (s.hw + R); nz = lz; } else { nz = Math.sign(lz || 1) * (s.hd + R); nx = lx; } }
+    p.x = s.x + nx * s.c + nz * s.s; p.z = s.z - nx * s.s + nz * s.c;
+  }
+}
+const insideSolid = (x, z, pad) => SOLIDS.some(s => {
+  if (s.r !== undefined) return Math.hypot(x - s.x, z - s.z) < s.r + pad;
+  const ox = x - s.x, oz = z - s.z, lx = ox * s.c - oz * s.s, lz = ox * s.s + oz * s.c; return Math.abs(lx) < s.hw + pad && Math.abs(lz) < s.hd + pad;
+});
+// caminho ate o destino contornando os predios (A* numa grade de 2 m + suavizacao); devolve lista de pontos {x,z}
+const NG = 2, NH = Math.ceil((CITY_R + 4) / NG), NW = NH * 2 + 1;
+let navBlock = null;
+const cellOf = (v) => Math.round(v / NG) + NH;
+const navFree = (ix, iz) => ix >= 0 && iz >= 0 && ix < NW && iz < NW && !navBlock[iz * NW + ix];
+export function cityPath(fx, fz, tx, tz) {
+  if (!navBlock) {
+    navBlock = new Uint8Array(NW * NW);
+    for (let iz = 0; iz < NW; iz++) for (let ix = 0; ix < NW; ix++) {
+      const x = (ix - NH) * NG, z = (iz - NH) * NG, r = Math.hypot(x, z), gate = Math.abs(x) < 6 && z > 0;
+      navBlock[iz * NW + ix] = ((!gate && r > CITY_R - 3) || (r > CITY_R + 3) || insideSolid(x, z, 1.1)) ? 1 : 0;
+    }
+  }
+  const nearest = (x, z) => { let ix = cellOf(x), iz = cellOf(z); if (navFree(ix, iz)) return [ix, iz]; for (let r = 1; r < 12; r++) for (let a = -r; a <= r; a++) for (let b = -r; b <= r; b++) { if (Math.max(Math.abs(a), Math.abs(b)) !== r) continue; if (navFree(ix + a, iz + b)) return [ix + a, iz + b]; } return null; };
+  const s0 = nearest(fx, fz), g0 = nearest(tx, tz); if (!s0 || !g0) return [{ x: tx, z: tz }];
+  const N = NW * NW, gS = new Float32Array(N).fill(1e9), from = new Int32Array(N).fill(-1), done = new Uint8Array(N);
+  const heap = []; const push = (k, f) => { heap.push([f, k]); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+  const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { let l = 2 * i + 1, r = l + 1, m = i; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top[1]; };
+  const sk = s0[1] * NW + s0[0], gk = g0[1] * NW + g0[0]; gS[sk] = 0; push(sk, 0);
+  const hq = (k) => Math.hypot((k % NW) - g0[0], ((k / NW) | 0) - g0[1]);
+  let found = false;
+  while (heap.length) {
+    const k = pop(); if (done[k]) continue; done[k] = 1; if (k === gk) { found = true; break; }
+    const ix = k % NW, iz = (k / NW) | 0;
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+      if (!a && !b) continue; const jx = ix + a, jz = iz + b; if (!navFree(jx, jz)) continue;
+      if (a && b && (!navFree(ix + a, iz) || !navFree(ix, iz + b))) continue;
+      const j = jz * NW + jx, c = gS[k] + (a && b ? 1.414 : 1); if (c < gS[j]) { gS[j] = c; from[j] = k; push(j, c + hq(j)); }
+    }
+  }
+  if (!found) return [{ x: tx, z: tz }];
+  let cells = []; for (let k = gk; k !== -1; k = from[k]) cells.push({ x: ((k % NW) - NH) * NG, z: (((k / NW) | 0) - NH) * NG }); cells.reverse();
+  // suavizacao: pula pontos intermediarios quando da para ir em linha reta sem bater em nada
+  const clear = (a, b) => { const d = Math.hypot(b.x - a.x, b.z - a.z), n = Math.ceil(d / 0.8); for (let i = 1; i < n; i++) { const t = i / n; if (insideSolid(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t, 0.9)) return false; } return true; };
+  const out = []; let cur = { x: fx, z: fz }, i = 0;
+  while (i < cells.length) { let j = cells.length - 1; while (j > i && !clear(cur, cells[j])) j--; out.push(cells[j]); cur = cells[j]; i = j + 1; }
+  out.push({ x: tx, z: tz }); return out;
+}
+
 function label(text, border, big) {
   const c = document.createElement('canvas'); c.width = 512; c.height = 112;
   const g = c.getContext('2d');

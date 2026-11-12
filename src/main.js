@@ -8,7 +8,7 @@ import { initCraft } from './craft.js';
 import { initShop } from './shop.js';
 import { itemGemSum, SLOTS, SLOT_ORDER, EQUIP_KEYS, KINDS, WEAPON_KIND, OFF_KIND, RAR, MATS, FOREST_LV, MAX_PLUS, newItem, itemValue, itemStat, itemIcon, itemFmt, statFmt, itemName, itemLine, sellPrice, buyPrice, upgradeCost, rollDrop, migrateItems } from './items.js';
 import { itemArt, ghostArt } from './itemart.js';
-import { buildCity, CITY_R, CITY_SPAWN, PLOTS, DISTRICTS, drawCityBase } from './city.js';
+import { buildCity, CITY_R, CITY_SPAWN, PLOTS, DISTRICTS, drawCityBase, pushOutCity, cityPath } from './city.js';
 import { createNet, nameTag, NET_URL } from './net.js';
 import { makeBiome, groundTex, BIOME_INFO } from './biomes.js';
 import { EXTRA_PETS } from './pets.js';
@@ -2532,7 +2532,22 @@ function update(dt) {
   if (walkGoal) {
     const pp0 = player.position;
     if (Math.hypot(dx, dz) > 0.15) walkGoal = null;
-    else { const wx = walkGoal.x - pp0.x, wz = walkGoal.z - pp0.z, wd = Math.hypot(wx, wz); if (wd < 3.2) { const g0 = walkGoal; walkGoal = null; if (g0.plot) openPlotMenu(g0.plot); else if (g0.npc) openNpcMenu(g0.npc); } else { dx = wx / wd; dz = wz / wd; } }
+    else {
+      const wx = walkGoal.x - pp0.x, wz = walkGoal.z - pp0.z, wd = Math.hypot(wx, wz);
+      if (wd < 3.2) { const g0 = walkGoal; walkGoal = null; if (g0.plot) openPlotMenu(g0.plot); else if (g0.npc) openNpcMenu(g0.npc); }
+      else if (!inCity) { dx = wx / wd; dz = wz / wd; }
+      else {
+        // na cidade o heroi contorna casas e predios: segue os pontos do caminho
+        if (!walkGoal.path) { walkGoal.path = cityPath(pp0.x, pp0.z, walkGoal.x, walkGoal.z); walkGoal.stuck = 0; }
+        let wp = walkGoal.path[0];
+        while (wp && walkGoal.path.length > 1 && Math.hypot(wp.x - pp0.x, wp.z - pp0.z) < 1.3) { walkGoal.path.shift(); wp = walkGoal.path[0]; }
+        const ax = wp.x - pp0.x, az = wp.z - pp0.z, ad = Math.hypot(ax, az) || 1;
+        dx = ax / ad; dz = az / ad;
+        // preso (ficou parado): recalcula o caminho
+        if (walkGoal.lx !== undefined && Math.hypot(pp0.x - walkGoal.lx, pp0.z - walkGoal.lz) < 0.01) { if (++walkGoal.stuck > 20) { walkGoal.path = null; } } else walkGoal.stuck = 0;
+        walkGoal.lx = pp0.x; walkGoal.lz = pp0.z;
+      }
+    }
   }
   // camera imersiva acompanha o rumo: empurrar para o lado (ou para frente e de lado) gira a visao nessa direcao
   if (lowCam() && !walkGoal) { const m0 = Math.hypot(dx, dz); if (m0 > 0.2) { const fwd = Math.max(0, -dz / m0); camYawT -= (dx / m0) * Math.min(1, m0) * (0.5 + 0.9 * fwd) * 1.7 * dt; } }
@@ -2548,6 +2563,7 @@ function update(dt) {
     p.x = THREE.MathUtils.clamp(p.x, -homeRoom.hw + 0.7, homeRoom.hw - 0.7); p.z = THREE.MathUtils.clamp(p.z, -homeRoom.hd + 0.8, zmax);
     if (p.z > homeRoom.hd + 0.35) { leaveHome(); return; }
   } else if (inCity) {
+    pushOutCity(p, 0.6);
     const gate = Math.abs(p.x) < 5.2 && p.z > 0, r = Math.hypot(p.x, p.z), lim = CITY_R - 1.2;
     if (!gate && r > lim) { p.x *= lim / r; p.z *= lim / r; }
     if (p.z > CITY_R + 0.5) { setCityMode(false); return; }
@@ -2900,6 +2916,20 @@ function runSelfTest() {
       openNpc(city.npcs.find(x => x.role === 'deco')); openFurnShop(city.npcs.find(x => x.role === 'deco')); closePanel();
       openCityMap(); closePanel(); drawMap($('minimap'));
       walkGoal = { x: pl.door[0], z: pl.door[1], plot: pl }; player.position.set(pl.door[0] + 6, 0, pl.door[1]); for (let i = 0; i < 200 && walkGoal; i++) update(0.05); if (!panelOpen) throw new Error('casa nao abriu ao chegar'); closePanel();
+      { // andar ate casas e NPCs de longe: tem que chegar sem atravessar predios
+        const goals = [...PLOTS.filter((_, i) => i % 7 === 3).slice(0, 8).map(p => ({ x: p.door[0], z: p.door[1], plot: p })), ...city.npcs.map(n => ({ x: n.pos[0], z: n.pos[1], npc: n }))];
+        let worst = 0, fails = [];
+        goals.forEach((g, gi) => {   // o caminho planejado nao pode cruzar nenhum solido
+          const pts = [{ x: CITY_SPAWN[0], z: CITY_SPAWN[1] }, ...cityPath(CITY_SPAWN[0], CITY_SPAWN[1], g.x, g.z)];
+          for (let k = 1; k < pts.length; k++) for (let t = 0; t <= 1; t += 0.05) { const q = { x: pts[k - 1].x + (pts[k].x - pts[k - 1].x) * t, z: pts[k - 1].z + (pts[k].z - pts[k - 1].z) * t }, q0 = { x: q.x, z: q.z }; pushOutCity(q, 0.5); worst = Math.max(worst, Math.hypot(q.x - q0.x, q.z - q0.z)); }
+        });
+        goals.forEach((g, gi) => {
+          player.position.set(gi % 2 ? 0 : CITY_SPAWN[0], 0, CITY_SPAWN[1] - (gi % 3) * 3); walkGoal = Object.assign({}, g); let n = 0;
+          for (; n < 3000 && walkGoal; n++) { update(0.05); const q = { x: player.position.x, z: player.position.z }; pushOutCity(q, 0.55); worst = Math.max(worst, Math.hypot(q.x - player.position.x, q.z - player.position.z)); }
+          if (walkGoal) fails.push((g.plot ? g.plot.id : g.npc.role) + '@' + Math.round(player.position.x) + ',' + Math.round(player.position.z)); walkGoal = null; closePanel();
+        });
+        if (fails.length) throw new Error('nao chegou: ' + fails.join(' ')); if (worst > 0.1) throw new Error('atravessou predio: ' + worst.toFixed(2));
+      }
       out.push('casas/predios/moveis: ok'); }
     travelTo(2); if (inCity || state.act !== 2) throw new Error('viagem');
     setCityMode(true); if (!inCity) throw new Error('cidade'); travelTo(0);
