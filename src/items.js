@@ -5,7 +5,7 @@ export const MATS = [
   { icon: '🐚', name: 'Conchas do Mar' }, { icon: '🕸️', name: 'Essência Sombria' }, { icon: '🔷', name: 'Cristal Arcano' },
   { icon: '🪨', name: 'Minério do Planalto' }, { icon: '🌿', name: 'Seiva Primeva' }, { icon: '🌌', name: 'Fragmento do Vazio' },
 ];
-const MATERIAL = ['Concha', 'Ferro', 'Cristal', 'Rocha', 'Raiz', 'Vazio'];   // "Espada de Ferro", "Elmo de Cristal"...
+const MATERIAL = ['Concha', 'Ferro', 'Cristal', 'Rocha', 'Raiz', 'Vazio', 'Obsidiana', 'Mithril', 'Astral', 'Celestial'];   // "Espada de Ferro", "Elmo de Cristal"...
 
 // Atributos que os equipamentos dão (somados no jogo todo)
 export const STATS = {
@@ -61,7 +61,7 @@ export const RAR = [
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 export function newItem(slot, tier, rar, cls) {
-  const it = { uid: uid(), slot, tier: Math.min(5, tier), rar, plus: 0 };
+  const it = { uid: uid(), slot, tier: Math.min(9, tier), rar, plus: 0 };
   if (slot === 'weapon') it.kind = WEAPON_KIND[cls] || 'sword';
   if (slot === 'offhand') it.kind = OFF_KIND[cls] || 'shield';
   return it;
@@ -73,7 +73,7 @@ export const itemIcon = (it) => (it.kind && KINDS[it.kind] && KINDS[it.kind].ico
 export const itemValue = (it) => itemBase(it) * (1 + it.tier * 0.5) * RAR[it.rar].mult * (1 + it.plus * 0.2);
 export const statFmt = (stat, v) => STATS[stat].fmt(v);
 export const itemFmt = (it) => STATS[itemStat(it)].fmt(itemValue(it));
-export const itemName = (it) => ((it.kind && KINDS[it.kind] ? KINDS[it.kind].label : SLOTS[it.slot].noun) + ' de ' + MATERIAL[it.tier]) + (it.plus ? ' +' + it.plus : '');
+export const itemName = (it) => ((it.kind && KINDS[it.kind] ? KINDS[it.kind].label : SLOTS[it.slot].noun) + ' de ' + MATERIAL[it.tier]) + ' Nv.' + (it.tier + 1) + (it.plus ? ' +' + it.plus : '');
 export const itemLine = (it) => itemIcon(it) + ' ' + itemName(it) + ' [' + RAR[it.rar].name + ']  ' + itemFmt(it) + gemTail(it);
 export const sellPrice = (it) => Math.round(12 * (1 + it.tier * 1.4) * (1 + it.rar * 1.6) * (1 + it.plus * 0.5));
 export const buyPrice = (tier, rar) => Math.round(100 * (1 + tier * 1.5) * (1 + rar * 2.5));
@@ -103,10 +103,19 @@ export const LOOT = {
   boss: { name: 'Chefe', item: 1, mat: 1, matN: 6 },
 };
 
+// Nível (tier 0..9) do item que cai: perto do nível da floresta; melhores são raros e só de chefes.
+// Níveis 8 a 10 (tier 7+) não caem: só se conseguem evoluindo peças na forja.
+export function dropTier(act, boss) {
+  let t = act; const r = Math.random();
+  if (boss) { if (r < 0.02 && act >= 3) t += 3; else if (r < 0.10) t += 2; else if (r < 0.40) t += 1; }
+  else { if (r < 0.01) t += 2; else if (r < 0.07) t += 1; else if (r < 0.45) t -= 1; }
+  return Math.max(0, Math.min(6, t));
+}
+
 export function rollDrop(kind, tier, boss, cls) {
   const t = LOOT[boss ? 'boss' : kind] || LOOT.Skeleton_Minion;
   const res = { mat: 0, item: null };
   if (Math.random() < t.mat) res.mat = t.matN;
-  if (Math.random() < t.item) res.item = newItem(SLOT_ORDER[Math.floor(Math.random() * SLOT_ORDER.length)], tier, rollRarity(boss), cls);
+  if (Math.random() < t.item) res.item = newItem(SLOT_ORDER[Math.floor(Math.random() * SLOT_ORDER.length)], dropTier(tier, boss), rollRarity(boss), cls);
   return res;
 }

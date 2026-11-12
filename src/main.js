@@ -493,7 +493,7 @@ const lookSignature = () => { const c = equippedAt('chest'), h = equippedAt('hel
 function lookFor(h) {
   if (h.id !== 'player') return h;
   const c = equippedAt('chest'), hm = equippedAt('helm');
-  return Object.assign({}, h, { outfit: c ? TIER_COL[c.tier] : h.outfit, hat: hm ? true : h.hat });
+  return Object.assign({}, h, { outfit: c ? TIER_COL[Math.min(5, c.tier)] : h.outfit, hat: hm ? true : h.hat });
 }
 function refreshLook() { if (player && hero.id === 'player' && lookSignature() !== lookSig) setHero(); }
 let eqAura = null;
@@ -1859,9 +1859,9 @@ function setCityMode(on) {
 }
 
 function doUpgrade(it) {
-  const c = upgradeCost(it), have = state.mats[it.tier] || 0;
+  const c = upgradeCost(it), mi = Math.min(5, it.tier), have = state.mats[mi] || 0;
   if (it.plus >= MAX_PLUS || state.gold < c.gold || have < c.mat) return false;
-  state.gold -= c.gold; state.mats[it.tier] = have - c.mat; it.plus++; recalcHp(); save(state); refreshHud(); return true;
+  state.gold -= c.gold; state.mats[mi] = have - c.mat; it.plus++; recalcHp(); save(state); refreshHud(); return true;
 }
 
 function openGear(title, slots, mode, back, keep) {
@@ -1881,7 +1881,7 @@ function openGear(title, slots, mode, back, keep) {
         const row = { text: (isEquipped(it) ? '✅ ' : '') + itemLine(it), color: RAR[it.rar].color };
         if (maxed) { row.btn = 'MÁX'; row.enabled = false; }
         else row.btns = [
-          { label: '⬆ 🪙' + c.gold + ' ' + MATS[it.tier].icon + c.mat, enabled: state.gold >= c.gold && (state.mats[it.tier] || 0) >= c.mat, fn: () => { doUpgrade(it); again(); } },
+          { label: '⬆ 🪙' + c.gold + ' ' + MATS[Math.min(5, it.tier)].icon + c.mat, enabled: state.gold >= c.gold && (state.mats[Math.min(5, it.tier)] || 0) >= c.mat, fn: () => { doUpgrade(it); again(); } },
           { label: '⚡🔮' + ky, enabled: state.cash >= ky, fn: () => { state.cash -= ky; it.plus++; recalcHp(); save(state); refreshHud(); again(); } },
         ];
         rows.push(row);
@@ -1916,7 +1916,7 @@ function openNpcMenu(n) {
   const rows = [{ head: true, text: n.icon + ' ' + n.title + '\n“' + n.talk + '”' }];
   if (slots) {
     const nm = ROLE_WHAT[n.role];
-    rows.push({ text: '⬆ Melhorar ' + nm + '\nGaste ouro e materiais da floresta, ou 🔮 Kyros para evoluir na hora', btn: 'ABRIR', fn: () => openGear('⬆ Melhorar ' + nm, slots, 'upgrade', back) });
+    rows.push({ text: '⬆ Melhorar ' + nm + '\nEscolha a peça que você usa e veja o que precisa', btn: 'ABRIR', fn: () => craft.openEquipUp(back, slots) });
     rows.push({ text: '🛒 Comprar ' + nm + '\nEquipamentos da loja', btn: 'ABRIR', fn: () => openGear('🛒 Comprar ' + nm, slots, 'buy', back) });
     rows.push({ text: '💰 Vender itens\nO que você coletou dos monstros', btn: 'ABRIR', fn: () => openGear('💰 Vender itens', SLOT_ORDER, 'sell', back) });
   }
@@ -2264,7 +2264,7 @@ function buildDetail(det, sel) {
   const art = el('div', 'det-art', null, row); art.style.borderColor = RAR[sel.rar].color; artImg(itemArt(sel), art);
   const info = el('div', 'det-info', null, row);
   el('div', 'det-name', itemName(sel), info).style.color = RAR[sel.rar].color;
-  el('div', 'det-sub', RAR[sel.rar].name + ' • ' + slotLabel(sel.slot) + ' • Floresta ' + (sel.tier + 1) + (on ? ' • ✔ equipado' : ''), info);
+  el('div', 'det-sub', RAR[sel.rar].name + ' • ' + slotLabel(sel.slot) + ' • Nível ' + (sel.tier + 1) + (on ? ' • ✔ equipado' : ''), info);
   el('div', 'det-stat', itemFmt(sel), info);
   if (!on) {
     const cur = equippedAt(keyFor(sel)), cmp = el('div', 'det-cmp', null, info);
@@ -2718,7 +2718,7 @@ if (qs.has('city')) setCityMode(true);
 if (qs.has('at')) { const [ax, az] = qs.get('at').split(',').map(Number); if (!qs.has('city')) setCityMode(true); player.position.set(ax, 0, az); syncCam(); }
 if (qs.has('night')) dayT = +qs.get('night') || 0;
 if (qs.has('quests')) setTimeout(() => openQuests(), 1500);
-if (qs.has('dbg')) window.__g = { useSkill, castSkill, get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
+if (qs.has('dbg')) window.__g = { craft, useSkill, castSkill, get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
 if (qs.get('pos')) { const iv = setInterval(() => { if (!gameStarted) return; clearInterval(iv); setTimeout(() => { const [px, pz] = qs.get('pos').split(',').map(Number); if (inCity) setCityMode(false); player.position.set(px || 0, 0, pz || 0); playerGy = walkY(px || 0, pz || 0); }, 600); }, 300); }
 if (qs.get('cam') === 'low') { camMode = 'low'; $('camb').querySelector('small').textContent = 'IMERSIVA'; }
 if (qs.has('yaw')) { camYaw = camYawT = +qs.get('yaw'); }
@@ -2916,6 +2916,13 @@ function runSelfTest() {
     if (!(state.meta.cnt.dungeon >= 1)) throw new Error('masmorra nao contou'); for (let i = 0; i < 80; i++) update(0.05); setCityMode(false);
     fishing = { st: 'bite', t: 1 }; const f0 = state.meta.cnt.fish || 0; catchFish(); if ((state.meta.cnt.fish || 0) !== f0 + 1) throw new Error('pesca');
     craft.giveGem('topaz', 1); craft.giveGem('topaz', 1); craft.giveGem('topaz', 1); craft.openCraft(null); craft.openGems(null); craft.openSocket(null, gi); craft.openForge(null, 'weapon');
+    { const w0 = newItem('helm', 2, 0, 'warrior'); state.items.push(w0); state.equip.helm = w0.uid;
+      for (let k = 0; k < 3; k++) state.items.push(newItem('helm', 2, 0, 'warrior'));
+      state.gold += 99999; state.mats[2] = 99; const n0 = state.items.length;
+      craft.openEquipUp(null, SLOT_ORDER); craft.openEquipUp(null, SLOT_ORDER, 'helm');
+      const evb = [...document.querySelectorAll('#card button')].find(b => b.textContent === 'EVOLUIR'); if (!evb || evb.disabled) throw new Error('evoluir indisponivel');
+      evb.click(); if (w0.tier !== 3 || state.items.length !== n0 - 3) throw new Error('evolucao falhou ' + w0.tier + ' ' + state.items.length);
+      craft.openEquipUp(null, SLOT_ORDER, 'helm'); out.push('melhorar equipamento: ok'); }
     out.push('ofício/gemas/masmorra/pesca: ok');
     // passe, loja, imoveis, mercador
     state.gems = 5000; state.gold = 1e6; shop.passXp('boss', 40); if (!(state.pass.xp >= 1200)) throw new Error('passe xp'); shop.openPass(null); shop.openCosmetics(null); shop.openGemPacks(null);
