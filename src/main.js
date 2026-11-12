@@ -13,6 +13,7 @@ import { createNet, nameTag, NET_URL } from './net.js';
 import { makeBiome, groundTex, BIOME_INFO } from './biomes.js';
 import { EXTRA_PETS } from './pets.js';
 import { createAmbient } from './ambient.js';
+import { makeCreature, CREATURE_TYPES, hordeWeights, hordeTitle } from './creatures.js';
 import { createVfx } from './vfx.js';
 const IMG = ((import.meta.env && import.meta.env.BASE_URL) || './') + 'img/';
 import { QUESTS, ACH, LOGIN_DAYS, ensureMeta, loginState, claimLogin, loginReward, questReward, offlineGain } from './meta.js';
@@ -1013,6 +1014,7 @@ function openIndex() {
   rows.push({ img: 'acts/' + a.realm + '.webp', head: true, text: '📖 HISTÓRIA\n' + (state.endless ? 'Tomo restaurado! Aventura Infinita.' : 'Ato ' + (state.act + 1) + '/6 — ' + REALMS[a.realm].icon + ' ' + a.name + '\nEstágio ' + state.stage + '/5') });
   const er = a.realm;
   rows.push({ text: 'Inimigos deste reino: ' + REALMS[er].icon + ' ' + REALMS[er].name + '\nVantagem: heróis de ' + Object.keys(REALMS).filter(k => REALMS[k].strong === er).map(k => REALMS[k].name).join(', ') + ' (+25% dano)' });
+  rows.push({ text: '🐾 Monstros por estágio neste reino:\n' + [1, 2, 3, 4, 5].map(i => (i === 5 ? 'Chefe' : 'Estágio ' + i) + ' — ' + hordeTitle(er, i)).join('\n') });
   rows.push({ head: true, text: '⚔️ CLASSES' });
   Object.entries(CLASSES).forEach(([k, c0]) => { const c = Object.assign({ k }, c0); rows.push({ text: c.icon + ' ' + c.name + ' — ' + c.role + '\n' + c.desc + '\nULT: ' + c.ult + '  →  Nv.' + ULT_LV[0] + ': ' + ULT_EVO[c.k][0].name + '  →  Nv.' + ULT_LV[1] + ': ' + ULT_EVO[c.k][1].name }); });
   rows.push({ head: true, text: '👹 MONSTROS E FRAQUEZAS' });
@@ -1110,7 +1112,7 @@ function spawnProxy(r) {
   const tintBase = boss ? info.color : (T0.tint != null ? T0.tint : realm.enemy);
   const BS = boss ? BOSSES[curAct().realm] : null;
   const tint = new THREE.Color(BS ? BS.tint : tintBase).lerp(new THREE.Color(0xffffff), boss ? (BS ? 0 : 0.2) : (T0.tint != null ? 0.1 : 0.5)).getHex();
-  const mesh = (BS && BS.proc && bossBody(curAct().realm)) || makeSkeleton(BS ? BS.model : T0.model, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run, bsize: BS && BS.size }) || makeEnemy(boss ? info.color : realm.enemy, boss);
+  const mesh = (!boss && T0.body && makeCreature(T0.body, T0.tint, T0.size)) || (BS && BS.proc && bossBody(curAct().realm)) || makeSkeleton(BS ? BS.model : T0.model, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run, bsize: BS && BS.size }) || makeEnemy(boss ? info.color : realm.enemy, boss);
   if (BS && !BS.proc) bossLook(mesh, curAct().realm);
   mesh.position.set(r[2], 0, r[3]); scene.add(mesh);
   const e = { nid: r[0], remote: true, mesh, hp: Math.max(1, r[4]), maxHp: r[5], speed: 0, boss, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? (BS ? BS.r : 1.4) : T0.r, t: Math.random() * 10, dmg: 0, stun: 0, slow: 0, flash: 0, ranged: null, res: boss ? null : T0.res || null, tx: r[2], tz: r[3], elite };
@@ -1184,6 +1186,7 @@ const ETYPES = {
   nova: { name: 'Mago da Nova', model: 'Skeleton_Mage', loot: 'Skeleton_Mage', hp: 0.9, dmg: 1.5, spd: 0.75, size: 1.8, r: 0.7, tint: 0x4fc3ff, beh: 'nova', atk: 'Spellcast_Shoot' },
   spitter: { name: 'Cuspidor', model: 'Skeleton_Rogue', loot: 'Skeleton_Rogue', hp: 0.8, dmg: 0.9, spd: 0.8, size: 1.7, r: 0.7, tint: 0x86d94a, beh: 'spitter', atk: 'Spellcast_Shoot' },
 };
+Object.assign(ETYPES, CREATURE_TYPES);
 // cada floresta tem a sua horda (classe de monstros) com ataques diferentes
 const HORDES = {
   mares: { name: 'Afogados', sub: 'enxames que cercam e cuspidores de poças', w: (st) => ({ swarm: 40, minion: 24, spitter: st >= 2 ? 18 : 0, archer: st >= 3 ? 8 : 0, brute: st >= 4 ? 5 : 0 }) },
@@ -1328,8 +1331,8 @@ function bossBrain(e, o, vx, vz, d) {
 // quanto mais avançado o ato / estágio, mais variedade e mais atiradores
 function pickEType() {
   const act = state.act, st = state.endless ? 5 : state.stage, H = HORDES[ACTS[act].realm];
-  const w = H ? H.w(st) : { minion: 60 };
-  if (night > 0.55) { w.runner = (w.runner || 0) + 6; w.stalker = (w.stalker || 0) + 8; }
+  const w = H ? hordeWeights(ACTS[act].realm, st, act) : { minion: 60 };
+  if (night > 0.55 && (st === 1 || state.endless)) { w.runner = (w.runner || 0) + 6; w.stalker = (w.stalker || 0) + 8; }
   let r = Math.random() * Object.values(w).reduce((a, b) => a + b, 0);
   for (const k in w) { r -= w[k]; if (r <= 0) return k; }
   return 'minion';
@@ -1344,7 +1347,7 @@ function spawnEnemy(boss, info, forceType, at) {
   const tintBase = boss ? (BS ? BS.tint : info.color) : (T0.tint != null ? T0.tint : realm.enemy);
   const tint = new THREE.Color(tintBase).lerp(new THREE.Color(0xffffff), boss ? (BS ? 0 : 0.2) : (T0.tint != null ? 0.1 : 0.5)).getHex();
   const kind = BS ? BS.model : T0.model;
-  const mesh = (BS && BS.proc && bossBody(curAct().realm)) || makeSkeleton(kind, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run, bsize: BS && BS.size }) || makeEnemy(boss ? info.color : realm.enemy, boss);
+  const mesh = (!boss && T0.body && makeCreature(T0.body, T0.tint, T0.size)) || (BS && BS.proc && bossBody(curAct().realm)) || makeSkeleton(kind, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run, bsize: BS && BS.size }) || makeEnemy(boss ? info.color : realm.enemy, boss);
   if (BS && !BS.proc) bossLook(mesh, curAct().realm);
   mesh.position.set(x, 0, z); scene.add(mesh);
   const lv = zoneLv();
@@ -1469,7 +1472,7 @@ function stageClear() {
   track('stage'); state.stage++; state.stageKills = 0; clearEnemies();
   state.gold += 20 * state.level;
   if (state.stage >= 5) { toast('⚠ O chefe se aproxima!'); showDialog(curAct().bossIntro, spawnBoss); }
-  else toast('✅ Estágio ' + (state.stage - 1) + ' concluído!');
+  else toast('✅ Estágio ' + (state.stage - 1) + ' concluído!\n⚔ Estágio ' + state.stage + ': ' + hordeTitle(curAct().realm, state.stage));
   save(state); refreshHud();
 }
 
@@ -3028,6 +3031,14 @@ function runSelfTest() {
       }
       hero.cls = cls0; state.level = lv0; skillReady[hero.id] = 0; bearUntil = 0; }
     out.push('ults evoluidas (7 classes x nv1/50/100): ok');
+    // hordas por estagio: todos os tipos existem, nascem e variam entre estagios
+    { const act0 = state.act, st0 = state.stage; let n = 0;
+      for (let a = 0; a < ACTS.length; a++) { const realm = ACTS[a].realm, seen = [];
+        for (let st = 1; st <= 5; st++) { const w = hordeWeights(realm, st, a); seen.push(Object.keys(w).filter(k => w[k] > 0).sort().join(','));
+          for (const k in w) if (w[k] > 0) { if (!ETYPES[k]) throw new Error('tipo inexistente ' + k); const e = spawnEnemy(false, null, k); if (!e || !e.mesh) throw new Error('nao nasceu ' + k); n++; } }
+        if (new Set(seen.slice(0, 4)).size < 4) throw new Error('estagios 1-4 repetem monstros em ' + realm);
+        if (seen[0].includes('crab') || !/minion/.test(seen[0])) throw new Error('estagio 1 nao e de esqueletos em ' + realm); }
+      clearEnemies(); state.act = act0; state.stage = st0; applyAct(); out.push('hordas por estagio (6 reinos x 5 estagios, ' + n + ' monstros): ok'); }
 
     // casa ampliada e andares
     { const pl = PLOTS.find(x => x.kind === 'house'); state.homes[pl.id] = { furn: [], sz: 0, fls: 1 }; enterHome(pl); const hw0 = homeRoom.hw; leaveHome();
