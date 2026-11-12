@@ -148,6 +148,16 @@ const insideSolid = (x, z, pad) => SOLIDS.some(s => {
   if (s.r !== undefined) return Math.hypot(x - s.x, z - s.z) < s.r + pad;
   const ox = x - s.x, oz = z - s.z, lx = ox * s.c - oz * s.s, lz = ox * s.s + oz * s.c; return Math.abs(lx) < s.hw + pad && Math.abs(lz) < s.hd + pad;
 });
+// camera: devolve ate onde (0..1) da linha heroi->camera da pra ir sem entrar num predio (teto ~12 m; acima disso a camera enxerga por cima)
+export function camClear(hx, hz, cx, cy, cz) {
+  const H = 1.2, ROOF = 12, N = 36;
+  for (let i = 1; i <= N; i++) {
+    const t = i / N, y = H + (cy - H) * t;
+    if (y > ROOF) return 1;
+    if (insideSolid(hx + (cx - hx) * t, hz + (cz - hz) * t, 0.4)) return Math.max(0.18, (i - 1.5) / N);
+  }
+  return 1;
+}
 // caminho ate o destino contornando os predios (A* numa grade de 2 m + suavizacao); devolve lista de pontos {x,z}
 const NG = 2, NH = Math.ceil((CITY_R + 4) / NG), NW = NH * 2 + 1;
 let navBlock = null;

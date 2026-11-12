@@ -8,7 +8,7 @@ import { initCraft } from './craft.js';
 import { initShop } from './shop.js';
 import { itemGemSum, SLOTS, SLOT_ORDER, EQUIP_KEYS, KINDS, WEAPON_KIND, OFF_KIND, RAR, MATS, FOREST_LV, MAX_PLUS, newItem, itemValue, itemStat, itemIcon, itemFmt, statFmt, itemName, itemLine, sellPrice, buyPrice, upgradeCost, rollDrop, migrateItems } from './items.js';
 import { itemArt, ghostArt } from './itemart.js';
-import { buildCity, CITY_R, CITY_SPAWN, PLOTS, DISTRICTS, drawCityBase, pushOutCity, cityPath } from './city.js';
+import { buildCity, CITY_R, CITY_SPAWN, PLOTS, DISTRICTS, drawCityBase, pushOutCity, cityPath, camClear } from './city.js';
 import { createNet, nameTag, NET_URL } from './net.js';
 import { makeBiome, groundTex, BIOME_INFO } from './biomes.js';
 import { EXTRA_PETS } from './pets.js';
@@ -2721,7 +2721,9 @@ function frame() {
   zoom += (zoomT - zoom) * Math.min(1, dt * 8);
   const dcm = decor.on && homeRoom, cx = dcm ? 0 : p.x, cz = dcm ? 1.2 : p.z;
   camGy += ((dcm || inCity || inHome ? 0 : walkY(p.x, p.z)) - camGy) * Math.min(1, dt * 5);
-  camera.position.lerp(new THREE.Vector3(cx, camGy, cz).add((dcm ? _co.copy(CAM_DECOR) : camOffset()).multiplyScalar(zoom)), Math.min(1, dt * (dcm ? 9 : 6)));
+  { const tg = new THREE.Vector3(cx, camGy, cz).add((dcm ? _co.copy(CAM_DECOR) : camOffset()).multiplyScalar(zoom));
+    if (inCity && !dcm) { const k = camClear(cx, cz, tg.x, tg.y, tg.z); if (k < 1) { tg.x = cx + (tg.x - cx) * k; tg.y = camGy + 1.2 + (tg.y - camGy - 1.2) * k; tg.z = cz + (tg.z - cz) * k; } }
+    camera.position.lerp(tg, Math.min(1, dt * (dcm ? 9 : inCity ? 9 : 6))); }
   if (shake > 0) { shake -= dt; camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake; }
   { const lc = lowCam(); camYaw += (camYawT - camYaw) * Math.min(1, dt * 8);
     const f = lc ? 62 : 50; if (Math.abs(camera.fov - f) > 0.05) { camera.fov += (f - camera.fov) * Math.min(1, dt * 5); camera.updateProjectionMatrix(); }
