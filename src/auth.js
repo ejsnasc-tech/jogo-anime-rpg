@@ -68,7 +68,7 @@ export function openAuth(opts) {
     };
     go.onclick = () => submit('login'); reg.onclick = () => submit('register');
     pass.onkeydown = (e) => { if (e.key === 'Enter') submit('login'); };
-    box.append(el('h1', null, 'Anime Crossover RPG'), el('p', 'sub', 'Entre com a sua conta ou crie uma. Só nome e senha, sem e-mail.'), name, pass, err, go, reg);
+    box.append(el('h1', null, 'Kyros Online'), el('p', 'sub', 'Entre com a sua conta ou crie uma. Só nome e senha, sem e-mail.'), name, pass, err, go, reg);
     if (opts.offline) { const off = el('button', 'sec', 'Jogar sem conta (só neste aparelho)'); off.onclick = opts.offline; box.append(off); }
   }
   function viewChars(chars) {
