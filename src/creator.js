@@ -85,7 +85,7 @@ export function openCreator(opts) {
   function viewAccount() {
     body.innerHTML = '';
     const ban = el('img'); ban.src = ((import.meta.env && import.meta.env.BASE_URL) || './') + 'img/title.webp'; ban.alt = ''; ban.style.cssText = 'width:100%;max-height:130px;object-fit:cover;border-radius:14px;border:3px solid #f5c542;margin-bottom:8px'; ban.onerror = () => ban.remove(); body.append(ban);
-    body.append(el('h1', null, 'Kyros Online'), el('p', 'sub', 'Crie sua conta para começar a aventura'));
+    body.append(el('h1', null, 'Aldyveon'), el('p', 'sub', 'Crie sua conta para começar a aventura'));
     const inp = el('input'); inp.type = 'text'; inp.maxLength = 16; inp.placeholder = 'Seu nome de jogador'; inp.value = account;
     const err = el('div', 'err');
     const go = el('button', 'big', 'Criar conta');
