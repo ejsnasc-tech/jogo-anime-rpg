@@ -342,6 +342,19 @@
   body.phone #menu { top:calc(env(safe-area-inset-top) + 176px); }
   body.phone #bossbar { top:calc(env(safe-area-inset-top) + 90px); }
   body.phone.land #hbars { width:150px; }
+
+  /* ===== MONTAR vira botao redondo; menu da paisagem desce; carteira ===== */
+  #mount { min-width:0 !important; width:56px; height:56px; border-radius:50% !important; padding:0 !important; display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1; font-size:9px !important; }
+  #mount .i { font-size:22px; } #mount small { font-size:8px; margin-top:1px; }
+  body.phone #mount { width:44px; height:44px; right:12px; bottom:calc(env(safe-area-inset-bottom) + 90px); }
+  body.phone #mount .i { font-size:18px; } body.phone #mount small { font-size:6.5px; }
+  body.phone.land #mount { right:146px; bottom:calc(env(safe-area-inset-bottom) + 12px); }
+  body.phone.land #menu { bottom:calc(env(safe-area-inset-bottom) + 6px); left:8px; gap:5px; }
+  body.phone.land #menu button { width:36px; height:36px; font-size:15px; border-width:2px; }
+  body.phone.land #menu button small { font-size:6px; }
+  body.phone.land #skillbar { grid-template-columns:repeat(8,28px); }
+  #hr { pointer-events:auto; cursor:pointer; }
+  .cur { display:inline-block; width:1em; height:1em; vertical-align:-0.15em; margin-right:3px; }
 </style>
 </head>
 <body>

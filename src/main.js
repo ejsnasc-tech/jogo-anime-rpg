@@ -532,7 +532,7 @@ function switchHero(i) {
 function refreshHud() {
   { const pu = portraitUrl(hero.model); const hn = $('hname'); hn.innerHTML = ''; if (pu) { const im = document.createElement('img'); im.src = pu; im.style.cssText = 'width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid #ffc933;vertical-align:middle;margin-right:6px'; hn.appendChild(im); } hn.appendChild(document.createTextNode(CLASSES[hero.cls].icon + ' Nv.' + state.level + ' ' + hero.name.split(' ')[0] + (state.meta && state.meta.title ? ' «' + state.meta.title + '»' : ''))); }
   { const n = questsClaimable(); setBtn('questbtn', '📜', 'MISSÕES', n); }
-  $('hgems').textContent = '💎' + state.gems; $('hgold').textContent = '🪙' + state.gold; $('hcash').textContent = '💵' + state.cash;
+  $('hgems').innerHTML = CUR.gems + state.gems; $('hgold').innerHTML = CUR.gold + state.gold; $('hcash').innerHTML = CUR.cash + state.cash;
   const a = curAct();
   $('stage').textContent = dg ? '🏰 MASMORRA — andar ' + dg.floor + '/5' + (dg.floor < 5 ? '  (' + dg.kills + '/' + dg.need + ')' : ' — CHEFE') : wb ? '🐉 CHEFE MUNDIAL — derrotem juntos!' : inHome ? '\u{1F3E0} ' + (homeVisit ? 'Visitando a casa de ' + homeVisit.name : inHome.name + ' \u2014 ' + ROOMS[inHome.kind].label) : inCity ? '🏰 Cidade de Aurora — fale com os moradores' : state.endless ? '♾ Aventura Infinita • abates ' + state.stageKills + (rmN > 1 ? '  👥 ' + rmN + ' jogadores (monstros ×' + rmN + ')' : '')
     : 'Ato ' + (state.act + 1) + ' (Nv.' + zoneLv() + ') • ' + a.name + ' — ' + (state.stage === 5 ? 'CHEFE' : 'Estágio ' + state.stage + '/5  (' + Math.min(state.stageKills, quota()) + '/' + quota() + ')') + (rmN > 1 ? '  👥 ' + rmN + ' jogadores (monstros ×' + rmN + ')' : '');
@@ -892,6 +892,29 @@ $('panel').addEventListener('click', (e) => { if (e.target === $('panel') && !pi
   apply();
   $('morebtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); min = !min; try { localStorage.setItem('ui_min', min ? '1' : '0'); } catch (_) {} apply(); });
 })();
+// icones das moedas (desenhados, para nao virar "pedra" em celular antigo)
+const CUR = {
+  gold: '<svg class="cur" viewBox="0 0 20 20"><circle cx="10" cy="10" r="9" fill="#f5b800" stroke="#9a6a00" stroke-width="1.5"/><circle cx="10" cy="10" r="5.5" fill="none" stroke="#ffe27a" stroke-width="1.5"/></svg>',
+  gems: '<svg class="cur" viewBox="0 0 20 20"><path d="M10 1.5 18 8 10 18.5 2 8Z" fill="#3fb6ff" stroke="#0b5f99" stroke-width="1.3"/><path d="M2 8h16M6 8l4-6.5L14 8l-4 10.5Z" fill="none" stroke="#bfeaff" stroke-width="1"/></svg>',
+  cash: '<svg class="cur" viewBox="0 0 20 20"><rect x="1" y="4.5" width="18" height="11" rx="2" fill="#3cb55a" stroke="#176a2c" stroke-width="1.3"/><circle cx="10" cy="10" r="3" fill="#b9f5c6" stroke="#176a2c" stroke-width="1"/></svg>',
+};
+function openWallet() {
+  if (dialogOpen || panelOpen) return;
+  const n = (v) => v.toLocaleString('pt-BR');
+  openPanel('💰 CARTEIRA', [
+    { head: true, text: 'Cada moeda tem o seu uso no jogo:' },
+    { text: `OURO  •  ${n(state.gold)}
+É a moeda do dia a dia. Ganha: derrotando monstros, missões, venda e eventos.
+Usa: melhorar e forjar equipamentos, treinos, lojas, gemas, aluguel e móveis.`, color: '#ffd166' },
+    { text: `DIAMANTES  •  ${n(state.gems)}
+É a moeda premium. Ganha: chefes, conquistas, missões, pérolas da pesca e o Passe.
+Usa: pets, trocar de classe, auras e títulos, móveis premium e ampliar a casa.`, color: '#7fd6ff' },
+    { text: `CASH  •  ${n(state.cash)}
+É o dinheiro da cidade. Ganha: chefes, masmorras, missões semanais e o Passe.
+Usa: construir novos andares na sua casa.`, color: '#7dff9b' },
+    { text: 'Toque no ✕ para voltar ao jogo.' },
+  ]);
+}
 function openPanel(title, rows) {
   if (dialogOpen) return;
   panelOpen = true;
@@ -1032,7 +1055,7 @@ function toggleMount() {
   if (isPaused()) return;
   mounted = !mounted;
   pet.scale.setScalar(mounted ? petDef.mountScale : petDef.scale);
-  $('mount').textContent = mounted ? '⬇ DESMONTAR' : '🐾 MONTAR';
+  $('mount').innerHTML = mounted ? '<span class="i">⬇</span><small>DESMONTAR</small>' : '<span class="i">🐾</span><small>MONTAR</small>';
   toast(mounted ? 'Montado em ' + petDef.name.split(',')[0] + '!' : 'Você desmontou');
   if (!mounted) player.position.y = 0;
 }
@@ -1042,6 +1065,7 @@ $('b-bag').onclick = () => { if (!dialogOpen && !picking && !invOpen) openProfil
 $('b-index').onclick = () => { if (!dialogOpen && !picking) openIndex(); };
 $('b-home').onclick = () => { if (!picking) { closePanel(); closeInv(); } };
 $('mount').addEventListener('pointerdown', (e) => { e.stopPropagation(); toggleMount(); });
+$('hr').addEventListener('pointerdown', (e) => { e.stopPropagation(); openWallet(); });
 $('skill').addEventListener('pointerdown', (e) => { e.stopPropagation(); useSkill(); });
 
 // ===================== Efeitos =====================
@@ -2679,7 +2703,7 @@ setHero();
 startNet();
 const qs = new URLSearchParams(location.search);
 if (qs.get('pet') && PETS.some(p => p.id === qs.get('pet'))) state.activePet = qs.get('pet');
-if (qs.get('mount')) { mounted = true; $('mount').textContent = '⬇ DESMONTAR'; }
+if (qs.get('mount')) { mounted = true; $('mount').innerHTML = '<span class="i">⬇</span><small>DESMONTAR</small>'; }
 if (qs.get('team')) { const ids = qs.get('team').split(',').filter(id => HEROES.some(h => h.id === id)).slice(0, MAX_TEAM); if (ids.length) { state.owned = Array.from(new Set(state.owned.concat(ids))); state.team = ids; activeIdx = 0; setHero(); } }
 if (qs.get('act')) { state.act = Math.min(ACTS.length - 1, +qs.get('act') || 0); applyAct(); refreshHud(); }
 setPet(); renderSkillChips();
