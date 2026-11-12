@@ -712,7 +712,7 @@ function openQuests() {
 
 const social = initSocial({ state, sess, toast, openPanel, closePanel, save, refreshHud, itemLine, sellPrice, isEquipped, giveItem, newItem, SLOT_ORDER, mainCls, track });
 
-const craft = initCraft({ state, toast, openPanel, save, refreshHud, itemLine, isEquipped, giveItem, newItem, SLOT_ORDER, slotLabel, slotIcon, mainCls, track, recalcHp });
+const craft = initCraft({ setPicker: (...a) => openSetPicker(...a), state, toast, openPanel, save, refreshHud, itemLine, isEquipped, giveItem, newItem, SLOT_ORDER, slotLabel, slotIcon, mainCls, track, recalcHp });
 
 const shop = initShop({ state, toast, openPanel, save, refreshHud, giveItem, newItem, SLOT_ORDER, mainCls, craft });
 
@@ -1909,10 +1909,25 @@ function openGear(title, slots, mode, back, keep) {
 const ROLE_DESC = { deco: 'Móveis e decoração para sua casa', smith: 'Melhora, compra e vende armas e escudos', armor: 'Melhora, compra e vende elmos, armaduras, calças e botas', merchant: 'Amuletos, anéis e compra de itens', summoner: 'Invoca heróis e criaturas', map: 'Mapa das florestas' };
 const ROLE_SLOTS = { smith: ['weapon', 'offhand'], armor: ['helm', 'chest', 'legs', 'boots'], merchant: ['amulet', 'ring'] };
 const ROLE_WHAT = { smith: 'armas e escudos', armor: 'armaduras', merchant: 'joias' };
+// tela do "set" (boneco) só com as peças que esse NPC melhora; tocar numa peça abre o que ela precisa
+function openSetPicker(back, slots, pick) {
+  openPanel('⬆ MELHORAR', [
+    { text: '◀ Voltar', btn: 'VOLTAR', fn: back },
+    { head: true, text: 'Toque na peça do seu set que você quer melhorar:' },
+  ]);
+  const man = el('div', 'mannequin', null, $('card')); man.style.cssText = 'height:300px;min-height:300px;margin:6px 0;--ss:58px';
+  man.insertAdjacentHTML('beforeend', FIGURE('#' + hero.color.toString(16).padStart(6, '0')));
+  Object.keys(DOLL_POS).filter(k => slots.includes(k)).forEach(key => {
+    const it = equippedAt(key), b = el('button', 'slot', null, man);
+    b.style.left = (slots.length <= 2 ? [30, 70][slots.indexOf(key)] : DOLL_POS[key][0]) + '%'; b.style.top = (slots.length <= 2 ? 50 : DOLL_POS[key][1]) + '%';
+    if (it) { b.style.borderColor = RAR[it.rar].color; artImg(itemArt(it), b); if (it.plus) el('span', 'pl', '+' + it.plus, b); b.onclick = () => pick(key); }
+    else { artImg(ghostArt(ghostKey(key)), b); el('small', '', slotLabel(key), b); b.onclick = () => toast('Nada equipado em ' + slotLabel(key) + '. Equipe uma peça primeiro (botão EQUIP).'); }
+  });
+}
 function openNpcMenu(n) {
   if (isPaused()) return;
   walkGoal = null;
-  const back = () => openNpcMenu(n), slots = ROLE_SLOTS[n.role];
+  const back = () => { closePanel(); openNpcMenu(n); }, slots = ROLE_SLOTS[n.role];
   const rows = [{ head: true, text: n.icon + ' ' + n.title + '\n“' + n.talk + '”' }];
   if (slots) {
     const nm = ROLE_WHAT[n.role];

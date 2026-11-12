@@ -34,6 +34,7 @@ export function initCraft(c) {
   function openEquipUp(back, slots, slot, msg) {
     const rows = [{ text: '◀ Voltar', btn: 'VOLTAR', fn: slot ? () => openEquipUp(back, slots) : back }];
     const it = slot && worn(slot);
+    if (!it && c.setPicker) { c.setPicker(back, slots, (sl) => openEquipUp(back, slots, sl)); return; }
     if (!it) {
       rows.push({ head: true, text: 'Escolha a peça que você está usando para melhorar:' });
       slots.forEach(sl => { const w = worn(sl); rows.push(w ? { text: itemLine(w) + '\n' + lvTxt(w), color: undefined, btn: 'ABRIR', fn: () => openEquipUp(back, slots, sl) } : { text: slotIcon(sl) + ' ' + slotLabel(sl) + '\n(nada equipado)' }); });
