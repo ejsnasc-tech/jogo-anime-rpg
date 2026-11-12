@@ -33,7 +33,7 @@ const $ = (id) => document.getElementById(id);
 
 // ===================== Save =====================
 const defaults = () => ({
-  gold: 0, gems: 80, cash: 0, level: 1, kills: 0,
+  gold: 0, gems: 80, cash: 500, level: 1, kills: 0,
   profs: {}, profOwned: [], gembag: {}, owned: ['kaito'], team: ['kaito'], upgrades: { atk: 0, hp: 0 }, stars: {},
   pets: ['fox'], activePet: 'fox', petStars: {},
   skills: {}, xp: 0, skillPts: 0, items: [], equip: {}, mats: {}, homes: {}, stock: {}, maxAct: 0, storyDone: false,
@@ -419,7 +419,7 @@ function makeDragon() {
 const PETS = [
   { id: 'fox',    perk: { gold: 0.10, txt: '+10% de ouro' }, name: 'Kitsune, Raposa de Gelo',    make: makeFox,    scale: 1,    mountScale: 1.7, seat: 1.6, speed: 1.3, dmg: 0.6, rate: 1.5, color: 0x7fdcff, weight: 50 },
   { id: 'rhino',  perk: { crit: 0.05, txt: '+5% de crítico' }, price: { gold: 3500 }, name: 'Rhino Lilás, Trovão Roxo',   make: makeRhino,  scale: 0.8,  mountScale: 1.4, seat: 2.1, speed: 1.6, dmg: 0.8, rate: 1.8, color: 0xc9a0ff, weight: 30 },
-  { id: 'dragon', perk: { regen: 0.012, txt: 'Regenera 1,2% da vida por segundo' }, price: { gems: 300 }, name: 'Glaciar, Dragão de Cristal', make: makeDragon, scale: 0.55, mountScale: 1.1, seat: 2.2, speed: 1.9, dmg: 1.3, rate: 2.2, color: 0x6fe3ff, weight: 20 },
+  { id: 'dragon', perk: { regen: 0.012, txt: 'Regenera 1,2% da vida por segundo' }, price: { cash: 500 }, name: 'Glaciar, Dragão de Cristal', make: makeDragon, scale: 0.55, mountScale: 1.1, seat: 2.2, speed: 1.9, dmg: 1.3, rate: 2.2, color: 0x6fe3ff, weight: 20 },
   ...EXTRA_PETS,
 ];
 
@@ -693,8 +693,8 @@ function checkAch() {
   const m = ensureMeta(state);
   ACH.forEach(a => { if (!m.ach[a.id] && a.ok(state)) { m.ach[a.id] = 1; state.gems += a.gems; toast('🏆 Conquista: ' + a.title + '  +' + a.gems + '💎'); if (!m.title) m.title = a.title; } });
 }
-const rewTxt = (r) => [r.gold && '🪙' + r.gold, r.gems && '💎' + r.gems, r.cash && '💵' + r.cash].filter(Boolean).join('  ');
-const giveRew = (r) => { state.gold += r.gold || 0; state.gems += r.gems || 0; state.cash += r.cash || 0; };
+const rewTxt = (r) => [r.gold && '🪙' + r.gold, r.gems && '💎' + r.gems].filter(Boolean).join('  ');
+const giveRew = (r) => { state.gold += r.gold || 0; state.gems += r.gems || 0; };
 function questsClaimable() { const m = ensureMeta(state); return [].concat(m.dq, m.wq).filter(q => !q.claimed && q.have >= q.need).length + (loginState(state).got ? 0 : 1); }
 function openQuests() {
   const m = ensureMeta(state), ls = loginState(state);
@@ -769,7 +769,7 @@ function dgKill() {
 }
 function dgBossDone() {
   const d = dg; dg = null; clearEnemies(); track('dungeon'); track('boss');
-  const gold = d.lv * 160, tier = Math.min(5, state.maxAct); state.gold += gold; state.gems += 25; state.cash += 80; state.mats[tier] = (state.mats[tier] || 0) + 8;
+  const gold = d.lv * 160, tier = Math.min(5, state.maxAct); state.gold += gold; state.gems += 25; state.mats[tier] = (state.mats[tier] || 0) + 8;
   giveItem(newItem(SLOT_ORDER[Math.floor(Math.random() * SLOT_ORDER.length)], tier, Math.random() < 0.2 ? 3 : 2, mainCls()));
   craft.giveGem(null, 2); craft.giveGem(null, Math.random() < 0.2 ? 3 : 1);
   toast('🏆 Masmorra concluída! +🪙' + gold + ' +💎25 + equipamento e gemas'); save(state); refreshHud();
@@ -896,7 +896,7 @@ $('panel').addEventListener('click', (e) => { if (e.target === $('panel') && !pi
 const CUR = {
   gold: '<svg class="cur" viewBox="0 0 20 20"><circle cx="10" cy="10" r="9" fill="#f5b800" stroke="#9a6a00" stroke-width="1.5"/><circle cx="10" cy="10" r="5.5" fill="none" stroke="#ffe27a" stroke-width="1.5"/></svg>',
   gems: '<svg class="cur" viewBox="0 0 20 20"><path d="M10 1.5 18 8 10 18.5 2 8Z" fill="#3fb6ff" stroke="#0b5f99" stroke-width="1.3"/><path d="M2 8h16M6 8l4-6.5L14 8l-4 10.5Z" fill="none" stroke="#bfeaff" stroke-width="1"/></svg>',
-  cash: '<svg class="cur" viewBox="0 0 20 20"><rect x="1" y="4.5" width="18" height="11" rx="2" fill="#3cb55a" stroke="#176a2c" stroke-width="1.3"/><circle cx="10" cy="10" r="3" fill="#b9f5c6" stroke="#176a2c" stroke-width="1"/></svg>',
+  cash: '<svg class="cur" viewBox="0 0 20 20"><path d="M10 1 16.5 6v8L10 19 3.5 14V6Z" fill="#a24bff" stroke="#4b1a8f" stroke-width="1.3"/><path d="M10 1v18M3.5 6l6.5 4 6.5-4" fill="none" stroke="#e3c4ff" stroke-width="1"/></svg>',
 };
 function openWallet() {
   if (dialogOpen || panelOpen) return;
@@ -908,10 +908,10 @@ function openWallet() {
 Usa: melhorar e forjar equipamentos, treinos, lojas, gemas, aluguel e móveis.`, color: '#ffd166' },
     { text: `DIAMANTES  •  ${n(state.gems)}
 É a moeda premium. Ganha: chefes, conquistas, missões, pérolas da pesca e o Passe.
-Usa: pets, trocar de classe, auras e títulos, móveis premium e ampliar a casa.`, color: '#7fd6ff' },
-    { text: `CASH  •  ${n(state.cash)}
-É o dinheiro da cidade. Ganha: chefes, masmorras, missões semanais e o Passe.
-Usa: construir novos andares na sua casa.`, color: '#7dff9b' },
+Usa: criaturas e montarias comuns, trocar de classe, auras e títulos, móveis premium.`, color: '#7fd6ff' },
+    { text: `KYROS  •  ${n(state.cash)}
+É a moeda rara, comprada com dinheiro real (a compra entra no lançamento; nos testes você recebe saldo).
+Usa: montarias especiais (Glaciar, Ignis, Aurora), evoluir equipamento na hora, comprar casas, construir andares, ampliar a sala e o Passe Premium.`, color: '#c48bff' },
     { text: 'Toque no ✕ para voltar ao jogo.' },
   ]);
 }
@@ -971,8 +971,8 @@ function openProfs(msg) {
   rows.push({ text: '🐾 Loja de Criaturas\n' + PETS.length + ' criaturas para comprar ou invocar. Você tem ' + state.pets.length + '.', btn: 'ABRIR', fn: () => openPets() });
   openPanel('🎓 VOCAÇÕES', rows);
 }
-const priceTxt = (pr) => pr.gems ? '💎' + pr.gems : '🪙' + pr.gold;
-const canPay = (pr) => pr.gems ? state.gems >= pr.gems : state.gold >= pr.gold;
+const priceTxt = (pr) => pr.cash ? '🔮' + pr.cash : pr.gems ? '💎' + pr.gems : '🪙' + pr.gold;
+const canPay = (pr) => pr.cash ? state.cash >= pr.cash : pr.gems ? state.gems >= pr.gems : state.gold >= pr.gold;
 function openPets(msg, keep) {
   const st = keep ? $('card').scrollTop : 0;
   const rows = [{ head: true, text: (msg ? msg + '\n' : '') + '🐾 CRIATURAS\nCada criatura é mascote (ataca com você) e montaria. Compre a que quiser ou invoque uma surpresa. Repetida = +10% de dano.' }];
@@ -981,7 +981,7 @@ function openPets(msg, keep) {
     const owned = state.pets.includes(p.id);
     const text = p.name + '\nDano ' + Math.round(p.dmg * 100) + '%  •  Velocidade montado x' + p.speed + (owned ? '  •  ★' + (state.petStars[p.id] || 0) : '') + '\nBônus: ' + p.perk.txt;
     if (owned) rows.push({ img: 'pets/' + p.id + '.webp', text, btn: state.activePet === p.id ? 'ATIVO' : 'USAR', enabled: state.activePet !== p.id, fn: () => { state.activePet = p.id; save(state); setPet(); openPets(null, true); } });
-    else if (p.price) rows.push({ img: 'pets/' + p.id + '.webp', text, btn: priceTxt(p.price), enabled: canPay(p.price), fn: () => { if (p.price.gems) state.gems -= p.price.gems; else state.gold -= p.price.gold; state.pets.push(p.id); state.activePet = p.id; save(state); refreshHud(); setPet(); openPets('🎉 ' + p.name.split(',')[0] + ' comprada e ativada!'); } });
+    else if (p.price) rows.push({ img: 'pets/' + p.id + '.webp', text, btn: priceTxt(p.price), enabled: canPay(p.price), fn: () => { if (p.price.cash) state.cash -= p.price.cash; else if (p.price.gems) state.gems -= p.price.gems; else state.gold -= p.price.gold; state.pets.push(p.id); state.activePet = p.id; save(state); refreshHud(); setPet(); openPets('🎉 ' + p.name.split(',')[0] + ' comprada e ativada!'); } });
     else rows.push({ img: 'pets/' + p.id + '.webp', text, btn: 'BLOQUEADO', enabled: false });
   });
   openPanel('🐾 CRIATURAS', rows);
@@ -992,7 +992,7 @@ const openCrew = openProfs;
 function openProfile(keep) {
   const st = keep ? $('card').scrollTop : 0;
   const again = () => openProfile(true), cost = (k) => 100 * (state.upgrades[k] + 1);
-  const rows = [{ head: true, text: '🪙' + state.gold + '  💎' + state.gems + '  💵' + state.cash + '  •  Abates: ' + state.kills + '\n' + MATS.map((m, i) => m.icon + (state.mats[i] || 0)).join('  ') }];
+  const rows = [{ head: true, text: '🪙' + state.gold + '  💎' + state.gems + '  🔮' + state.cash + '  •  Abates: ' + state.kills + '\n' + MATS.map((m, i) => m.icon + (state.mats[i] || 0)).join('  ') }];
   rows.push({ text: '🎒 Mochila e equipamento\nUse os botões 🧍 EQUIP e 🎒 BAG no canto superior esquerdo.' });
   rows.push({ text: 'Aparência do personagem\nMude nome e visual (a classe não muda)', btn: 'EDITAR', fn: editCharacter });
   if (sess && sess.cid) {
@@ -1424,7 +1424,6 @@ function onKill(e) {
   state.kills++; state.gold += Math.round((5 + state.level + state.act * 2) * (1 + sk('greed') * 0.2 + petPerk('gold') + homeBonus().gold));
   if (Math.random() < 0.05 + sk('greed') * 0.01) state.gems++;
   if (sk('vamp')) heal(maxHp * 0.01 * sk('vamp'));
-  if (Math.random() < 0.1) state.cash += 10;
   state.xp++;
   if (state.xp >= xpNeed()) { state.xp = 0; state.level++; state.skillPts++; ftAt(player.position, 'LEVEL UP!', '#7CFC00', 2.8); }
   if (e.boss && dg) dgBossDone();
@@ -1476,7 +1475,7 @@ function stageClear() {
 function bossDefeated() {
   track('boss'); const act = curAct(); clearEnemies();
   const replay = state.act < state.maxAct || state.storyDone;
-  state.gold += 300 * (state.act + 1); state.gems += replay ? 4 : 10; state.cash += replay ? 30 : 100;
+  state.gold += 300 * (state.act + 1); state.gems += replay ? 4 : 10;
   toast('🏆 Chefe derrotado! +' + (replay ? 4 : 10) + '💎');
   save(state); refreshHud();
   if (replay) { state.stage = 1; state.stageKills = 0; save(state); refreshHud(); return; }
@@ -1878,7 +1877,14 @@ function openGear(title, slots, mode, back, keep) {
       if (!list.length) rows.push({ text: 'Você ainda não tem peças desse tipo. Derrote monstros ou compre uma na loja.' });
       list.slice(0, 12).forEach(it => {
         const c = upgradeCost(it), maxed = it.plus >= MAX_PLUS;
-        rows.push({ text: (isEquipped(it) ? '✅ ' : '') + itemLine(it), color: RAR[it.rar].color, btn: maxed ? 'MÁX' : '⬆ 🪙' + c.gold + ' ' + MATS[it.tier].icon + c.mat, enabled: !maxed && state.gold >= c.gold && (state.mats[it.tier] || 0) >= c.mat, fn: () => { doUpgrade(it); again(); } });
+        const ky = Math.max(5, Math.round(c.gold / 40) + c.mat * 2);
+        const row = { text: (isEquipped(it) ? '✅ ' : '') + itemLine(it), color: RAR[it.rar].color };
+        if (maxed) { row.btn = 'MÁX'; row.enabled = false; }
+        else row.btns = [
+          { label: '⬆ 🪙' + c.gold + ' ' + MATS[it.tier].icon + c.mat, enabled: state.gold >= c.gold && (state.mats[it.tier] || 0) >= c.mat, fn: () => { doUpgrade(it); again(); } },
+          { label: '⚡🔮' + ky, enabled: state.cash >= ky, fn: () => { state.cash -= ky; it.plus++; recalcHp(); save(state); refreshHud(); again(); } },
+        ];
+        rows.push(row);
       });
     } else if (mode === 'sell') {
       const sellable = list.filter(it => !isEquipped(it));
@@ -1910,7 +1916,7 @@ function openNpcMenu(n) {
   const rows = [{ head: true, text: n.icon + ' ' + n.title + '\n“' + n.talk + '”' }];
   if (slots) {
     const nm = ROLE_WHAT[n.role];
-    rows.push({ text: '⬆ Melhorar ' + nm + '\nGaste ouro e materiais da floresta', btn: 'ABRIR', fn: () => openGear('⬆ Melhorar ' + nm, slots, 'upgrade', back) });
+    rows.push({ text: '⬆ Melhorar ' + nm + '\nGaste ouro e materiais da floresta, ou 🔮 Kyros para evoluir na hora', btn: 'ABRIR', fn: () => openGear('⬆ Melhorar ' + nm, slots, 'upgrade', back) });
     rows.push({ text: '🛒 Comprar ' + nm + '\nEquipamentos da loja', btn: 'ABRIR', fn: () => openGear('🛒 Comprar ' + nm, slots, 'buy', back) });
     rows.push({ text: '💰 Vender itens\nO que você coletou dos monstros', btn: 'ABRIR', fn: () => openGear('💰 Vender itens', SLOT_ORDER, 'sell', back) });
   }
@@ -2047,8 +2053,8 @@ function openPlotMenu(p) {
   else if (other && (o.acc || 'private') === 'private') rows.push({ text: '🔒 Casa privada\nSó o dono ' + o.name + ' pode entrar', btn: 'TRANCADA', enabled: false, fn: () => {} });
   else if (other) rows.push({ text: (o.acc === 'invited' ? '🎟 Entrar (só convidados)\nSe o seu nome estiver na lista de ' + o.name : '👀 Visitar a casa de ' + o.name + '\nVeja os móveis dele — só olhar'), btn: 'ENTRAR', enabled: !!(net && net.connected), fn: () => { closePanel(); net.send({ t: 'visit', plot: p.id }); } });
   else rows.push({
-    text: (house ? '🛒 Comprar ' : '🔑 Alugar ') + p.name + '\nSala de ' + R.w + '×' + R.d + ' m (dá para ampliar e ter mais andares)', btn: '🪙' + p.price, enabled: state.gold >= p.price,
-    fn: () => { state.gold -= p.price; state.homes[p.id] = p.kind === 'apt' ? { furn: [], paid: Date.now() + WEEK } : { furn: [] }; track('house'); save(state); refreshHud(); if (net) net.send({ t: 'buy', plot: p.id }); refreshPlots(); closePanel(); toast(house ? '🏠 Casa comprada!' : '🏢 Apartamento alugado!'); again(); },
+    text: (house ? '🛒 Comprar ' : '🔑 Alugar ') + p.name + '\nSala de ' + R.w + '×' + R.d + ' m (dá para ampliar e ter mais andares)', btn: house ? '🔮' + Math.round(p.price / 40) : '🪙' + p.price, enabled: house ? state.cash >= Math.round(p.price / 40) : state.gold >= p.price,
+    fn: () => { if (house) state.cash -= Math.round(p.price / 40); else state.gold -= p.price; state.homes[p.id] = p.kind === 'apt' ? { furn: [], paid: Date.now() + WEEK } : { furn: [] }; track('house'); save(state); refreshHud(); if (net) net.send({ t: 'buy', plot: p.id }); refreshPlots(); closePanel(); toast(house ? '🏠 Casa comprada!' : '🏢 Apartamento alugado!'); again(); },
   });
   if (own) {
     if (!house) { const days = Math.max(0, Math.ceil(((own.paid || Date.now()) - Date.now()) / 864e5)); rows.push({ text: '💳 Aluguel semanal: 🪙' + RENT + '\nPróximo vencimento em ' + days + ' dia(s). Atrasou mais de 3 dias, perde o apartamento. O sistema desconta sozinho se você tiver ouro.', btn: 'PAGAR 🪙' + RENT, enabled: state.gold >= RENT && (own.paid || 0) < Date.now() + 3 * WEEK, fn: () => { state.gold -= RENT; own.paid = Math.max(own.paid || 0, Date.now()) + WEEK; save(state); refreshHud(); toast('🏢 Aluguel pago'); again(); } }); }
@@ -2110,19 +2116,18 @@ function openHomeUp(p, msg) {
   const h = state.homes[p.id]; if (!h) return;
   const R = ROOMS[p.kind], sz = h.sz | 0, fls = h.fls || 1, again = (m) => openHomeUp(p, m), after = () => { save(state); refreshHud(); if (net) net.send({ t: 'furn', plot: p.id, furn: h.furn || [], sz: h.sz | 0, fls: h.fls || 1 }); if (inHome && inHome.id === p.id) { const f0 = homeFloor; enterHome(p); showFloor(Math.min(f0, homeRoom.fls - 1), true); } };
   const rows = [{ text: '◀ Voltar', btn: 'VOLTAR', fn: () => { closePanel(); if (inHome) return; openPlotMenu(p); } }];
-  rows.push({ head: true, text: (msg ? msg + '\n' : '') + '📐 AMPLIAR ' + p.name.toUpperCase() + '\nSala atual: ' + roomDims(p.kind, sz).w + '×' + roomDims(p.kind, sz).d + ' m  •  ' + fls + ' andar(es)\nPague com 🪙 ouro do jogo ou com 💎 gemas (as gemas serão compradas com dinheiro real no futuro).' });
+  rows.push({ head: true, text: (msg ? msg + '\n' : '') + '📐 AMPLIAR ' + p.name.toUpperCase() + '\nSala atual: ' + roomDims(p.kind, sz).w + '×' + roomDims(p.kind, sz).d + ' m  •  ' + fls + ' andar(es)\nSala: 🪙 ouro ou 🔮 Kyros. Andares: só 🔮 Kyros.' });
   if (sz < SZ_MAX) {
     const n = sz + 1, g = Math.round(p.price * 0.35 * n), gm = 30 * n, nd = roomDims(p.kind, n);
     rows.push({ text: '📐 Ampliar sala — nível ' + n + '/' + SZ_MAX + '\nNova sala: ' + nd.w + '×' + nd.d + ' m', btns: [
       { label: '🪙' + g, enabled: state.gold >= g, fn: () => { state.gold -= g; h.sz = n; after(); again('✅ Sala ampliada!'); } },
-      { label: '💎' + gm, enabled: state.gems >= gm, fn: () => { state.gems -= gm; h.sz = n; after(); again('✅ Sala ampliada!'); } },
+      { label: '🔮' + gm, enabled: state.cash >= gm, fn: () => { state.cash -= gm; h.sz = n; after(); again('✅ Sala ampliada!'); } },
     ] });
   } else rows.push({ text: '📐 Sala no tamanho máximo (' + roomDims(p.kind, SZ_MAX).w + '×' + roomDims(p.kind, SZ_MAX).d + ' m) ✔' });
   if (fls < R.maxFl) {
-    const gm = 80 * fls, ca = 600 * fls;
+    const ca = 80 * fls;
     rows.push({ text: '🏗 Construir andar ' + (fls + 1) + '/' + R.maxFl + '\nMais um piso inteiro para mobiliar (use 🪜 para subir e descer)', btns: [
-      { label: '💎' + gm, enabled: state.gems >= gm, fn: () => { state.gems -= gm; h.fls = fls + 1; after(); again('✅ Novo andar construído!'); } },
-      { label: '💵' + ca, enabled: state.cash >= ca, fn: () => { state.cash -= ca; h.fls = fls + 1; after(); again('✅ Novo andar construído!'); } },
+      { label: '🔮' + ca, enabled: state.cash >= ca, fn: () => { state.cash -= ca; h.fls = fls + 1; after(); again('✅ Novo andar construído!'); } },
     ] });
   } else rows.push({ text: '🏗 Número máximo de andares (' + R.maxFl + ') ✔' });
   openPanel('📐 AMPLIAR', rows);

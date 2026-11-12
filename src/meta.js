@@ -20,7 +20,7 @@ export const WEEKLY = [
   { id: 'wd', key: 'drop', need: 20, label: 'Encontre 20 equipamentos' },
 ];
 export const LOGIN_DAYS = [
-  { gold: 200 }, { gems: 10 }, { gold: 500 }, { gems: 15 }, { cash: 50 }, { gold: 1000 }, { gems: 50, cash: 100, big: 1 },
+  { gold: 200 }, { gems: 10 }, { gold: 500 }, { gems: 15 }, { gems: 20 }, { gold: 1000 }, { gems: 50, big: 1 },
 ];
 export const ACH = [
   { id: 'k100', title: 'Caçador', desc: 'Derrote 100 monstros', ok: (s) => s.meta.cnt.kill >= 100, gems: 10 },
@@ -49,7 +49,7 @@ export const dayKey = (d) => { d = d || new Date(); return d.getFullYear() + '-'
 export const weekKey = (d) => { d = d || new Date(); const t = new Date(d.getFullYear(), d.getMonth(), d.getDate()); t.setDate(t.getDate() - ((t.getDay() + 6) % 7)); return dayKey(t); };
 const hash = (str) => { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
 
-export const questReward = (level, weekly) => weekly ? { gold: level * 220 + 400, gems: 40, cash: 60 } : { gold: 80 + level * 28, gems: 5, cash: 0 };
+export const questReward = (level, weekly) => weekly ? { gold: level * 220 + 400, gems: 40 } : { gold: 80 + level * 28, gems: 5 };
 export const loginReward = (day, level) => { const r = Object.assign({}, LOGIN_DAYS[day % 7]); if (r.gold) r.gold = Math.round(r.gold * (1 + level * 0.12)); return r; };
 
 // garante que s.meta exista e esteja no dia/semana certos

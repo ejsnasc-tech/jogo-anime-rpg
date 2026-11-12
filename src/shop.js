@@ -24,13 +24,13 @@ export function passReward(lvl, prem) {
     if (lvl % 5 === 0) return { gems: 15 };
     return lvl % 2 ? { gold: 150 * lvl } : { gems: 4 };
   }
-  if (lvl === 30) return { gems: 200, cash: 300, aura: 'season', title: 'Lenda da Temporada' };
+  if (lvl === 30) return { gems: 300, aura: 'season', title: 'Lenda da Temporada' };
   if (lvl === 20) return { gems: 60, gem: 3, item: 3 };
   if (lvl === 10) return { gems: 40, gem: 2, item: 2 };
-  if (lvl % 5 === 0) return { gems: 25, cash: 60 };
-  return lvl % 2 ? { gems: 8 } : { cash: 30, gold: 100 * lvl };
+  if (lvl % 5 === 0) return { gems: 30 };
+  return lvl % 2 ? { gems: 8 } : { gems: 4, gold: 100 * lvl };
 }
-const rewTxt = (r) => [r.gold && '🪙' + r.gold, r.gems && '💎' + r.gems, r.cash && '💵' + r.cash, r.gem && '🔷gema Nv.' + r.gem, r.item && '🎁item ' + (r.item === 3 ? 'LENDÁRIO' : 'ÉPICO'), r.aura && '✨aura', r.title && '🏷título'].filter(Boolean).join(' ');
+const rewTxt = (r) => [r.gold && '🪙' + r.gold, r.gems && '💎' + r.gems, r.gem && '🔷gema Nv.' + r.gem, r.item && '🎁item ' + (r.item === 3 ? 'LENDÁRIO' : 'ÉPICO'), r.aura && '✨aura', r.title && '🏷título'].filter(Boolean).join(' ');
 
 export function initShop(c) {
   const { state, toast, openPanel, save, refreshHud, giveItem, newItem, SLOT_ORDER, mainCls, craft } = c;
@@ -45,7 +45,7 @@ export function initShop(c) {
     if (level() > before) toast('🎟 Passe da Temporada: nível ' + level() + '! Abra com a Arauta.');
   }
   function give(r) {
-    state.gold += r.gold || 0; state.gems += r.gems || 0; state.cash += r.cash || 0;
+    state.gold += r.gold || 0; state.gems += r.gems || 0;
     if (r.gem) craft.giveGem(null, r.gem);
     if (r.item) giveItem(newItem(SLOT_ORDER[Math.floor(Math.random() * SLOT_ORDER.length)], Math.min(5, state.maxAct), r.item, mainCls()));
     if (r.aura) cos().owned[r.aura] = 1;
@@ -55,7 +55,7 @@ export function initShop(c) {
   function openPass(back) {
     const p = pass(), lv = level(), rows = back ? [{ text: '◀ Voltar', btn: 'VOLTAR', fn: back }] : [];
     rows.push({ head: true, text: '🎟 PASSE DA TEMPORADA — ' + monthName() + '\nNível ' + lv + '/' + PASS_LEVELS + '  •  ' + p.xp + ' XP (' + (lv >= PASS_LEVELS ? 'máximo!' : (PASS_XP - p.xp % PASS_XP) + ' para o próximo') + ')\nGanhe XP de passe abatendo monstros, chefes, masmorras, eventos, baús e pesca. Reinicia todo mês.' });
-    rows.push({ text: p.premium ? '⭐ Passe PREMIUM ativo: você recebe os dois prêmios por nível.' : '⭐ Passe PREMIUM: libera a trilha de prêmios extra (mais 💎, 💵, itens épicos/lendários, gemas, aura e título exclusivos). Por enquanto se compra com 💎 (a compra com dinheiro real entra no lançamento).', btn: p.premium ? '✔' : '💎600', enabled: !p.premium && state.gems >= 600, fn: () => { state.gems -= 600; p.premium = true; save(state); refreshHud(); toast('⭐ Passe Premium ativado!'); openPass(back); } });
+    rows.push({ text: p.premium ? '⭐ Passe PREMIUM ativo: você recebe os dois prêmios por nível.' : '⭐ Passe PREMIUM: libera a trilha de prêmios extra (mais 💎, itens épicos/lendários, gemas, aura e título exclusivos). Comprado com 🔮 Kyros.', btn: p.premium ? '✔' : '🔮300', enabled: !p.premium && state.cash >= 300, fn: () => { state.cash -= 300; p.premium = true; save(state); refreshHud(); toast('⭐ Passe Premium ativado!'); openPass(back); } });
     for (let i = 1; i <= PASS_LEVELS; i++) {
       const f = passReward(i, false), pr = passReward(i, true), reach = lv >= i;
       rows.push({ text: (reach ? '✅ ' : '🔒 ') + 'Nível ' + i + '\nGrátis: ' + rewTxt(f) + '\nPremium: ' + rewTxt(pr), btns: [

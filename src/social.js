@@ -179,9 +179,9 @@ export function initSocial(c) {
     if (v.top.length) { rows.push({ head: true, text: '🏅 MAIORES DANOS' }); v.top.forEach((x, i) => rows.push({ text: (i + 1) + '. ' + x.name + ' — ' + Math.round(x.dmg).toLocaleString('pt-BR') })); }
     if (v.pend) rows.push({ text: '🎁 Recompensa do chefe anterior (seu dano: ' + Math.round(v.pend.dmg).toLocaleString('pt-BR') + (v.pend.killed ? ', vencido!' : '') + ')', btn: 'COLETAR', fn: async () => {
       const r = await call('wboss/claim', {}); if (!r) return;
-      state.gold += r.gold; state.gems += r.gems; state.cash += r.cash;
+      state.gold += r.gold; state.gems += r.gems + Math.floor((r.cash || 0) / 10);
       if (r.itemRar >= 0) giveItem(newItem(SLOT_ORDER[Math.floor(Math.random() * SLOT_ORDER.length)], Math.min(5, state.act), r.itemRar, mainCls()));
-      track('wboss'); save(state); refreshHud(); toast('🎁 Posição #' + r.rank + ': +🪙' + r.gold + ' +💎' + r.gems + ' +💵' + r.cash); openWBoss(back, enter);
+      track('wboss'); save(state); refreshHud(); toast('🎁 Posição #' + r.rank + ': +🪙' + r.gold + ' +💎' + r.gems + ''); openWBoss(back, enter);
     } });
     openPanel('🐉 CHEFE MUNDIAL', rows);
   }
