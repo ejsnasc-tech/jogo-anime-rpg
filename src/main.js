@@ -909,7 +909,7 @@ Usa: melhorar e forjar equipamentos, treinos, lojas, gemas, aluguel e móveis.`,
     { text: `DIAMANTES  •  ${n(state.gems)}
 É a moeda premium. Ganha: chefes, conquistas, missões, pérolas da pesca e o Passe.
 Usa: criaturas e montarias comuns, trocar de classe, auras e títulos, móveis premium.`, color: '#7fd6ff' },
-    { text: `KYROS  •  ${n(state.cash)}
+    { text: `VEON  •  ${n(state.cash)}
 É a moeda rara, comprada com dinheiro real (a compra entra no lançamento; nos testes você recebe saldo).
 Usa: montarias especiais (Glaciar, Ignis, Aurora), evoluir equipamento na hora, comprar casas, construir andares, ampliar a sala e o Passe Premium.`, color: '#c48bff' },
     { text: 'Toque no ✕ para voltar ao jogo.' },
@@ -2136,7 +2136,7 @@ function openHomeUp(p, msg) {
   const h = state.homes[p.id]; if (!h) return;
   const R = ROOMS[p.kind], sz = h.sz | 0, fls = h.fls || 1, again = (m) => openHomeUp(p, m), after = () => { save(state); refreshHud(); if (net) net.send({ t: 'furn', plot: p.id, furn: h.furn || [], sz: h.sz | 0, fls: h.fls || 1 }); if (inHome && inHome.id === p.id) { const f0 = homeFloor; enterHome(p); showFloor(Math.min(f0, homeRoom.fls - 1), true); } };
   const rows = [{ text: '◀ Voltar', btn: 'VOLTAR', fn: () => { closePanel(); if (inHome) return; openPlotMenu(p); } }];
-  rows.push({ head: true, text: (msg ? msg + '\n' : '') + '📐 AMPLIAR ' + p.name.toUpperCase() + '\nSala atual: ' + roomDims(p.kind, sz).w + '×' + roomDims(p.kind, sz).d + ' m  •  ' + fls + ' andar(es)\nSala: 🪙 ouro ou 🔮 Kyros. Andares: só 🔮 Kyros.' });
+  rows.push({ head: true, text: (msg ? msg + '\n' : '') + '📐 AMPLIAR ' + p.name.toUpperCase() + '\nSala atual: ' + roomDims(p.kind, sz).w + '×' + roomDims(p.kind, sz).d + ' m  •  ' + fls + ' andar(es)\nSala: 🪙 ouro ou 🔮 Veon. Andares: só 🔮 Veon.' });
   if (sz < SZ_MAX) {
     const n = sz + 1, g = Math.round(p.price * 0.35 * n), gm = 30 * n, nd = roomDims(p.kind, n);
     rows.push({ text: '📐 Ampliar sala — nível ' + n + '/' + SZ_MAX + '\nNova sala: ' + nd.w + '×' + nd.d + ' m', btns: [

@@ -55,7 +55,7 @@ export function initShop(c) {
   function openPass(back) {
     const p = pass(), lv = level(), rows = back ? [{ text: '◀ Voltar', btn: 'VOLTAR', fn: back }] : [];
     rows.push({ head: true, text: '🎟 PASSE DA TEMPORADA — ' + monthName() + '\nNível ' + lv + '/' + PASS_LEVELS + '  •  ' + p.xp + ' XP (' + (lv >= PASS_LEVELS ? 'máximo!' : (PASS_XP - p.xp % PASS_XP) + ' para o próximo') + ')\nGanhe XP de passe abatendo monstros, chefes, masmorras, eventos, baús e pesca. Reinicia todo mês.' });
-    rows.push({ text: p.premium ? '⭐ Passe PREMIUM ativo: você recebe os dois prêmios por nível.' : '⭐ Passe PREMIUM: libera a trilha de prêmios extra (mais 💎, itens épicos/lendários, gemas, aura e título exclusivos). Comprado com 🔮 Kyros.', btn: p.premium ? '✔' : '🔮300', enabled: !p.premium && state.cash >= 300, fn: () => { state.cash -= 300; p.premium = true; save(state); refreshHud(); toast('⭐ Passe Premium ativado!'); openPass(back); } });
+    rows.push({ text: p.premium ? '⭐ Passe PREMIUM ativo: você recebe os dois prêmios por nível.' : '⭐ Passe PREMIUM: libera a trilha de prêmios extra (mais 💎, itens épicos/lendários, gemas, aura e título exclusivos). Comprado com 🔮 Veon.', btn: p.premium ? '✔' : '🔮300', enabled: !p.premium && state.cash >= 300, fn: () => { state.cash -= 300; p.premium = true; save(state); refreshHud(); toast('⭐ Passe Premium ativado!'); openPass(back); } });
     for (let i = 1; i <= PASS_LEVELS; i++) {
       const f = passReward(i, false), pr = passReward(i, true), reach = lv >= i;
       rows.push({ text: (reach ? '✅ ' : '🔒 ') + 'Nível ' + i + '\nGrátis: ' + rewTxt(f) + '\nPremium: ' + rewTxt(pr), btns: [
