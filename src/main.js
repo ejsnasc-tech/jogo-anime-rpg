@@ -13,6 +13,7 @@ import { createNet, nameTag, NET_URL } from './net.js';
 import { makeBiome, groundTex, BIOME_INFO } from './biomes.js';
 import { EXTRA_PETS } from './pets.js';
 import { createAmbient } from './ambient.js';
+import { buildCave } from './cave.js';
 import { makeCreature, CREATURE_TYPES, hordeWeights, hordeTitle } from './creatures.js';
 import { createVfx } from './vfx.js';
 const IMG = ((import.meta.env && import.meta.env.BASE_URL) || './') + 'img/';
@@ -23,6 +24,7 @@ import { ROOMS, SZ_MAX, FLOOR_TINT, roomDims, FURN, furnByKey, makeFurniture, fo
 
 const WORLD = 200;          // metade do tamanho do mapa
 const PLAYER_SPEED = 7;
+const CITY_CENTER = [0, 10];
 const MAX_TEAM = 1;
 
 const testing = new URLSearchParams(location.search).has('selftest');
@@ -156,7 +158,7 @@ const hillH = (x, z) => {   // morros grandes e vales: o campo tem relevo de ver
 };
 function groundH(x, z) { const d = riverDepth(x, z); return hillH(x, z) * (1 - d) - d * 1.25; }
 const BR = (() => { let z = -30, x = 0; for (let i = 0; i < 8; i++) { x = trailX(z); z = riverZ(x); } return { x, z, len: riverHW(x) + 5.5 }; })();
-function walkY(x, z) { if (Math.abs(x - BR.x) < 2.6 && Math.abs(z - BR.z) < BR.len) return 0.45; return groundH(x, z); }
+function walkY(x, z) { if (cave) return 0; if (Math.abs(x - BR.x) < 2.6 && Math.abs(z - BR.z) < BR.len) return 0.45; return groundH(x, z); }
 
 const grassMap = grassTexture();
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), new THREE.MeshStandardMaterial({ map: grassMap, roughness: 1 }));
@@ -450,6 +452,7 @@ const skillReady = {}, ultLen = {};
 let ev = null, nextEvT = 150 + Math.random() * 100, dayT = 0.3, night = 0, weather = 'clear', weatherLeft = 200, rainPts = null, isNight = false;
 let bossRef = null;
 let panelOpen = false, dialogOpen = false, creatorOpen = false;
+let cave = null;
 let inCity = false, city = null, nearNpc = null, walkGoal = null, invOpen = false, mmT = 0;
 let inHome = null, homeRoom = null, homeVisit = null, homeFloor = 0;
 const owners = {}; let myOid = ''; const recover = new Set();
@@ -531,11 +534,12 @@ function switchHero(i) {
 
 // ===================== HUD =====================
 function refreshHud() {
+  updateHomeBtn();
   { const pu = portraitUrl(hero.model); const hn = $('hname'); hn.innerHTML = ''; if (pu) { const im = document.createElement('img'); im.src = pu; im.style.cssText = 'width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid #ffc933;vertical-align:middle;margin-right:6px'; hn.appendChild(im); } hn.appendChild(document.createTextNode(CLASSES[hero.cls].icon + ' Nv.' + state.level + ' ' + hero.name.split(' ')[0] + (state.meta && state.meta.title ? ' «' + state.meta.title + '»' : ''))); }
   { const n = questsClaimable(); setBtn('questbtn', '📜', 'MISSÕES', n); }
   $('hgems').innerHTML = CUR.gems + state.gems; $('hgold').innerHTML = CUR.gold + state.gold; $('hcash').innerHTML = CUR.cash + state.cash;
   const a = curAct();
-  $('stage').textContent = dg ? '🏰 MASMORRA — andar ' + dg.floor + '/5' + (dg.floor < 5 ? '  (' + dg.kills + '/' + dg.need + ')' : ' — CHEFE') : wb ? '🐉 CHEFE MUNDIAL — derrotem juntos!' : inHome ? '\u{1F3E0} ' + (homeVisit ? 'Visitando a casa de ' + homeVisit.name : inHome.name + ' \u2014 ' + ROOMS[inHome.kind].label) : inCity ? '🏰 Cidade de Aurora — fale com os moradores' : state.endless ? '♾ Aventura Infinita • abates ' + state.stageKills + (rmN > 1 ? '  👥 ' + rmN + ' jogadores (monstros ×' + rmN + ')' : '')
+  $('stage').textContent = dg && dg.cave ? '🐉 CAVERNA — ' + REALMS[dg.realm].icon + ' ' + ACTS[dg.ai].boss.name + (bossRef ? ' — CHEFE' : ' (siga o caminho)') : dg ? '🏰 MASMORRA — andar ' + dg.floor + '/5' + (dg.floor < 5 ? '  (' + dg.kills + '/' + dg.need + ')' : ' — CHEFE') : wb ? '🐉 CHEFE MUNDIAL — derrotem juntos!' : inHome ? '\u{1F3E0} ' + (homeVisit ? 'Visitando a casa de ' + homeVisit.name : inHome.name + ' \u2014 ' + ROOMS[inHome.kind].label) : inCity ? '🏰 Cidade de Aurora — fale com os moradores' : state.endless ? '♾ Aventura Infinita • abates ' + state.stageKills + (rmN > 1 ? '  👥 ' + rmN + ' jogadores (monstros ×' + rmN + ')' : '')
     : 'Ato ' + (state.act + 1) + ' (Nv.' + zoneLv() + ') • ' + a.name + ' — ' + (state.stage === 5 ? 'CHEFE' : 'Estágio ' + state.stage + '/5  (' + Math.min(state.stageKills, quota()) + '/' + quota() + ')') + (rmN > 1 ? '  👥 ' + rmN + ' jogadores (monstros ×' + rmN + ')' : '');
 }
 
@@ -582,7 +586,7 @@ function finishEvent() {
 const EMOTES = ['👋', '😂', '👍', '❤️', '😡', '🎉'];
 function updateWorld(dt) {
   const ov = $('nightov');
-  if (inHome) { ov.style.opacity = 0; if (rainPts) rainPts.visible = false; }
+  if (inHome || cave) { ov.style.opacity = 0; if (rainPts) rainPts.visible = false; }
   else {
     dayT = (dayT + dt / 420) % 1;
     const light = 0.5 + 0.5 * Math.sin((dayT - 0.25) * Math.PI * 2);
@@ -744,13 +748,14 @@ function updateWander(dt) {
 
 // ---- Masmorra: 5 andares, chefe no último (3 entradas por dia) ----
 let dg = null;
-function dgLeft() { const m = ensureMeta(state); if (m.dgDay !== m.day) { m.dgDay = m.day; m.dgUsed = 0; } return 3 - (m.dgUsed || 0); }
+function dgLeft() { const m = ensureMeta(state); if (m.dgDay !== m.day) { m.dgDay = m.day; m.dgUsed = 0; m.cvUsed = 0; } return 3 - (m.dgUsed || 0); }
 function openDungeon(back) {
   const left = dgLeft(), lv = FOREST_LV[Math.min(5, state.maxAct)] + 6;
   openPanel('🏰 MASMORRA', [
     { text: '◀ Voltar', btn: 'VOLTAR', fn: back },
     { head: true, text: '🏰 Masmorra Sombria\n5 andares com monstros nível ~' + lv + '+ (mais fortes que a floresta), elites frequentes e um chefe no último andar.\nSe você cair, perde a tentativa.' },
     { text: 'Entradas hoje: ' + left + '/3 (renovam à meia-noite)\nRecompensa: ouro, 💎, equipamento ÉPICO ou melhor, gemas e materiais.', btn: 'ENTRAR', enabled: left > 0, fn: enterDungeon },
+    { text: '🐉 Cavernas dos Chefes\nSiga o caminho escuro até a câmara do chefe de cada reino.', btn: 'ABRIR', fn: () => openCaves(() => openDungeon(back)) },
   ]);
 }
 function enterDungeon() {
@@ -759,7 +764,56 @@ function enterDungeon() {
   dg = { lv: FOREST_LV[Math.min(5, state.maxAct)] + 6, floor: 1, kills: 0, need: 16 };
   save(state); toast('🏰 Andar 1: derrote ' + dg.need + ' monstros'); refreshHud();
 }
+// ---- Cavernas dos chefes: corredor fechado ate a camara do chefe de cada reino ----
+function cvLeft() { dgLeft(); return 3 - (ensureMeta(state).cvUsed || 0); }
+function openCaves(back) {
+  const left = cvLeft();
+  const rows = [{ text: '◀ Voltar', btn: 'VOLTAR', fn: back }, { head: true, text: '🐉 Cavernas dos Chefes\nSiga o caminho escuro, enfrente os monstros e chegue à câmara do chefe. Ao derrotá-lo você ganha prêmios e volta para a cidade.\nEntradas hoje: ' + left + '/3 (renovam à meia-noite). Se cair, perde a tentativa.' }];
+  ACTS.forEach((a, i) => {
+    const R = REALMS[a.realm];
+    if (i > state.maxAct) rows.push({ text: '🔒 ' + R.icon + ' ' + a.boss.name + '\nChegue ao reino ' + R.name + ' para liberar.', btn: 'BLOQUEADA', enabled: false });
+    else rows.push({ text: R.icon + ' ' + a.boss.name + ' — ' + R.name + '\nMonstros nível ~' + (FOREST_LV[i] + 4) + ' • chefe do reino', btn: 'ENTRAR', enabled: left > 0, fn: () => enterCave(i) });
+  });
+  openPanel('🐉 CAVERNAS DOS CHEFES', rows);
+}
+function enterCave(ai) {
+  if (cvLeft() <= 0) return; const m = ensureMeta(state); m.cvUsed = (m.cvUsed || 0) + 1;
+  closePanel(); setCityMode(false); clearEnemies();
+  const a = ACTS[ai], c = buildCave(REALMS[a.realm].enemy, BOSSES[a.realm].fx);
+  scene.add(c.group); c.ai = ai; c.realm = a.realm; c.bossSpawned = false; cave = c;
+  dg = { cave: true, realm: a.realm, ai, lv: FOREST_LV[ai] + 4, floor: 1, kills: 0, need: 0 };
+  fieldGroup.visible = false; terrain.visible = false; ground.visible = false; farGroup.visible = false;
+  setSky(['#07060c', '#0d0a16', '#15101f']); scene.fog.color.set(0x0c0914); scene.fog.near = 18; scene.fog.far = 90; biomeFar = 90;
+  hemi.intensity = 1.5; sun.intensity = 0.7; hemi.groundColor.set(0x2a2438);
+  $('minimap').style.display = 'none';
+  player.position.set(c.start.x, 0, c.start.z); facing = c.startYaw; setZoom(1.1); zoom = zoomT; syncCam();
+  save(state); toast('🐉 ' + a.boss.name + ': siga o caminho até o fim'); refreshHud();
+}
+function leaveCave() {
+  if (!cave) return; scene.remove(cave.group); cave.dispose(); cave = null;
+  farGroup.visible = true; $('minimap').style.display = ''; hemi.intensity = 0.85; sun.intensity = 1.1;
+}
+function caveWave(st) {
+  const w = hordeWeights(cave.realm, [1, 2, 3, 4, 4][st.i], cave.ai), keys = Object.keys(w).filter(k => w[k] > 0), tot = keys.reduce((a, k) => a + w[k], 0), j0 = cave.nearest(st.x, st.z).i;
+  for (let i = 0; i < 4 + st.i; i++) {
+    let r = Math.random() * tot, k = keys[0]; for (const kk of keys) { r -= w[kk]; if (r <= 0) { k = kk; break; } }
+    const pp = cave.pts[Math.min(cave.pts.length - 1, j0 + 7 + i * 2)], q = { x: pp.x + (Math.random() - 0.5) * 5, z: pp.z + (Math.random() - 0.5) * 5 };
+    cave.clamp(q, 1.2, false); spawnEnemy(false, null, k, q);
+  }
+}
+function caveTick(p) {
+  if (!cave) return;
+  cave.clamp(p, 0.8, cave.sealed); cave.light.position.set(p.x, 3.2, p.z);
+  if (cave.bossSpawned) return;
+  cave.stations.forEach(st => { if (!st.done && dist2(st, p) < 36) { st.done = true; caveWave(st); } });
+  if (cave.inArena(p.x, p.z, 4)) {
+    cave.bossSpawned = true; cave.sealed = true; cave.seal.visible = true; clearEnemies();
+    const b = ACTS[cave.ai].boss; spawnEnemy(true, { name: b.name, color: b.color }, null, { x: cave.arena.x, z: cave.arena.z - 5 });
+    toast('⚠ A entrada se fechou! Derrote ' + b.name);
+  }
+}
 function dgKill() {
+  if (dg.cave) { refreshHud(); return; }
   dg.kills++;
   if (dg.floor < 5 && dg.kills >= dg.need) {
     dg.floor++; dg.kills = 0; dg.need = 12 + dg.floor * 4; clearEnemies(); state.gold += dg.lv * 12;
@@ -769,11 +823,12 @@ function dgKill() {
   refreshHud();
 }
 function dgBossDone() {
-  const d = dg; dg = null; clearEnemies(); track('dungeon'); track('boss');
-  const gold = d.lv * 160, tier = Math.min(5, state.maxAct); state.gold += gold; state.gems += 25; state.mats[tier] = (state.mats[tier] || 0) + 8;
-  giveItem(newItem(SLOT_ORDER[Math.floor(Math.random() * SLOT_ORDER.length)], tier, Math.random() < 0.2 ? 3 : 2, mainCls()));
+  const d = dg; dg = null; clearEnemies(); track(d.cave ? 'boss' : 'dungeon'); track('boss');
+  const gold = d.lv * (d.cave ? 220 : 160), tier = d.cave ? d.ai : Math.min(5, state.maxAct); state.gold += gold; state.gems += d.cave ? 30 + d.ai * 5 : 25; state.mats[Math.min(5, tier)] = (state.mats[Math.min(5, tier)] || 0) + 8;
+  giveItem(newItem(SLOT_ORDER[Math.floor(Math.random() * SLOT_ORDER.length)], Math.min(6, tier + (d.cave && Math.random() < 0.3 ? 1 : 0)), Math.random() < 0.2 ? 3 : 2, mainCls()));
+  if (d.cave) giveItem(newItem(SLOT_ORDER[Math.floor(Math.random() * SLOT_ORDER.length)], Math.min(6, tier), Math.random() < 0.3 ? 3 : 2, mainCls()));
   craft.giveGem(null, 2); craft.giveGem(null, Math.random() < 0.2 ? 3 : 1);
-  toast('🏆 Masmorra concluída! +🪙' + gold + ' +💎25 + equipamento e gemas'); save(state); refreshHud();
+  toast((d.cave ? '🏆 Chefe derrotado! +🪙' + gold + ' +💎' + (30 + d.ai * 5) : '🏆 Masmorra concluída! +🪙' + gold + ' +💎25') + ' + equipamento e gemas\nVocê será levado de volta à cidade…'); save(state); refreshHud();
   timers.push({ at: T + 3, fn: () => { if (!inCity) setCityMode(true); } });
 }
 
@@ -1338,17 +1393,18 @@ function pickEType() {
   return 'minion';
 }
 
+const bossRealm = () => (cave ? cave.realm : curAct().realm);
 function spawnEnemy(boss, info, forceType, at) {
   const a = Math.random() * Math.PI * 2, d = boss ? 16 : 20, anc = roomAnchor();
   const x = THREE.MathUtils.clamp(at ? at.x : anc.x + Math.cos(a) * d, -WORLD, WORLD), z = THREE.MathUtils.clamp(at ? at.z : anc.z + Math.sin(a) * d, -WORLD, WORLD);
   const realm = REALMS[curAct().realm];
   const tk = boss ? 'warrior' : (forceType || pickEType()), T0 = ETYPES[tk];
-  const BS = boss ? BOSSES[curAct().realm] : null;
+  const BS = boss ? BOSSES[bossRealm()] : null;
   const tintBase = boss ? (BS ? BS.tint : info.color) : (T0.tint != null ? T0.tint : realm.enemy);
   const tint = new THREE.Color(tintBase).lerp(new THREE.Color(0xffffff), boss ? (BS ? 0 : 0.2) : (T0.tint != null ? 0.1 : 0.5)).getHex();
   const kind = BS ? BS.model : T0.model;
-  const mesh = (!boss && T0.body && makeCreature(T0.body, T0.tint, T0.size)) || (BS && BS.proc && bossBody(curAct().realm)) || makeSkeleton(kind, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run, bsize: BS && BS.size }) || makeEnemy(boss ? info.color : realm.enemy, boss);
-  if (BS && !BS.proc) bossLook(mesh, curAct().realm);
+  const mesh = (!boss && T0.body && makeCreature(T0.body, T0.tint, T0.size)) || (BS && BS.proc && bossBody(bossRealm())) || makeSkeleton(kind, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run, bsize: BS && BS.size }) || makeEnemy(boss ? info.color : realm.enemy, boss);
+  if (BS && !BS.proc) bossLook(mesh, bossRealm());
   mesh.position.set(x, 0, z); scene.add(mesh);
   const lv = zoneLv();
   // o mundo acompanha o jogador: passar do nível da zona deixa os bichos mais fortes
@@ -1356,7 +1412,7 @@ function spawnEnemy(boss, info, forceType, at) {
   const base = (18 + lv * 7) * (1 + state.act * 0.3) * 2.4 * catchup;
   const hpv = boss ? base * 14 * (state.endless ? 1.5 : 1) * 1.3 * rmN : base * T0.hp;
   const dmgBase = ((6 + lv * 0.8) * (1 + state.act * 0.12)) * 1.6 * catchD;
-  const e = { nid: ++nidSeq, mesh, hp: hpv, maxHp: hpv, speed: boss ? 1.5 * (BS ? BS.spd / 1.2 : 1) : (1.9 + Math.random() * 1.0) * T0.spd, boss: !!boss, bk: boss ? curAct().realm : null, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? (BS ? BS.r : 1.4) : T0.r, t: Math.random() * 10, dmg: dmgBase * (boss ? 1.6 : T0.dmg), stun: 0, slow: 0, flash: 0, ranged: boss ? null : T0.ranged || null, res: boss ? null : T0.res || null, shotAt: T + 1 + Math.random() * 2, beh: boss ? (BS ? 'boss' : null) : T0.beh || null, cdAt: T + 1 + Math.random() * 3 };
+  const e = { nid: ++nidSeq, mesh, hp: hpv, maxHp: hpv, speed: boss ? 1.5 * (BS ? BS.spd / 1.2 : 1) : (1.9 + Math.random() * 1.0) * T0.spd, boss: !!boss, bk: boss ? bossRealm() : null, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? (BS ? BS.r : 1.4) : T0.r, t: Math.random() * 10, dmg: dmgBase * (boss ? 1.6 : T0.dmg), stun: 0, slow: 0, flash: 0, ranged: boss ? null : T0.ranged || null, res: boss ? null : T0.res || null, shotAt: T + 1 + Math.random() * 2, beh: boss ? (BS ? 'boss' : null) : T0.beh || null, cdAt: T + 1 + Math.random() * 3 };
   if (dg) { e.hp = e.maxHp = e.hp * 1.35; e.dmg *= 1.3; }
   if (!boss && !forceType && Math.random() < 0.04 + state.act * 0.01 + (night > 0.55 ? 0.03 : 0) + (dg ? 0.12 : 0)) {
     e.elite = true; e.hp = e.maxHp = e.hp * 4; e.dmg *= 1.4; e.radius *= 1.3; mesh.scale.multiplyScalar(1.35);
@@ -1394,7 +1450,7 @@ function autoSpawn() {
   for (let i = 0; i < rmN; i++) autoSpawn1();
 }
 function autoSpawn1() {
-  if (dg) { if (dg.floor === 5) { if (enemies.length < 7) spawnEnemy(false); } else if (enemies.length < Math.min(14, dg.need - dg.kills + 2)) spawnEnemy(false); return; }
+  if (dg) { if (dg.cave) return; if (dg.floor === 5) { if (enemies.length < 7) spawnEnemy(false); } else if (enemies.length < Math.min(14, dg.need - dg.kills + 2)) spawnEnemy(false); return; }
   const bossStage = state.stage === 5 && !state.endless;
   if (bossStage) { if (enemies.length < 8 * rmN) spawnEnemy(false); return; }
   const cap = Math.min(60, state.endless ? 25 * rmN : Math.min(25 * rmN, quota() - state.stageKills + 2));
@@ -1869,7 +1925,8 @@ function runSkills(dt) {
 }
 
 // ===================== Cidade, loja e mapa =====================
-function setCityMode(on) {
+function setCityMode(on, at) {
+  if (cave) leaveCave();
   if (inHome) cleanupHome();
   if (on && wb) endWB();
   if (on && dg) { dg = null; toast('🏰 Você saiu da masmorra'); }
@@ -1878,7 +1935,7 @@ function setCityMode(on) {
   clearEnemies(); nearNpc = null; walkGoal = null; $('talk').style.display = 'none';
   if (on) {
     setSky(['#6ec6ff', '#bfe6ff', '#fff1d6']); scene.fog.color.set(0xdff0ff); ground.material.map = grassMap; ground.material.needsUpdate = true; ground.material.color.set(0xb5d99c); hemi.groundColor.set(0x4a7a3a); scene.fog.near = 70; biomeFar = 270;
-    player.position.set(CITY_SPAWN[0], 0, CITY_SPAWN[1]);
+    player.position.set(at ? at[0] : CITY_SPAWN[0], 0, at ? at[1] : CITY_SPAWN[1]); if (at) pushOutCity(player.position, 0.6);
   } else {
     applyAct(); player.position.set(0, 0, 0);
     if (state.stage === 5 && !state.endless && !bossRef) spawnBoss();
@@ -2465,6 +2522,14 @@ function chatLine(name, text, mine) {
   d.textContent = name + ': ' + text; log.appendChild(d); while (log.children.length > 6) log.removeChild(log.firstChild);
   setTimeout(() => d.remove(), 14000);
 }
+function myHomes() { return PLOTS.filter(p => state.homes[p.id]); }
+function updateHomeBtn() { const b = $('homebtn'); if (b) b.style.display = inCity && !inHome && !cave && myHomes().length ? '' : 'none'; }
+$('homebtn').addEventListener('pointerdown', (e) => {
+  e.stopPropagation(); if (isPaused() || !inCity) return;
+  const hs = myHomes(); if (!hs.length) return;
+  if (hs.length === 1) enterHome(hs[0]);
+  else openPanel('🏠 MINHAS CASAS', hs.map(p => ({ text: (p.kind === 'house' ? '🏠 ' : '🏢 ') + p.name + '\nIr direto para dentro', btn: 'IR', fn: () => { closePanel(); enterHome(p); } })));
+});
 function setBtn(id, icon, label, badge) { $(id).innerHTML = '<span class="i">' + icon + '</span><small>' + label + '</small>' + (badge ? '<b class="bdg">' + badge + '</b>' : ''); }
 function refreshNet() { if (net && net.connected) setBtn('netbtn', '🟢', 'ONLINE', remotes.size + 1); else setBtn('netbtn', '🔴', 'OFFLINE'); }
 function syncHomes() {
@@ -2499,7 +2564,7 @@ function startNet() {
   net = createNet({ url: q && q.startsWith('ws') ? q : NET_URL, getMe: () => ({ name: meName(), look: state.custom || null, pid: state.pid }), onEvent: netEvent, onStatus: (ok) => { if (!ok) { remotes.forEach((r, id) => dropRemote(id)); netId = null; } refreshNet(); } });
   refreshNet();
 }
-const curW = () => inHome ? 'home:' + inHome.id : inCity ? 'city' : dg ? 'field:dg' : wb ? 'field:wb' : 'field:' + (state.endless ? 'inf' : state.act);
+const curW = () => inHome ? 'home:' + inHome.id : inCity ? 'city' : cave ? 'field:cave' : dg ? 'field:dg' : wb ? 'field:wb' : 'field:' + (state.endless ? 'inf' : state.act);
 const whereTxt = (w) => w === 'city' ? 'Na cidade de Aurora' : w === 'field:wb' ? 'Lutando contra o Chefe Mundial' : w === 'field:dg' ? 'Em uma masmorra' : w.startsWith('home:') ? 'Dentro de uma casa' : w === 'field:inf' ? 'Na Aventura Infinita' : w.startsWith('field:') ? 'Na floresta do Ato ' + (+w.slice(6) + 1) + (w === curW() ? ' (com você!)' : '') : 'Em outra área';
 function updateNet(dt) {
   const w = curW();
@@ -2599,6 +2664,8 @@ function update(dt) {
     if (p.z > CITY_R + 0.5) { setCityMode(false); return; }
   }
 
+  if (cave) caveTick(p);
+
   // alvo
   let target = null, best = hero.range * (1 + sk('eagle') * 0.08);
   enemies.forEach(e => { const d = dist2(e.mesh.position, p); if (d < best) { best = d; target = e; } });
@@ -2622,7 +2689,7 @@ function update(dt) {
     const tb = $('talk');
     if (nearNpc) { tb.style.display = 'block'; const t = '💬 ' + nearNpc.icon + ' ' + nearNpc.title.split(',')[0]; if (tb.textContent !== t) tb.textContent = t; } else tb.style.display = 'none';
   }
-  mmT += dt; if (mmT > 0.1) { mmT = 0; if (!inHome) drawMap($('minimap')); }
+  mmT += dt; if (mmT > 0.1) { mmT = 0; if (!inHome && !cave) drawMap($('minimap')); }
   // passivos
   if (hero.cls === 'druid' && hp < maxHp) hp = Math.min(maxHp, hp + (2 + state.level * 0.15) * dt);
   if (hero.cls === 'sorcerer') overload = Math.max(0, overload - 6 * dt);
@@ -2655,6 +2722,7 @@ function update(dt) {
     let melee = !e.ranged, ux = vx / d, uz = vz / d, sp = 1;
     if (e.beh && sm > 0) { const o = behave(e, tg, vx, vz, d); mv = o.mv; melee = o.melee; sp = o.spd; if (o.dir) { ux = o.dir.x; uz = o.dir.z; } }
     ep.x = THREE.MathUtils.clamp(ep.x + ux * e.speed * sm * mv * sp * dt, -WORLD, WORLD); ep.z = THREE.MathUtils.clamp(ep.z + uz * e.speed * sm * mv * sp * dt, -WORLD, WORLD);
+    if (cave) cave.clamp(ep, 0.5, false);
     e.t += dt * 6;
     if (e.mesh.userData.glb) { ep.y = gE; animateHero(e.mesh, dt, { moving: sm > 0 && mv !== 0 && (mv < 0 || d > e.radius + 0.4), spd: sm }); }
     else ep.y = gE + Math.abs(Math.sin(e.t)) * 0.25;
@@ -2752,16 +2820,16 @@ function frame() {
   const dcm = decor.on && homeRoom, cx = dcm ? 0 : p.x, cz = dcm ? 1.2 : p.z;
   camGy += ((dcm || inCity || inHome ? 0 : walkY(p.x, p.z)) - camGy) * Math.min(1, dt * 5);
   { const tg = new THREE.Vector3(cx, camGy, cz).add((dcm ? _co.copy(CAM_DECOR) : camOffset()).multiplyScalar(zoom));
-    if (inCity && !dcm) { const k = camClear(cx, cz, tg.x, tg.y, tg.z); if (k < 1) { tg.x = cx + (tg.x - cx) * k; tg.y = camGy + 1.2 + (tg.y - camGy - 1.2) * k; tg.z = cz + (tg.z - cz) * k; } }
-    camera.position.lerp(tg, Math.min(1, dt * (dcm ? 9 : inCity ? 9 : 6))); }
+    if ((inCity || cave) && !dcm) { const k = cave ? cave.camPull(cx, cz, tg.x, tg.y, tg.z) : camClear(cx, cz, tg.x, tg.y, tg.z); if (k < 1) { tg.x = cx + (tg.x - cx) * k; tg.y = camGy + 1.2 + (tg.y - camGy - 1.2) * k; tg.z = cz + (tg.z - cz) * k; } }
+    camera.position.lerp(tg, Math.min(1, dt * (dcm ? 9 : inCity || cave ? 9 : 6))); }
   if (shake > 0) { shake -= dt; camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake; }
   { const lc = lowCam(); camYaw += (camYawT - camYaw) * Math.min(1, dt * 8);
     const f = lc ? 62 : 50; if (Math.abs(camera.fov - f) > 0.05) { camera.fov += (f - camera.fov) * Math.min(1, dt * 5); camera.updateProjectionMatrix(); }
     if (lc) { const l = rotY(_co.copy(LOW_LOOK), camYaw); camera.lookAt(cx + l.x, camGy + l.y, cz + l.z); } else camera.lookAt(cx, camGy + (dcm ? 0 : 0.8), cz);
-    if (!inCity && !inHome && !dcm) { const gc = groundH(camera.position.x, camera.position.z) + 1.4; if (camera.position.y < gc) camera.position.y = gc; }
+    if (!inCity && !inHome && !dcm && !cave) { const gc = groundH(camera.position.x, camera.position.z) + 1.4; if (camera.position.y < gc) camera.position.y = gc; }
     const rb = $('camrot'); if (rb) rb.style.display = lc ? 'flex' : 'none'; }
   farGroup.position.set(p.x, 0, p.z);
-  ambient.setVisible(!inCity && !decor.on); if (!inCity) ambient.update(dt, p);
+  ambient.setVisible(!inCity && !cave && !decor.on); if (!inCity && !cave) ambient.update(dt, p);
   sun.position.set(p.x + 10, 18, p.z + 7); sun.target.position.copy(p);
   vfx.update(dt, camera, renderer.domElement.height);
   renderer.render(scene, camera);
@@ -2786,7 +2854,7 @@ if (qs.has('city')) setCityMode(true);
 if (qs.has('at')) { const [ax, az] = qs.get('at').split(',').map(Number); if (!qs.has('city')) setCityMode(true); player.position.set(ax, 0, az); syncCam(); }
 if (qs.has('night')) dayT = +qs.get('night') || 0;
 if (qs.has('quests')) setTimeout(() => openQuests(), 1500);
-if (qs.has('dbg')) window.__g = { craft, useSkill, castSkill, get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
+if (qs.has('dbg')) window.__g = { craft, enterCave, caveTick, get cave() { return cave; }, state, useSkill, castSkill, get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
 if (qs.get('pos')) { const iv = setInterval(() => { if (!gameStarted) return; clearInterval(iv); setTimeout(() => { const [px, pz] = qs.get('pos').split(',').map(Number); if (inCity) setCityMode(false); player.position.set(px || 0, 0, pz || 0); playerGy = walkY(px || 0, pz || 0); }, 600); }, 300); }
 if (qs.get('cam') === 'low') { camMode = 'low'; $('camb').querySelector('small').textContent = 'IMERSIVA'; }
 if (qs.has('yaw')) { camYaw = camYawT = +qs.get('yaw'); }
@@ -2849,8 +2917,10 @@ function startGame() {
     if (og) { state.gold += og.gold; state.lastSeen = Date.now(); save(state); refreshHud(); setTimeout(() => toast('💤 Enquanto você estava fora (' + (og.mins >= 60 ? Math.floor(og.mins / 60) + 'h' + (og.mins % 60 ? ' ' + og.mins % 60 + 'min' : '') : og.mins + ' min') + '), seu personagem juntou 🪙' + og.gold), 1500); }
     if (!loginState(state).got) setTimeout(() => toast('🎁 Recompensa de login disponível! Abra 📜 MISSÕES'), og ? 5000 : 2000);
   }
+  const goCity = !testing && !['pos', 'at', 'act', 'city', 'npc', 'home', 'visit'].some(k => qs.has(k));
+  if (goCity) setCityMode(true, CITY_CENTER);   // sempre comeca no centro da cidade
   if (!state.seen.intro) { state.seen.intro = 1; save(state); showDialog(INTRO.concat(ACTS[0].intro)); }
-  else if (state.stage === 5 && !state.endless && !bossRef) spawnBoss();
+  else if (!goCity && state.stage === 5 && !state.endless && !bossRef) spawnBoss();
 }
 
 if (qs.has('nocreator') && !state.custom) { state.account = 'Teste'; applyCustom(Object.assign({}, PREMADE[Number(qs.get('nocreator')) || 0], qs.get('ai') ? { model: qs.get('ai') } : {})); setHero(); }
@@ -3031,6 +3101,30 @@ function runSelfTest() {
       }
       hero.cls = cls0; state.level = lv0; skillReady[hero.id] = 0; bearUntil = 0; }
     out.push('ults evoluidas (7 classes x nv1/50/100): ok');
+    // caverna do chefe: caminho fechado, ondas, chefe e volta para a cidade
+    { state.maxAct = 5; const mm = ensureMeta(state); hp = 1e9; maxHp = 1e9;
+      for (const ai of [0, 3, 5]) {
+        dgLeft(); mm.cvUsed = 0; if (!inCity) setCityMode(true); enterCave(ai);
+        if (!cave || !dg || !dg.cave || inCity) throw new Error('caverna nao abriu ' + ai);
+        player.position.set(cave.start.x + 60, 0, cave.start.z); caveTick(player.position);
+        if (!(cave.nearest(player.position.x, player.position.z).d <= cave.hw + 0.01)) throw new Error('parede da caverna nao segurou');
+        for (let j = 0; j < cave.pts.length; j += 3) { player.position.set(cave.pts[j].x, 0, cave.pts[j].z); update(0.02); }
+        if (!cave.stations.every(st => st.done)) throw new Error('ondas da caverna nao dispararam');
+        if (!(enemies.length > 0)) throw new Error('sem monstros na caverna');
+        enemies.forEach(e => { const q = { x: e.mesh.position.x, z: e.mesh.position.z }; cave.clamp(q, 0.4, false); if (Math.hypot(q.x - e.mesh.position.x, q.z - e.mesh.position.z) > 3) throw new Error('monstro fora da caverna'); });
+        player.position.set(cave.arena.x, 0, cave.arena.z + 12); update(0.02);
+        if (!bossRef || !cave.sealed) throw new Error('chefe da caverna nao acordou');
+        if (bossRealm() !== ACTS[ai].realm) throw new Error('chefe do reino errado');
+        const gold0 = state.gold; enemies.slice().forEach(e => damageEnemy(e, 1e12));
+        if (dg) throw new Error('caverna nao terminou'); timers.splice(0).forEach(t => t.fn());
+        if (!inCity || cave || !(state.gold > gold0)) throw new Error('nao voltou para a cidade com premio');
+      } }
+    out.push('cavernas dos chefes (3 reinos: caminho, ondas, chefe, volta): ok');
+    // botao de teleporte para a casa
+    { const pl = PLOTS.find(x => x.kind === 'house'); delete state.homes[pl.id]; setCityMode(true); refreshHud(); const hb = $('homebtn'); if (hb.style.display !== 'none') throw new Error('botao casa sem casa');
+      state.homes[pl.id] = { furn: [], sz: 0, fls: 1 }; refreshHud(); if (hb.style.display === 'none') throw new Error('botao casa nao apareceu');
+      hb.dispatchEvent(new Event('pointerdown')); if (!inHome) throw new Error('botao casa nao teleportou'); leaveHome(); delete state.homes[pl.id]; refreshHud(); }
+    out.push('botao teleporte para casa: ok');
     // hordas por estagio: todos os tipos existem, nascem e variam entre estagios
     { const act0 = state.act, st0 = state.stage; let n = 0;
       for (let a = 0; a < ACTS.length; a++) { const realm = ACTS[a].realm, seen = [];
