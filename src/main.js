@@ -2159,10 +2159,11 @@ function openPlotMenu(p) {
   }
   else if (other && (o.acc || 'private') === 'private') rows.push({ text: '🔒 Casa privada\nSó o dono ' + o.name + ' pode entrar', btn: 'TRANCADA', enabled: false, fn: () => {} });
   else if (other) rows.push({ text: (o.acc === 'invited' ? '🎟 Entrar (só convidados)\nSe o seu nome estiver na lista de ' + o.name : '👀 Visitar a casa de ' + o.name + '\nVeja os móveis dele — só olhar'), btn: 'ENTRAR', enabled: !!(net && net.connected), fn: () => { closePanel(); net.send({ t: 'visit', plot: p.id }); } });
-  else rows.push({
-    text: (house ? '🛒 Comprar ' : '🔑 Alugar ') + p.name + '\nSala de ' + R.w + '×' + R.d + ' m (dá para ampliar e ter mais andares)', btn: house ? '🔮' + Math.round(p.price / 40) : '🪙' + p.price, enabled: house ? state.cash >= Math.round(p.price / 40) : state.gold >= p.price,
-    fn: () => { if (house) state.cash -= Math.round(p.price / 40); else state.gold -= p.price; state.homes[p.id] = p.kind === 'apt' ? { furn: [], paid: Date.now() + WEEK } : { furn: [] }; track('house'); save(state); refreshHud(); if (net) net.send({ t: 'buy', plot: p.id }); refreshPlots(); closePanel(); toast(house ? '🏠 Casa comprada!' : '🏢 Apartamento alugado!'); again(); },
-  });
+  else {
+    const vp = Math.round(p.price / 40), done = () => { state.homes[p.id] = p.kind === 'apt' ? { furn: [], paid: Date.now() + WEEK } : { furn: [] }; track('house'); save(state); refreshHud(); if (net) net.send({ t: 'buy', plot: p.id }); refreshPlots(); closePanel(); toast(house ? '🏠 Casa comprada!' : '🏢 Apartamento alugado!'); again(); };
+    rows.push({ text: (house ? '🛒 Comprar ' : '🔑 Alugar ') + p.name + ' com ouro\nSala de ' + R.w + '×' + R.d + ' m (dá para ampliar e ter mais andares)', btn: '🪙' + p.price, enabled: state.gold >= p.price, fn: () => { state.gold -= p.price; done(); } });
+    if (house) rows.push({ text: '💎 Comprar ' + p.name + ' com Veon\nVocê tem ' + state.cash + ' Veon', btn: 'Veon ' + vp, enabled: state.cash >= vp, fn: () => { state.cash -= vp; done(); } });
+  }
   if (own) {
     if (!house) { const days = Math.max(0, Math.ceil(((own.paid || Date.now()) - Date.now()) / 864e5)); rows.push({ text: '💳 Aluguel semanal: 🪙' + RENT + '\nPróximo vencimento em ' + days + ' dia(s). Atrasou mais de 3 dias, perde o apartamento. O sistema desconta sozinho se você tiver ouro.', btn: 'PAGAR 🪙' + RENT, enabled: state.gold >= RENT && (own.paid || 0) < Date.now() + 3 * WEEK, fn: () => { state.gold -= RENT; own.paid = Math.max(own.paid || 0, Date.now()) + WEEK; save(state); refreshHud(); toast('🏢 Aluguel pago'); again(); } }); }
     rows.push({ text: '💰 Vender ' + p.name + '\nVocê recebe 🪙' + Math.round(p.price * 0.6) + ' e os móveis voltam para o seu baú.', btn: 'VENDER', fn: () => { if (confirm('Vender ' + p.name + '?')) sellHome(p); } });
