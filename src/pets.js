@@ -24,7 +24,7 @@ function quad(o) {
   g.add(sph(0.2, belly, 0, lh + 0.36, 0.95, 1.1, 0.8, 0.8));                // focinho
   g.add(sph(0.06, std(0x2a1a1a), 0, lh + 0.4, 1.12));                       // nariz
   eyes(g, o.eye, lh + 0.52, 0.93, 0.17, 0.085);
-  [[-0.38, 0.6], [0.38, 0.6], [-0.38, -0.55], [0.38, -0.55]].forEach(([x, z]) => g.add(cyl(0.16, 0.19, lh, o.legDark ? dark : body, x * (o.fat || 1), lh / 2, z)));
+  const legs = [[-0.38, 0.6], [0.38, 0.6], [-0.38, -0.55], [0.38, -0.55]].map(([x, z]) => { const pv = new THREE.Group(); pv.position.set(x * (o.fat || 1), lh, z); pv.add(cyl(0.16, 0.19, lh, o.legDark ? dark : body, 0, -lh / 2, 0)); g.add(pv); return pv; });
   const ear = o.ear || 'cone', earM = o.earDark ? dark : body;
   [-1, 1].forEach(s => {
     if (ear === 'cone') { g.add(cone(0.15, 0.45, earM, s * 0.22, lh + 0.95, 0.55, 0, -s * 0.15)); g.add(cone(0.08, 0.3, std(0xffa0b0), s * 0.22, lh + 0.92, 0.6, 0, -s * 0.15)); }
@@ -40,8 +40,8 @@ function quad(o) {
   if (o.horn) { g.add(cone(0.07, 0.55, std(0xffe08a, { emissive: 0xffd166, emissiveIntensity: 0.5 }), 0, lh + 1.0, 0.78, 0.35, 0)); }
   if (o.mane) [0xff6b8a, 0xffd23f, 0x6fe3ff, 0xb48aff, 0xff6b8a].forEach((c, i) => g.add(sph(0.16, std(c), 0, lh + 0.85 - i * 0.1, 0.35 - i * 0.18, 0.6, 1, 1)));
   if (o.stripes) [-0.3, 0, 0.3, -0.55].forEach((z, i) => { g.add(box(0.8, 0.05, 0.1, dark, 0, lh + 0.4 - (i === 3 ? 0.04 : 0), z)); });
-  if (o.patches) { [-1, 1].forEach(s => { g.add(sph(0.1, dark, s * 0.16, lh + 0.54, 0.9, 1, 1.4, 0.4)); }); [[-0.38, 0.6], [0.38, 0.6], [-0.38, -0.55], [0.38, -0.55]].forEach(([x, z]) => g.add(cyl(0.17, 0.2, lh * 0.9, dark, x, lh * 0.45, z))); g.add(sph(0.46, dark, 0, lh + 0.2, 0.55, 1.1, 0.4, 0.5)); }
-  root.userData = { tail }; shadowAll(root); return root;
+  if (o.patches) { [-1, 1].forEach(s => { g.add(sph(0.1, dark, s * 0.16, lh + 0.54, 0.9, 1, 1.4, 0.4)); }); legs.forEach(pv => pv.add(cyl(0.17, 0.2, lh * 0.9, dark, 0, -lh * 0.55, 0))); g.add(sph(0.46, dark, 0, lh + 0.2, 0.55, 1.1, 0.4, 0.5)); }
+  root.userData = { tail, legs }; shadowAll(root); return root;
 }
 
 function makeSlime() {

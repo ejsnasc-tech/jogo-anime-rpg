@@ -1140,6 +1140,7 @@ function toggleMount() {
   $('mount').innerHTML = mounted ? '<span class="i">⬇</span><small>DESMONTAR</small>' : '<span class="i">🐾</span><small>MONTAR</small>';
   toast(mounted ? 'Montado em ' + petDef.name.split(',')[0] + '!' : 'Você desmontou');
   if (!mounted) player.position.y = 0;
+  { const q = pet.position; vfx.burst(q, { color: petDef.color, n: 26, speed: 5, up: 0.9, size: 0.5, life: 0.7, grav: 1.5 }); vfx.shock(q, petDef.color, 2.6, 0.45); vfx.flash(q, petDef.color, 4, 0.25, 1); }
 }
 
 $('b-mount').onclick = () => { if (!dialogOpen && !picking && !invOpen) openPets(); };
@@ -2789,6 +2790,12 @@ function update(dt) {
     pp.x += (p.x - 1.6 - pp.x) * Math.min(1, dt * 4); pp.z += (p.z + 1.2 - pp.z) * Math.min(1, dt * 4);
     pp.y = pgy + Math.abs(Math.sin(petT)) * (moving ? 0.14 : 0.04);
     pet.rotation.y = angleLerp(pet.rotation.y, facing, Math.min(1, dt * 6));
+  }
+  // galope: pernas em diagonal, corpo balança para frente/trás e para os lados, poeira e rastro de luz
+  { const gs = moving ? 1 : 0; pet.userData.gs = (pet.userData.gs || 0) + (gs - (pet.userData.gs || 0)) * Math.min(1, dt * 8); const k = pet.userData.gs, w = petT * (mounted ? 1.25 : 1);
+    if (pu.legs) pu.legs.forEach((l, i) => { l.rotation.x = Math.sin(w + (i === 1 || i === 2 ? Math.PI : 0)) * 0.75 * k; });
+    pet.rotation.order = 'YXZ'; pet.rotation.x = Math.sin(w * 0.5) * 0.07 * k - (mounted && moving ? 0.05 : 0); pet.rotation.z = Math.sin(w * 0.5 + 1.2) * 0.05 * k;
+    if (k > 0.5 && !inHome && T - (pet.userData.dustAt || 0) > (mounted ? 0.11 : 0.2)) { pet.userData.dustAt = T; vfx.burst({ x: pp.x - Math.sin(facing) * 0.5, y: pp.y, z: pp.z - Math.cos(facing) * 0.5 }, { color: mounted ? petDef.color : 0xd9cfae, n: mounted ? 3 : 2, speed: 1.2, up: 0.5, size: mounted ? 0.4 : 0.25, life: 0.45, y: 0.1 }); }
   }
   if (pu.tail) pu.tail.rotation.y = Math.sin(petT * 0.6) * 0.35;
   if (pu.wings) { const s = Math.sin(petT * 0.9) * 0.45; pu.wings[0].rotation.z = s; pu.wings[1].rotation.z = -s; }
