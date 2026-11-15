@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ULT_LV, ULT_EVO, CLASSES, CLASS_MODELS, REALMS, RARITY, HEROES, ACTS, INTRO, ENDING, PREMADE, buildPlayerHero, portraitUrl, BASE } from './data.js';
 import { std, metal, glow, shadowAll } from './models.js';
 import { makeHero, makeSkeleton, animateHero, playOnce, preloadModels } from './actors.js';
@@ -107,6 +111,27 @@ const yawNow = () => (lowCam() ? camYaw : 0);
 const rotY = (v, a) => { const c = Math.cos(a), s = Math.sin(a), x = v.x * c + v.z * s, z = -v.x * s + v.z * c; v.x = x; v.z = z; return v; };
 const camOffset = () => lowCam() ? rotY(_co.copy(CAM_LOW), camYaw) : _co.copy(CAM_OFFSET);
 
+// ---- qualidade grafica: ALTO (brilho/bloom, sombras nitidas, tela cheia) ou BAIXO (celulares fracos) ----
+let gfx = 'high';
+try { const s = localStorage.getItem('gfx'); gfx = s === 'low' || s === 'high' ? s : ((navigator.hardwareConcurrency || 8) <= 4 || /Android|iPhone/i.test(navigator.userAgent) && (navigator.deviceMemory || 4) <= 3 ? 'low' : 'high'); } catch (e) {}
+{ const q = new URLSearchParams(location.search).get('gfx'); if (q === 'low' || q === 'high') gfx = q; }
+let composer = null, bloom = null;
+function applyGfx() {
+  const hi = gfx === 'high';
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, hi ? 2 : 1.25));
+  if (typeof sun !== 'undefined') { const n = hi ? 2048 : 1024; if (sun.shadow.mapSize.x !== n) { sun.shadow.mapSize.set(n, n); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } } }
+  if (hi && !composer) {
+    try {
+      const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4 });
+      composer = new EffectComposer(renderer, rt);
+      composer.addPass(new RenderPass(scene, camera));
+      bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.38, 0.55, 0.93);   // so o que e bem claro brilha: tochas, magias, raios
+      composer.addPass(bloom); composer.addPass(new OutputPass());
+    } catch (e) { composer = null; }
+  }
+  if (composer) composer.setPixelRatio(renderer.getPixelRatio());
+  if (typeof resize === 'function') resize();
+}
 const hemi = new THREE.HemisphereLight(0xffffff, 0x4a7a3a, 0.85); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff2d6, 1.1);
 sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03; sun.shadow.radius = 3;
@@ -1195,7 +1220,7 @@ function applyKill(d) {
   let e = enemies.find(x => x.remote && x.nid === d.n);
   if (e) {
     e.dead = true; const i = enemies.indexOf(e); if (i >= 0) enemies.splice(i, 1);
-    if (e.mesh.userData.glb) { playOnce(e.mesh, 'death'); dying.push({ mesh: e.mesh, until: T + 1.1 }); } else scene.remove(e.mesh);
+    if (e.mesh.userData.glb) { playOnce(e.mesh, 'death'); dying.push({ mesh: e.mesh, until: T + 1.1 }); } else dying.push({ mesh: e.mesh, until: T + 0.28, pop: T, s0: e.mesh.scale.x });
   } else { const T0 = ETYPES[d.k] || ETYPES.minion; e = { kind: d.b ? 'Skeleton_Warrior' : T0.loot, boss: !!d.b, elite: !!d.el, type: d.b ? 'boss' : d.k, mesh: { position: new THREE.Vector3(d.x, 0, d.z) } }; }
   onKill(e);
 }
@@ -1470,7 +1495,7 @@ function damageEnemy(e, dmg, crit, fromNet) {
   if (e === bossRef && !e.wb) $('bossfill').style.width = Math.max(0, e.hp / e.maxHp * 100) + '%';
   if (e.hp > 0) return;
   e.dead = true;
-  if (e.mesh.userData.glb) { playOnce(e.mesh, 'death'); dying.push({ mesh: e.mesh, until: T + 1.1 }); } else scene.remove(e.mesh);
+  if (e.mesh.userData.glb) { playOnce(e.mesh, 'death'); dying.push({ mesh: e.mesh, until: T + 1.1 }); } else dying.push({ mesh: e.mesh, until: T + 0.28, pop: T, s0: e.mesh.scale.x });
   const i = enemies.indexOf(e); if (i >= 0) enemies.splice(i, 1);
   if (rmCur && rmN > 1 && isHost()) rl('ek', { n: e.nid, k: e.type, b: e.boss ? 1 : 0, el: e.elite ? 1 : 0, x: +e.mesh.position.x.toFixed(1), z: +e.mesh.position.z.toFixed(1) });
   onKill(e);
@@ -1814,9 +1839,12 @@ window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
 
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
-  renderer.setSize(w, h); camera.aspect = w / h; camera.fov = w / h < 0.8 ? 62 : 50; camera.updateProjectionMatrix();
+  renderer.setSize(w, h); if (composer) composer.setSize(w, h); camera.aspect = w / h; camera.fov = w / h < 0.8 ? 62 : 50; camera.updateProjectionMatrix();
 }
-window.addEventListener('resize', resize); resize();
+window.addEventListener('resize', resize); resize(); applyGfx();
+const setGfx = (m) => { gfx = m; try { localStorage.setItem('gfx', m); } catch (e) {} applyGfx(); toast(m === 'high' ? '✨ Gráficos ALTO (brilho e sombras)' : '⚡ Gráficos BAIXO (mais leve)'); $('gfxb').querySelector('small').textContent = m === 'high' ? 'GRÁF. ALTO' : 'GRÁF. BAIXO'; };
+$('gfxb').addEventListener('pointerdown', (e) => { e.stopPropagation(); setGfx(gfx === 'high' ? 'low' : 'high'); });
+$('gfxb').querySelector('small').textContent = gfx === 'high' ? 'GRÁF. ALTO' : 'GRÁF. BAIXO';
 
 // ===================== Skills de nível =====================
 let picking = false, nextLightning = 2, nextNova = 4, nextFrost = 5, nextAura = 0, orbAngle = 0;
@@ -2726,14 +2754,22 @@ function update(dt) {
     if (cave) cave.clamp(ep, 0.5, false);
     e.t += dt * 6;
     if (e.mesh.userData.glb) { ep.y = gE; animateHero(e.mesh, dt, { moving: sm > 0 && mv !== 0 && (mv < 0 || d > e.radius + 0.4), spd: sm }); }
-    else ep.y = gE + Math.abs(Math.sin(e.t)) * 0.25;
+    else {
+      // pulo com inclinacao para frente ao andar e investida ao atacar
+      const mvg = sm > 0 && mv !== 0 && (mv < 0 || d > e.radius + 0.4), hit = melee && d < e.radius + 0.5 && sm > 0;
+      e.mesh.rotation.order = 'YXZ';
+      const hop = Math.abs(Math.sin(e.t)), lunge = hit ? Math.max(0, Math.sin(T * 9 + e.t)) : 0;
+      ep.y = gE + (mvg ? hop * 0.25 : hop * 0.04) + lunge * 0.15;
+      const lean = (mvg ? 0.16 + hop * 0.08 : 0) * (mv < 0 ? -1 : 1) + lunge * 0.5;
+      e.mesh.rotation.x += (lean - e.mesh.rotation.x) * Math.min(1, dt * 14);
+    }
     e.mesh.rotation.y = Math.atan2(vx, vz);
     if (e.flash > 0) { e.flash -= dt; const on = e.flash > 0; e.mesh.traverse(o => { if (o.isMesh && o.material.emissive) o.material.emissive.setHex(on ? 0xffffff : (e.elite ? 0x664400 : 0x000000)); }); }
     if (melee && d < e.radius + 0.5) { if (tg.id) hurtRemote(e, tg.id); else hitPlayer(e); if (e.mesh.userData.glb && T > (e.atkAt || 0)) { e.atkAt = T + 1.0; playOnce(e.mesh, 'atk', 0.6); } }
   });
   updateDangers();
   enemies.forEach(e => { const ud = e.mesh.userData; if (ud && ud.spinG) ud.spinG.rotation.y = T * 1.6; if (ud && ud.tick) ud.tick(T); });
-  for (let i = dying.length - 1; i >= 0; i--) { const dd = dying[i]; animateHero(dd.mesh, dt, {}); if (T >= dd.until) { scene.remove(dd.mesh); dying.splice(i, 1); } }
+  for (let i = dying.length - 1; i >= 0; i--) { const dd = dying[i]; if (dd.pop != null) { const k = Math.min(1, (T - dd.pop) / 0.28), s = dd.s0 * (k < 0.25 ? 1 + k * 0.8 : Math.max(0.01, 1.2 * (1 - (k - 0.25) / 0.75))); dd.mesh.scale.set(s, s * (k < 0.25 ? 1 : 0.6 + 0.4 * (1 - k)), s); dd.mesh.rotation.y += dt * 9; } else animateHero(dd.mesh, dt, {}); if (T >= dd.until) { scene.remove(dd.mesh); dying.splice(i, 1); } }
 
   // ataque automático
   if (target && T - lastShot > hero.rate / 1000 * (1 - sk('haste') * 0.09)) { lastShot = T; doAttack(target); }
@@ -2833,7 +2869,7 @@ function frame() {
   ambient.setVisible(!inCity && !cave && !decor.on); if (!inCity && !cave) ambient.update(dt, p);
   sun.position.set(p.x + 10, 18, p.z + 7); sun.target.position.copy(p);
   vfx.update(dt, camera, renderer.domElement.height);
-  renderer.render(scene, camera);
+  if (composer && gfx === 'high') composer.render(dt); else renderer.render(scene, camera);
 }
 
 // ===================== Início =====================
