@@ -1,5 +1,6 @@
 // Cenários por setor: cada reino tem chão, vegetação/relevo, céu, névoa e atmosfera próprios.
 import * as THREE from 'three';
+import { kkMesh } from './kk.js';
 
 export const BIOME_INFO = {
   mares:    { title: 'Mar das Marés',    sub: 'praias, palmeiras, corais e poças de maré', fog: [60, 230], mtn: 0x6fb7d9, cap: 0xffffff, cloud: 0xffffff, hemi: 0xa8e6ff },
@@ -36,6 +37,9 @@ export function groundTex(realm) {
 }
 
 const DENS = 3.2;
+// pedra modelada (KayKit) no lugar do dodecaedro; cada chamada devolve um dos 5 formatos
+let rockN = 0;
+const rockGeo = (r) => { const m = kkMesh('rock_single_' + 'ABCDE'[rockN++ % 5]); if (!m) return new THREE.DodecahedronGeometry(r); const g = m.geometry.clone(); g.scale(r * 3.4, r * 3.4, r * 3.4); return g; };
 const std = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.9 }, o));
 const glow = (c, i) => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: i || 0.8 });
 
@@ -75,22 +79,22 @@ export function makeBiome(realm, ctx) {
     scatter(new THREE.CylinderGeometry(0.12, 0.34, 3.6, 5), std(0x241d2e), 360, () => { const s = rnd(0.8, 1.7); return { y: 1.8 * s, sx: s, sy: s, sz: s, rz: rnd(-0.25, 0.25), ry: rnd(0, 6) }; });
     scatter(new THREE.ConeGeometry(0.35, 2, 4), std(0x241d2e), 360, () => { const s = rnd(0.8, 1.6); return { y: 3 * s, sx: s, sy: s, sz: s, rz: rnd(-0.9, 0.9), ry: rnd(0, 6) }; });
     scatter(new THREE.BoxGeometry(0.9, 1.5, 0.3), std(0x77708a), 260, () => ({ y: 0.7, ry: rnd(-0.4, 0.4), rz: rnd(-0.15, 0.15), sy: rnd(0.7, 1.3) }));
-    scatter(new THREE.DodecahedronGeometry(0.8), std(0x3a3347), 260, () => { const s = rnd(0.6, 1.6); return { y: 0.3 * s, sx: s, sy: s * 0.7, sz: s }; });
+    scatter(rockGeo(0.8), std(0x3a3347), 260, () => { const s = rnd(0.6, 1.6); return { y: 0.3 * s, sx: s, sy: s * 0.7, sz: s }; });
     scatter(new THREE.SphereGeometry(0.22, 8, 6), new THREE.MeshBasicMaterial({ color: 0x9be8ff }), 90, () => ({ y: rnd(0.8, 2.6) }), { shadow: false });   // fogos-fatuos
   } else if (realm === 'arcana') {
     const cols = [0xb388ff, 0x4fe3ff, 0xff8fe0, 0x8fa4ff];
     scatter(new THREE.OctahedronGeometry(1), glow(0xffffff, 0.7), 340, () => { const s = rnd(0.5, 1.5); return { y: 1.6 * s, sx: s * 0.6, sy: s * 2.2, sz: s * 0.6, ry: rnd(0, 6), rz: rnd(-0.25, 0.25), col: pick(cols) }; });
     scatter(new THREE.BoxGeometry(1.6, 0.35, 1.6), glow(0x6a5acd, 0.5), 80, () => { const s = rnd(0.6, 1.4); return { y: rnd(2.2, 5), sx: s, sy: s, sz: s, ry: rnd(0, 6) }; });   // pedras de runa flutuantes
-    scatter(new THREE.DodecahedronGeometry(0.8), std(0x4a4eb0), 220, () => { const s = rnd(0.6, 1.5); return { y: 0.3 * s, sx: s, sy: s * 0.7, sz: s }; });
+    scatter(rockGeo(0.8), std(0x4a4eb0), 220, () => { const s = rnd(0.6, 1.5); return { y: 0.3 * s, sx: s, sy: s * 0.7, sz: s }; });
   } else if (realm === 'planalto') {
     scatter(new THREE.CylinderGeometry(0.35, 0.42, 2.6, 8), std(0x4f9a4a), 300, () => { const s = rnd(0.7, 1.7); return { y: 1.3 * s, sx: s, sy: s, sz: s }; });
     scatter(new THREE.CylinderGeometry(5, 6.5, 5, 7), std(0xc9833f), 26, () => { const s = rnd(0.7, 1.7); return { y: 2.2 * s, sx: s, sy: s * rnd(0.8, 1.6), sz: s, ry: rnd(0, 6) }; });   // mesas de arenito
-    scatter(new THREE.DodecahedronGeometry(0.8), std(0xb98048), 300, () => { const s = rnd(0.6, 1.6); return { y: 0.3 * s, sx: s, sy: s * 0.7, sz: s }; });
+    scatter(rockGeo(0.8), std(0xb98048), 300, () => { const s = rnd(0.6, 1.6); return { y: 0.3 * s, sx: s, sy: s * 0.7, sz: s }; });
     scatter(new THREE.SphereGeometry(0.3, 6, 5), std(0xe8c36a), 200, () => ({ y: 0.2, sy: 0.7 }), { shadow: false });   // tufos secos
   } else if (realm === 'vazio') {
     scatter(new THREE.OctahedronGeometry(1), glow(0x5a2d9a, 0.5), 300, () => { const s = rnd(0.4, 1.6); return { y: rnd(1, 7), sx: s * 0.6, sy: s * 1.3, sz: s * 0.6, rx: rnd(0, 3), rz: rnd(0, 3), ry: rnd(0, 6) }; });
     scatter(new THREE.CylinderGeometry(0.9, 1.1, 5, 6), std(0x2a2736), 90, () => { const s = rnd(0.6, 1.5); return { y: 2.2 * s, sx: s, sy: s * rnd(0.4, 1.4), sz: s, rz: rnd(-0.2, 0.2) }; });
-    scatter(new THREE.DodecahedronGeometry(0.8), std(0x1c1a26), 220, () => { const s = rnd(0.7, 1.8); return { y: 0.3 * s, sx: s, sy: s * 0.7, sz: s }; });
+    scatter(rockGeo(0.8), std(0x1c1a26), 220, () => { const s = rnd(0.7, 1.8); return { y: 0.3 * s, sx: s, sy: s * 0.7, sz: s }; });
   } else if (realm === 'primeva') {
     // pinheiros ja existem no cenario base; aqui entram cogumelos gigantes e samambaias
     const caps = [0xe0405a, 0xb06ae0, 0xf0a040];

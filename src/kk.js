@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { BASE } from './data.js';
 
-const NAMES = ['tree_single_A', 'tree_single_B', 'rock_single_A', 'rock_single_B', 'rock_single_C', 'rock_single_D', 'rock_single_E', 'cloud_big'];
+const NAMES = ['tree_single_A', 'tree_single_B', 'rock_single_A', 'rock_single_B', 'rock_single_C', 'rock_single_D', 'rock_single_E', 'cloud_big', 'mountain_A', 'mountain_B', 'hill_single_A'];
 const COLORS = ['blue', 'green', 'red', 'yellow'];
 const BUILD = ['home_A', 'home_B', 'tavern', 'church', 'market', 'blacksmith', 'well', 'windmill', 'tower_A', 'castle'];
 BUILD.forEach(b => COLORS.forEach(c => NAMES.push('building_' + b + '_' + c)));

@@ -24,7 +24,7 @@ import { buildCave } from './cave.js';
 import { makeCreature, CREATURE_TYPES, hordeWeights, hordeTitle } from './creatures.js';
 import { createVfx } from './vfx.js';
 import { createGrass } from './grass.js';
-import { kkReady, kkMesh } from './kk.js';
+import { kkReady, kkMesh, kkClone } from './kk.js';
 const IMG = ((import.meta.env && import.meta.env.BASE_URL) || './') + 'img/';
 import { QUESTS, ACH, LOGIN_DAYS, ensureMeta, loginState, claimLogin, loginReward, questReward, offlineGain } from './meta.js';
 import { initSocial } from './social.js';
@@ -293,12 +293,19 @@ const skyGlow = (() => {
   sp.scale.setScalar(70); sp.position.set(-110, 62, -170); sp.renderOrder = -1; farGroup.add(sp); return sp;
 })();
 const SUN = { mares: 0xfff1c0, sombras: 0xb9a6ff, arcana: 0xd8c6ff, planalto: 0xffc46a, primeva: 0xeaffb0, vazio: 0x9a5cff };
-let waterTex = null;
+let waterTex = null, waterNorm = null;
 const RUINS = [], chestMeshes = [];
 (function scenery() {
   const mat = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 1 }, o));
   mtnMat = mat(0x8fa6bd); capMat = mat(0xffffff);
-  for (let i = 0; i < 16; i++) {
+  const KM = ['mountain_A', 'mountain_B'].map(kkMesh);
+  if (KM.every(Boolean)) {   // montanhas modeladas (KayKit), com a cor do reino aplicada por cima
+    mtnMat = new THREE.MeshStandardMaterial({ map: KM[0].material.map, color: 0x8fa6bd, roughness: 1 });
+    for (let i = 0; i < 20; i++) {
+      const a = (i / 20) * Math.PI * 2 + Math.random() * 0.15, r = 118 + Math.random() * 28, sc = 38 + Math.random() * 26, m = new THREE.Mesh(KM[i % 2].geometry, mtnMat);
+      m.scale.set(sc, sc * (0.9 + Math.random() * 0.5), sc); m.position.set(Math.cos(a) * r, -2, Math.sin(a) * r); m.rotation.y = Math.random() * 6.28; farGroup.add(m);
+    }
+  } else for (let i = 0; i < 16; i++) {
     const a = (i / 16) * Math.PI * 2 + Math.random() * 0.2, r = 115 + Math.random() * 25, h = 30 + Math.random() * 28, w = 22 + Math.random() * 16;
     const m = new THREE.Mesh(new THREE.ConeGeometry(w, h, 6), mtnMat); m.position.set(Math.cos(a) * r, h / 2 - 1, Math.sin(a) * r);
     const cap = new THREE.Mesh(new THREE.ConeGeometry(w * 0.34, h * 0.3, 6), capMat); cap.position.set(m.position.x, h * 0.85 - 1, m.position.z);
@@ -307,11 +314,15 @@ const RUINS = [], chestMeshes = [];
   const cm = cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, fog: false });
   for (let i = 0; i < 16; i++) {
     const g = new THREE.Group();
-    for (let k = 0; k < 4; k++) { const s = new THREE.Mesh(new THREE.SphereGeometry(4 + Math.random() * 3, 10, 8), cm); s.position.set(k * 5 - 8, Math.random() * 2, Math.random() * 3); s.scale.y = 0.55; g.add(s); }
+    const KC = kkMesh('cloud_big');
+    if (KC) { const s = new THREE.Mesh(KC.geometry, cm); const sc = 9 + Math.random() * 9; s.scale.set(sc, sc * 0.8, sc); s.rotation.y = Math.random() * 6.28; g.add(s); }
+    else for (let k = 0; k < 4; k++) { const s = new THREE.Mesh(new THREE.SphereGeometry(4 + Math.random() * 3, 10, 8), cm); s.position.set(k * 5 - 8, Math.random() * 2, Math.random() * 3); s.scale.y = 0.55; g.add(s); }
     g.position.set((Math.random() * 2 - 1) * 130, 38 + Math.random() * 18, (Math.random() * 2 - 1) * 130); farGroup.add(g);
   }
   const stone = mat(0xb9bec6), roof = mat(0xc0392b);
   const tower = (x, z) => {
+    const KT2 = kkClone('building_tower_A_' + ['blue', 'red', 'green', 'yellow'][Math.abs(Math.round(x + z)) % 4]);
+    if (KT2) { const b = new THREE.Box3().setFromObject(KT2), s = 15 / b.max.y; KT2.scale.setScalar(s); KT2.position.set(x, groundH(x, z), z); fieldGroup.add(KT2); return; }
     const t = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.6, 11, 12), stone); t.position.y = 5.5;
     const r = new THREE.Mesh(new THREE.ConeGeometry(3.1, 4.5, 12), roof); r.position.y = 13.2; t.castShadow = r.castShadow = true;
     const g = new THREE.Group(); g.add(t, r); g.position.set(x, groundH(x, z), z); fieldGroup.add(g);
@@ -323,7 +334,14 @@ const RUINS = [], chestMeshes = [];
   wg.fillStyle = '#ffffff'; wg.fillRect(0, 0, 128, 128); wg.strokeStyle = 'rgba(110,190,240,.55)'; wg.lineWidth = 2;
   for (let i = 0; i < 26; i++) { const x = Math.random() * 128, y = Math.random() * 128; wg.beginPath(); wg.moveTo(x, y); wg.quadraticCurveTo(x + 10, y - 4, x + 22, y); wg.stroke(); }
   waterTex = new THREE.CanvasTexture(wc); waterTex.wrapS = waterTex.wrapT = THREE.RepeatWrapping; waterTex.colorSpace = THREE.SRGBColorSpace;
-  const wmat = new THREE.MeshStandardMaterial({ color: 0x3fb4e8, map: waterTex, transparent: true, opacity: 0.74, roughness: 0.12, metalness: 0.1, depthWrite: false });
+  // relevo da agua: ondas somadas viram um mapa de normais (a luz e o ceu refletem em ondulacoes, nao num plano liso)
+  const nc = document.createElement('canvas'); nc.width = nc.height = 128; const ng = nc.getContext('2d'), nh = new Float32Array(128 * 128);
+  for (let y = 0; y < 128; y++) for (let x = 0; x < 128; x++) { const u = x / 128 * 6.2832, v = y / 128 * 6.2832; nh[y * 128 + x] = Math.sin(u * 2 + Math.sin(v * 3) * 1.3) * 0.5 + Math.sin(v * 3 + u) * 0.35 + Math.sin((u + v) * 5) * 0.2 + Math.sin(u * 7 - v * 4) * 0.12; }
+  { const im = ng.createImageData(128, 128), H = (x, y) => nh[((y + 128) % 128) * 128 + ((x + 128) % 128)];
+    for (let y = 0; y < 128; y++) for (let x = 0; x < 128; x++) { const dx = (H(x + 1, y) - H(x - 1, y)) * 2.2, dy = (H(x, y + 1) - H(x, y - 1)) * 2.2, l = Math.hypot(dx, dy, 1), i = (y * 128 + x) * 4; im.data[i] = (-dx / l * 0.5 + 0.5) * 255; im.data[i + 1] = (-dy / l * 0.5 + 0.5) * 255; im.data[i + 2] = (1 / l * 0.5 + 0.5) * 255; im.data[i + 3] = 255; }
+    ng.putImageData(im, 0, 0); }
+  waterNorm = new THREE.CanvasTexture(nc); waterNorm.wrapS = waterNorm.wrapT = THREE.RepeatWrapping; waterNorm.repeat.set(3, 3);
+  const wmat = new THREE.MeshStandardMaterial({ color: 0x3fb4e8, map: waterTex, normalMap: waterNorm, normalScale: new THREE.Vector2(0.55, 0.55), transparent: true, opacity: 0.8, roughness: 0.06, metalness: 0.15, envMapIntensity: 1.8, depthWrite: false });
   {
     const N = 116, pos = [], uvs = [], idx = [];
     for (let i = 0; i <= N; i++) {
@@ -2733,7 +2751,7 @@ function update(dt) {
   playerGy += (gyNow - playerGy) * Math.min(1, dt * 12);
   if (wet && moving && T > splashAt) { splashAt = T + 0.38; ringFx({ x: p.x, z: p.z }, 0xd6f2ff, 1.8, 0.7, WATER_Y + 0.03); }
   p.y = playerGy + (mounted ? petDef.seat - (player.userData.glb ? 0.9 : 0.55) : 0) + (player.userData.bob || 0);
-  if (waterTex && !inCity) { waterTex.offset.x += dt * 0.03; waterTex.offset.y += dt * 0.011; }
+  if (waterTex && !inCity) { waterTex.offset.x += dt * 0.03; waterTex.offset.y += dt * 0.011; if (waterNorm) { waterNorm.offset.x -= dt * 0.021; waterNorm.offset.y += dt * 0.034; } }
   updateEqAura();
   tmpScale.setScalar(bear ? 1.6 : 1); player.scale.lerp(tmpScale, Math.min(1, dt * 12));
 
