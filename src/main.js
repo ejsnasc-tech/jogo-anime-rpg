@@ -3,6 +3,9 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { ULT_LV, ULT_EVO, CLASSES, CLASS_MODELS, REALMS, RARITY, HEROES, ACTS, INTRO, ENDING, PREMADE, buildPlayerHero, portraitUrl, BASE } from './data.js';
 import { std, metal, glow, shadowAll } from './models.js';
 import { makeHero, makeSkeleton, animateHero, playOnce, preloadModels } from './actors.js';
@@ -116,7 +119,7 @@ const camOffset = () => lowCam() ? rotY(_co.copy(CAM_LOW), camYaw) : _co.copy(CA
 let gfx = 'high';
 try { const s = localStorage.getItem('gfx'); gfx = s === 'low' || s === 'high' ? s : ((navigator.hardwareConcurrency || 8) <= 4 || /Android|iPhone/i.test(navigator.userAgent) && (navigator.deviceMemory || 4) <= 3 ? 'low' : 'high'); } catch (e) {}
 { const q = new URLSearchParams(location.search).get('gfx'); if (q === 'low' || q === 'high') gfx = q; }
-let composer = null, bloom = null;
+let composer = null, bloom = null, ao = null;
 function applyGfx() {
   const hi = gfx === 'high';
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, hi ? 2 : 1.25));
@@ -126,14 +129,21 @@ function applyGfx() {
       const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4 });
       composer = new EffectComposer(renderer, rt);
       composer.addPass(new RenderPass(scene, camera));
-      bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.38, 0.55, 0.93);   // so o que e bem claro brilha: tochas, magias, raios
-      composer.addPass(bloom); composer.addPass(new OutputPass());
+      if (!/Android|iPhone|iPad/i.test(navigator.userAgent)) { try { ao = new GTAOPass(scene, camera, innerWidth, innerHeight); ao.output = GTAOPass.OUTPUT.Default; ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.2, thickness: 1.0, scale: 0.8, samples: 12 }); ao.blendIntensity = 0.5; composer.addPass(ao); } catch (e) { ao = null; } }
+      bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.3, 0.5, 1.05);   // so o que e bem claro brilha: tochas, magias, raios
+      composer.addPass(bloom);
+      // correcao de cor de cinema: contraste suave, mais saturacao, sombras frias e luzes quentes
+      composer.addPass(new ShaderPass({ uniforms: { tDiffuse: { value: null } }, vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+        fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb; float l = dot(c, vec3(0.2126, 0.7152, 0.0722)); c = mix(vec3(l), c, 1.18); c *= mix(vec3(0.94, 0.99, 1.06), vec3(1.07, 1.0, 0.92), smoothstep(0.05, 0.9, l)); c = (c - 0.18) * 1.06 + 0.18; gl_FragColor = vec4(max(c, 0.0), 1.0); }' }));
+      composer.addPass(new OutputPass());
     } catch (e) { composer = null; }
   }
   if (composer) composer.setPixelRatio(renderer.getPixelRatio());
   if (typeof resize === 'function') resize();
 }
 const hemi = new THREE.HemisphereLight(0xffffff, 0x4a7a3a, 0.85); scene.add(hemi);
+// luz de ambiente de verdade: um ceu HDRI (CC0) ilumina e reflete em tudo; a intensidade acompanha o dia/noite
+{ const pm = new THREE.PMREMGenerator(renderer); new RGBELoader().load(BASE + 'img/hdri/sky.hdr', (t) => { scene.environment = pm.fromEquirectangular(t).texture; t.dispose(); pm.dispose(); }, undefined, () => {}); scene.environmentIntensity = 0.35; }
 const sun = new THREE.DirectionalLight(0xfff2d6, 1.1);
 sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03; sun.shadow.radius = 3;
 Object.assign(sun.shadow.camera, { left: -22, right: 22, top: 22, bottom: -22, near: 1, far: 60 });
@@ -625,6 +635,7 @@ function updateWorld(dt) {
     }
     const rainy = weather === 'rain' ? 1 : 0;
     hemi.intensity = 0.85 - 0.45 * night - 0.1 * rainy; sun.intensity = 1.1 - 0.8 * night - 0.35 * rainy;
+    scene.environmentIntensity = (inCity ? 0.4 : 0.35) * (1 - 0.85 * night) * (1 - 0.4 * rainy);
     ov.style.opacity = Math.min(0.62, night * 0.5 + rainy * 0.12).toFixed(3);
     const fogFar = weather === 'fog' ? Math.min(62, biomeFar) : biomeFar; scene.fog.far += (fogFar - scene.fog.far) * Math.min(1, dt * 0.6);
     if (isNight !== night > 0.55) { isNight = night > 0.55; refreshHud(); if (!inCity) toast(isNight ? '🌙 A noite caiu: magos e elites aparecem mais!' : '🌅 Amanheceu'); }
@@ -811,7 +822,7 @@ function enterCave(ai) {
   dg = { cave: true, realm: a.realm, ai, lv: FOREST_LV[ai] + 4, floor: 1, kills: 0, need: 0 };
   fieldGroup.visible = false; terrain.visible = false; ground.visible = false; farGroup.visible = false;
   setSky(['#07060c', '#0d0a16', '#15101f']); scene.fog.color.set(0x0c0914); scene.fog.near = 18; scene.fog.far = 90; biomeFar = 90;
-  hemi.intensity = 1.5; sun.intensity = 0.7; hemi.groundColor.set(0x2a2438);
+  hemi.intensity = 1.5; sun.intensity = 0.7; hemi.groundColor.set(0x2a2438); scene.environmentIntensity = 0.12;
   $('minimap').style.display = 'none';
   player.position.set(c.start.x, 0, c.start.z); facing = c.startYaw; setZoom(1.1); zoom = zoomT; syncCam();
   save(state); toast('🐉 ' + a.boss.name + ': siga o caminho até o fim'); refreshHud();
@@ -1842,7 +1853,7 @@ window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
 
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
-  renderer.setSize(w, h); if (composer) composer.setSize(w, h); camera.aspect = w / h; camera.fov = w / h < 0.8 ? 62 : 50; camera.updateProjectionMatrix();
+  renderer.setSize(w, h); if (composer) { composer.setSize(w, h); if (ao) ao.setSize(w, h); } camera.aspect = w / h; camera.fov = w / h < 0.8 ? 62 : 50; camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize); resize(); applyGfx();
 const setGfx = (m) => { gfx = m; try { localStorage.setItem('gfx', m); } catch (e) {} applyGfx(); toast(m === 'high' ? '✨ Gráficos ALTO (brilho e sombras)' : '⚡ Gráficos BAIXO (mais leve)'); $('gfxb').querySelector('small').textContent = m === 'high' ? 'GRÁF. ALTO' : 'GRÁF. BAIXO'; };
