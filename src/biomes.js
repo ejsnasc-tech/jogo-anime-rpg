@@ -1,13 +1,14 @@
 // Cenários por setor: cada reino tem chão, vegetação/relevo, céu, névoa e atmosfera próprios.
 import * as THREE from 'three';
 import { kkMesh } from './kk.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export const BIOME_INFO = {
-  mares:    { title: 'Mar das Marés',    sub: 'praias, palmeiras, corais e poças de maré', fog: [60, 230], mtn: 0x6fb7d9, cap: 0xffffff, cloud: 0xffffff, hemi: 0xa8e6ff },
+  mares:    { title: 'Mar das Marés',    sub: 'praias, palmeiras, corais e poças de maré', fog: [60, 300], mtn: 0x6fb7d9, cap: 0xffffff, cloud: 0xffffff, hemi: 0xa8e6ff },
   sombras:  { title: 'Clã das Sombras',  sub: 'cemitério, árvores mortas e fogos-fátuos', fog: [30, 120], mtn: 0x3a3050, cap: 0x8a7aa8, cloud: 0x6a5a80, hemi: 0x6a5a90 },
-  arcana:   { title: 'Academia Arcana',  sub: 'cristais mágicos e pedras de runas flutuantes', fog: [50, 200], mtn: 0x6f6fcf, cap: 0xe6d6ff, cloud: 0xe6d6ff, hemi: 0xb8a8ff },
-  planalto: { title: 'Planalto Dourado', sub: 'deserto, cactos e mesas de arenito', fog: [70, 260], mtn: 0xc98a4b, cap: 0xffe2a8, cloud: 0xfff0c9, hemi: 0xffd89a },
-  primeva:  { title: 'Floresta Primeva', sub: 'floresta densa, cogumelos gigantes', fog: [45, 200], mtn: 0x4f8f6a, cap: 0xeaffea, cloud: 0xeaffea, hemi: 0x9be3a8 },
+  arcana:   { title: 'Academia Arcana',  sub: 'cristais mágicos e pedras de runas flutuantes', fog: [50, 260], mtn: 0x6f6fcf, cap: 0xe6d6ff, cloud: 0xe6d6ff, hemi: 0xb8a8ff },
+  planalto: { title: 'Planalto Dourado', sub: 'deserto, cactos e mesas de arenito', fog: [70, 320], mtn: 0xc98a4b, cap: 0xffe2a8, cloud: 0xfff0c9, hemi: 0xffd89a },
+  primeva:  { title: 'Floresta Primeva', sub: 'floresta densa, cogumelos gigantes', fog: [45, 260], mtn: 0x4f8f6a, cap: 0xeaffea, cloud: 0xeaffea, hemi: 0x9be3a8 },
   vazio:    { title: 'O Vazio',          sub: 'cacos flutuantes e pilares quebrados', fog: [25, 110], mtn: 0x1a1a26, cap: 0x4a3a6a, cloud: 0x3a3050, hemi: 0x6a5a8a },
 };
 
@@ -37,6 +38,30 @@ export function groundTex(realm) {
 }
 
 const DENS = 3.2;
+const paint = (g, c) => { const col = new THREE.Color(c), n = g.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) { a[i * 3] = col.r; a[i * 3 + 1] = col.g; a[i * 3 + 2] = col.b; } g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; };
+const strip = (g) => { g.deleteAttribute('uv'); return g.index ? g.toNonIndexed() : g; };
+// cacto com bracos curvos (tronco + dois bracos), base em y = 0
+function cactusGeo() {
+  const parts = [new THREE.CapsuleGeometry(0.38, 2.2, 5, 10).translate(0, 1.5, 0)];
+  [[1, 0.9, 1.3], [-1, 0.6, 1.9]].forEach(([sd, h0, h1]) => { parts.push(new THREE.CapsuleGeometry(0.2, 0.6, 4, 8).rotateZ(Math.PI / 2).translate(sd * 0.62, h0 + 0.5, 0)); parts.push(new THREE.CapsuleGeometry(0.2, h1 - h0 - 0.3, 4, 8).translate(sd * 0.95, h0 + 0.5 + (h1 - h0) / 2, 0)); });
+  return mergeGeometries(parts.map(strip));
+}
+// palmeira: tronco curvo em segmentos + 8 folhas arqueadas
+function palmGeo() {
+  const parts = []; let x = 0, y = 0;
+  for (let i = 0; i < 6; i++) { const t = new THREE.CylinderGeometry(0.2 - i * 0.012, 0.24 - i * 0.012, 0.85, 7); t.translate(0, 0.42, 0); t.rotateZ(-0.09); t.translate(x, y, 0); x += -Math.sin(0.09 * 1) * 0.85 * 0.9; y += 0.85 * 0.99; parts.push(paint(strip(t), 0x9a7448)); }
+  for (let k = 0; k < 8; k++) {
+    const a = k / 8 * Math.PI * 2, f = new THREE.SphereGeometry(1, 7, 5); f.scale(1.7, 0.07, 0.38); f.translate(1.55, 0, 0); f.rotateZ(-0.35); f.rotateY(a); f.translate(x, y + 0.1, 0); parts.push(paint(strip(f), k % 2 ? 0x2fa84f : 0x3cbf5c));
+  }
+  parts.push(paint(strip(new THREE.SphereGeometry(0.26, 8, 6).translate(x, y + 0.05, 0)), 0x6b4a2a));
+  return mergeGeometries(parts);
+}
+// cristal: feixe de tres prismas hexagonais com ponta
+function crystalGeo() {
+  const parts = []; [[0, 0, 1.0, 0.34], [0.5, 0.15, 0.62, 0.24], [-0.4, -0.2, 0.7, 0.26]].forEach(([x, z, h, r], i) => {
+    const b = new THREE.CylinderGeometry(r, r * 1.05, h, 6).translate(0, h / 2, 0), t = new THREE.ConeGeometry(r, h * 0.45, 6).translate(0, h + h * 0.225, 0), g = mergeGeometries([strip(b), strip(t)]); g.rotateZ(i ? (i % 2 ? 0.25 : -0.3) : 0); g.translate(x, 0, z); parts.push(g); });
+  return mergeGeometries(parts);
+}
 // pedra modelada (KayKit) no lugar do dodecaedro; cada chamada devolve um dos 5 formatos
 let rockN = 0;
 const rockGeo = (r) => { const m = kkMesh('rock_single_' + 'ABCDE'[rockN++ % 5]); if (!m) return new THREE.DodecahedronGeometry(r); const g = m.geometry.clone(); g.scale(r * 3.4, r * 3.4, r * 3.4); return g; };
@@ -62,13 +87,7 @@ export function makeBiome(realm, ctx) {
   const rnd = (a, b) => a + Math.random() * (b - a), pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
   if (realm === 'mares') {
-    scatter(new THREE.CylinderGeometry(0.18, 0.3, 4.4, 6), std(0xb98e55), 320, () => { const s = rnd(0.8, 1.5); return { y: 2.2 * s, sx: s, sy: s, sz: s, rz: rnd(-0.18, 0.18), rx: rnd(-0.12, 0.12), ry: rnd(0, 6) }; });
-    // copas: duas camadas de folhas achatadas por palmeira (posicionadas junto)
-    const tr0 = grp.children[0];
-    const crown = new THREE.InstancedMesh(new THREE.ConeGeometry(2.4, 0.9, 7), std(0x2fa84f), tr0.count); crown.frustumCulled = false; crown.castShadow = true;
-    const tr = grp.children[0], mtx = new THREE.Matrix4(), pv = new THREE.Vector3(), qv = new THREE.Quaternion(), sv = new THREE.Vector3();
-    for (let i = 0; i < tr.count; i++) { tr.getMatrixAt(i, mtx); mtx.decompose(pv, qv, sv); d.position.set(pv.x, pv.y + 2.3 * sv.y, pv.z); d.quaternion.copy(qv); d.scale.set(sv.x * 1.1, sv.y * 0.9, sv.z * 1.1); d.updateMatrix(); crown.setMatrixAt(i, d.matrix); d.quaternion.identity(); }
-    grp.add(crown);
+    scatter(palmGeo(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }), 320, () => { const s = rnd(0.8, 1.5); return { y: 0, sx: s, sy: s, sz: s, ry: rnd(0, 6) }; });
     const corals = [0xff7aa8, 0xff9a4a, 0xc77dff, 0xffd166];
     scatter(new THREE.DodecahedronGeometry(0.7), std(0xffffff), 420, () => { const s = rnd(0.5, 1.5); return { y: 0.4 * s, sx: s * 0.7, sy: s * rnd(0.8, 2), sz: s * 0.7, ry: rnd(0, 6), col: pick(corals) }; });
     // poças de maré
@@ -83,11 +102,11 @@ export function makeBiome(realm, ctx) {
     scatter(new THREE.SphereGeometry(0.22, 8, 6), new THREE.MeshBasicMaterial({ color: 0x9be8ff }), 90, () => ({ y: rnd(0.8, 2.6) }), { shadow: false });   // fogos-fatuos
   } else if (realm === 'arcana') {
     const cols = [0xb388ff, 0x4fe3ff, 0xff8fe0, 0x8fa4ff];
-    scatter(new THREE.OctahedronGeometry(1), glow(0xffffff, 0.7), 340, () => { const s = rnd(0.5, 1.5); return { y: 1.6 * s, sx: s * 0.6, sy: s * 2.2, sz: s * 0.6, ry: rnd(0, 6), rz: rnd(-0.25, 0.25), col: pick(cols) }; });
+    scatter(crystalGeo(), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x9a8cff, emissiveIntensity: 0.18, roughness: 0.25, metalness: 0.1 }), 300, () => { const s = rnd(0.6, 1.6); return { y: 0, sx: s, sy: s * rnd(0.8, 1.6), sz: s, ry: rnd(0, 6), col: pick(cols) }; });
     scatter(new THREE.BoxGeometry(1.6, 0.35, 1.6), glow(0x6a5acd, 0.5), 80, () => { const s = rnd(0.6, 1.4); return { y: rnd(2.2, 5), sx: s, sy: s, sz: s, ry: rnd(0, 6) }; });   // pedras de runa flutuantes
     scatter(rockGeo(0.8), std(0x4a4eb0), 220, () => { const s = rnd(0.6, 1.5); return { y: 0.3 * s, sx: s, sy: s * 0.7, sz: s }; });
   } else if (realm === 'planalto') {
-    scatter(new THREE.CylinderGeometry(0.35, 0.42, 2.6, 8), std(0x4f9a4a), 300, () => { const s = rnd(0.7, 1.7); return { y: 1.3 * s, sx: s, sy: s, sz: s }; });
+    scatter(cactusGeo(), std(0x4f9a4a), 300, () => { const s = rnd(0.7, 1.6); return { y: 0, sx: s, sy: s, sz: s, ry: rnd(0, 6) }; });
     scatter(new THREE.CylinderGeometry(5, 6.5, 5, 7), std(0xc9833f), 26, () => { const s = rnd(0.7, 1.7); return { y: 2.2 * s, sx: s, sy: s * rnd(0.8, 1.6), sz: s, ry: rnd(0, 6) }; });   // mesas de arenito
     scatter(rockGeo(0.8), std(0xb98048), 300, () => { const s = rnd(0.6, 1.6); return { y: 0.3 * s, sx: s, sy: s * 0.7, sz: s }; });
     scatter(new THREE.SphereGeometry(0.3, 6, 5), std(0xe8c36a), 200, () => ({ y: 0.2, sy: 0.7 }), { shadow: false });   // tufos secos

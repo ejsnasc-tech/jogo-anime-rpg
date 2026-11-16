@@ -1461,6 +1461,7 @@ function pickEType() {
   return 'minion';
 }
 
+const BLOB_GEO = new THREE.CircleGeometry(0.75, 20), BLOB_MAT = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false, fog: false });
 const bossRealm = () => (cave ? cave.realm : curAct().realm);
 function spawnEnemy(boss, info, forceType, at) {
   const a = Math.random() * Math.PI * 2, d = boss ? 16 : 20, anc = roomAnchor();
@@ -1474,6 +1475,7 @@ function spawnEnemy(boss, info, forceType, at) {
   const mesh = (!boss && T0.body && makeCreature(T0.body, T0.tint, T0.size)) || (BS && BS.proc && bossBody(bossRealm())) || makeSkeleton(kind, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run, bsize: BS && BS.size }) || makeEnemy(boss ? info.color : realm.enemy, boss);
   if (BS && !BS.proc) bossLook(mesh, bossRealm());
   mesh.position.set(x, 0, z); scene.add(mesh);
+  { const bs = new THREE.Mesh(BLOB_GEO, BLOB_MAT); bs.rotation.x = -Math.PI / 2; bs.position.y = 0.04; bs.scale.setScalar((boss ? 2.2 : 1) * (T0.r || 1) * 1.2); bs.userData.noOutline = true; bs.renderOrder = 1; mesh.add(bs); }   // sombra de contato
   const lv = zoneLv();
   // o mundo acompanha o jogador: passar do nível da zona deixa os bichos mais fortes
   const over = Math.max(0, state.level - lv), catchup = 1 + over * 0.1, catchD = 1 + over * 0.05;
@@ -2941,7 +2943,7 @@ if (qs.has('city')) setCityMode(true);
 if (qs.has('at')) { const [ax, az] = qs.get('at').split(',').map(Number); if (!qs.has('city')) setCityMode(true); player.position.set(ax, 0, az); syncCam(); }
 if (qs.has('night')) dayT = +qs.get('night') || 0;
 if (qs.has('quests')) setTimeout(() => openQuests(), 1500);
-if (qs.has('dbg')) window.__g = { craft, enterCave, caveTick, get cave() { return cave; }, state, useSkill, castSkill, get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
+if (qs.has('dbg')) window.__g = { setDay: (v, w) => { dayT = v; if (w) weather = w; weatherLeft = 1e6; }, craft, enterCave, caveTick, get cave() { return cave; }, state, useSkill, castSkill, get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
 if (qs.get('pos')) { const iv = setInterval(() => { if (!gameStarted) return; clearInterval(iv); setTimeout(() => { const [px, pz] = qs.get('pos').split(',').map(Number); if (inCity) setCityMode(false); player.position.set(px || 0, 0, pz || 0); playerGy = walkY(px || 0, pz || 0); }, 600); }, 300); }
 if (qs.get('cam') === 'low') { camMode = 'low'; $('camb').querySelector('small').textContent = 'IMERSIVA'; }
 if (qs.has('yaw')) { camYaw = camYawT = +qs.get('yaw'); }

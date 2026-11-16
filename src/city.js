@@ -617,7 +617,7 @@ export function buildCity() {
     B.frame(0, 0, 0);
   }
   // ---- Praça das Casas: poço e canteiros ----
-  if (kkHas('building_well_blue')) { B.frame(DECO_SQ.x - 4, DECO_SQ.z - 3, 0); kkPlace(B, 'building_well_blue', 4.2, 4.8, 5); }
+  if (kkHas('building_well_blue')) { B.frame(DECO_SQ.x - 4, DECO_SQ.z - 3, 0); kkPlace(B, 'building_well_blue', 4.2, 4.8, 5); B.frame(0, 0, 0); }
   else {
   B.cyl(1.3, 1.5, 1.1, 10, DECO_SQ.x - 4, 0, DECO_SQ.z - 3, STONE); B.cyl(0.9, 0.9, 0.05, 10, DECO_SQ.x - 4, 1.05, DECO_SQ.z - 3, 0x4fc3f7);
   [-1.2, 1.2].forEach(s => B.cyl(0.1, 0.1, 2.4, 5, DECO_SQ.x - 4 + s, 1.1, DECO_SQ.z - 3, TIM)); B.box(3, 0.2, 1.8, DECO_SQ.x - 4, 3.4, DECO_SQ.z - 3, TIM); B.gable(3.4, 2.6, 0.9, DECO_SQ.x - 4, 3.6, DECO_SQ.z - 3, 0xc0392b);
@@ -666,8 +666,10 @@ export function buildCity() {
 
   // ---- campos e moinho (sudeste distante) ----
   const mill = new THREE.Group(); let blades;
-  { B.cyl(3.2, 4.6, 12, 8, FARM.x, 0, FARM.z, 0xece4d2); B.cone(4.6, 5, 8, FARM.x, 12, FARM.z, 0xb5452f); B.box(1.6, 2.6, 0.3, FARM.x, 0, FARM.z + 4.3, 0x6b4423); B.k = 'g'; B.box(1.2, 1.4, 0.2, FARM.x, 6, FARM.z + 3.5, GLASS); B.k = 'm';
-    mill.position.set(FARM.x, 9.5, FARM.z + 3.5); blades = new THREE.Group(); mill.add(blades);
+  const kkMill = kkHas('building_windmill_yellow');
+  if (kkMill) { B.frame(FARM.x, FARM.z, 0); kkPlace(B, 'building_windmill_yellow', 9, 9, 19); B.frame(0, 0, 0); }
+  { if (!kkMill) B.cyl(3.2, 4.6, 12, 8, FARM.x, 0, FARM.z, 0xece4d2); if (!kkMill) { B.cone(4.6, 5, 8, FARM.x, 12, FARM.z, 0xb5452f); B.box(1.6, 2.6, 0.3, FARM.x, 0, FARM.z + 4.3, 0x6b4423); B.k = 'g'; B.box(1.2, 1.4, 0.2, FARM.x, 6, FARM.z + 3.5, GLASS); B.k = 'm'; }
+    mill.position.set(FARM.x, 9.5, FARM.z + 3.5); blades = new THREE.Group(); mill.add(blades); mill.visible = !kkMill;
     const bm = new THREE.MeshStandardMaterial({ color: 0xe9dfc8, roughness: 1, flatShading: true }), wd = new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 1 });
     for (let i = 0; i < 4; i++) { const a = new THREE.Group(); a.rotation.z = i * Math.PI / 2; const arm = new THREE.Mesh(new THREE.BoxGeometry(0.4, 9, 0.2), wd); arm.position.y = 4.8; const sail = new THREE.Mesh(new THREE.BoxGeometry(2, 6, 0.08), bm); sail.position.set(1.2, 5.4, 0); a.add(arm, sail); blades.add(a); }
     const hub = new THREE.Mesh(new THREE.SphereGeometry(0.7, 8, 6), wd); mill.add(hub); group.add(mill);

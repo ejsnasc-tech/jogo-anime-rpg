@@ -1,5 +1,6 @@
 // Caverna do chefe: um corredor sinuoso fechado que termina numa camara circular onde mora o chefe do reino.
 import * as THREE from 'three';
+import { kkMesh } from './kk.js';
 
 const PATH = [[0, 120], [0, 98], [-26, 78], [-26, 48], [14, 26], [16, -6], [-18, -30], [-20, -60], [8, -82], [10, -100]];
 export const CAVE_HW = 6.5, ARENA_R = 24, WALL_H = 4.2;
@@ -61,6 +62,12 @@ export function buildCave(rockColor, glowColor) {
     const q = side(s, i, 0.88 + hash(i, s) * 0.08), h = 0.8 + hash(i, s + 3) * 1.6;
     const c = new THREE.Mesh(new THREE.ConeGeometry(0.35 + hash(i, s + 5) * 0.4, h, 5), stone); c.position.set(q.x, h / 2, q.z); g.add(c);
   }
+  // pedras modeladas (KayKit) amontoadas rente as paredes: da volume e quebra o aspecto liso
+  { const KR = ['rock_single_A', 'rock_single_C', 'rock_single_E'].map(kkMesh);
+    if (KR.every(Boolean)) { const rm = new THREE.MeshStandardMaterial({ color: base.clone().multiplyScalar(1.15), roughness: 1, flatShading: true }), dd = new THREE.Object3D();
+      KR.forEach((m, v) => { const im = new THREE.InstancedMesh(m.geometry, rm, 70); let k = 0;
+        for (let i = 2 + v; i < N && k < 70; i += 3) for (const s2 of [1, -1]) { if (hash(i, s2 + 20 + v) < 0.45 || k >= 70) continue; const q = side(s2, i, 0.8 + hash(i, v + 31) * 0.2), sc = 1.8 + hash(i, v + 9) * 3.2; dd.position.set(q.x, -0.05, q.z); dd.rotation.set(0, hash(i, v) * 6.28, 0); dd.scale.set(sc, sc * (0.8 + hash(i, 4) * 0.8), sc); dd.updateMatrix(); im.setMatrixAt(k++, dd.matrix); }
+        im.count = k; im.instanceMatrix.needsUpdate = true; g.add(im); }); } }
   for (let i = 8; i < N; i += 9) {
     const s = (i / 9) % 2 ? 1 : -1, q = side(s, i, 0.93);
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 1.5, 5), stone); pole.position.set(q.x, 0.75, q.z); g.add(pole);
