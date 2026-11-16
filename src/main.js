@@ -770,7 +770,15 @@ const giveRew = (r) => { state.gold += r.gold || 0; state.gems += r.gems || 0; }
 function questsClaimable() { const m = ensureMeta(state); return [].concat(m.dq, m.wq).filter(q => !q.claimed && q.have >= q.need).length + (loginState(state).got ? 0 : 1); }
 function openQuests() {
   const m = ensureMeta(state), ls = loginState(state);
-  const rows = [{ head: true, text: '🎁 LOGIN DIÁRIO — sequência: ' + ls.streak + ' dia(s)' }];
+  const qList = [[m.dq, false], [m.wq, true]], pending = (ls.got ? 0 : 1) + qList.reduce((n, [L]) => n + L.filter(q => !q.claimed && q.have >= q.need).length, 0);
+  const claimAll = () => {   // recebe de uma vez: login diário + todas as missões diárias e semanais já concluídas
+    const tot = { gold: 0, gems: 0 }; let n = 0; const add = (r) => { if (!r) return; tot.gold += r.gold || 0; tot.gems += r.gems || 0; giveRew(r); n++; };
+    if (!ls.got) add(claimLogin(state));
+    qList.forEach(([L, w]) => L.forEach(q => { if (!q.claimed && q.have >= q.need) { q.claimed = true; add(questReward(state.level, w)); } }));
+    save(state); refreshHud(); toast('✅ ' + n + ' recompensa(s) recebida(s): ' + rewTxt(tot)); openQuests();
+  };
+  const rows = [{ text: '🎁 Receber tudo\n' + (pending ? pending + ' recompensa(s) pronta(s) para coletar de uma vez.' : 'Nada pronto para coletar agora.'), btn: pending ? 'RECEBER TUDO (' + pending + ')' : '—', enabled: pending > 0, fn: claimAll }];
+  rows.push({ head: true, text: '🎁 LOGIN DIÁRIO — sequência: ' + ls.streak + ' dia(s)' });
   rows.push({ text: 'Dia ' + (ls.day + 1) + ' de 7: ' + rewTxt(loginReward(ls.day, state.level)) + (LOGIN_DAYS[ls.day].big ? '   ⭐ PRÊMIO GRANDE' : '') + '\nVolte todo dia sem falhar para chegar ao dia 7.', btn: ls.got ? '✔ HOJE' : 'COLETAR', enabled: !ls.got, fn: () => { const r = claimLogin(state); giveRew(r); save(state); refreshHud(); toast('🎁 ' + rewTxt(r)); openQuests(); } });
   rows.push({ head: true, text: '📜 MISSÕES DIÁRIAS (renovam à meia-noite)' });
   const addQ = (q, weekly) => { const rw = questReward(state.level, weekly); rows.push({ text: q.label + '   (' + q.have + '/' + q.need + ')\nRecompensa: ' + rewTxt(rw), btn: q.claimed ? '✔' : q.have >= q.need ? 'COLETAR' : '…', enabled: !q.claimed && q.have >= q.need, fn: () => { q.claimed = true; giveRew(rw); save(state); refreshHud(); toast('✅ ' + rewTxt(rw)); openQuests(); } }); };
@@ -1031,10 +1039,10 @@ function openWallet() {
 Usa: melhorar e forjar equipamentos, treinos, lojas, gemas, aluguel e móveis.`, color: '#ffd166' },
     { text: `DIAMANTES  •  ${n(state.gems)}
 É a moeda premium. Ganha: chefes, conquistas, missões, pérolas da pesca e o Passe.
-Usa: criaturas e montarias comuns, trocar de classe, auras e títulos, móveis premium.`, color: '#7fd6ff' },
+Usa: pets comuns, trocar de classe, auras e títulos, móveis premium.`, color: '#7fd6ff' },
     { text: `VEON  •  ${n(state.cash)}
 É a moeda rara, comprada com dinheiro real (a compra entra no lançamento; nos testes você recebe saldo).
-Usa: montarias especiais (Glaciar, Ignis, Aurora), evoluir equipamento na hora, comprar casas, construir andares, ampliar a sala e o Passe Premium.`, color: '#c48bff' },
+Usa: pets especiais (Glaciar, Ignis, Aurora), evoluir equipamento na hora, comprar casas, construir andares, ampliar a sala e o Passe Premium.`, color: '#c48bff' },
     { text: 'Toque no ✕ para voltar ao jogo.' },
   ]);
 }
@@ -1090,7 +1098,7 @@ function openProfs(msg) {
     else if (own) rows.push({ img: 'classes/' + c + '.webp', text, btn: 'TROCAR', fn: () => { changeProf(c); openProfs(); } });
     else rows.push({ img: 'classes/' + c + '.webp', text, btn: '💎' + profCost(), enabled: state.gems >= profCost(), fn: () => { state.gems -= profCost(); state.profOwned.push(c); save(state); refreshHud(); openProfs('🔓 ' + d.name + ' desbloqueada! Toque em TROCAR para começar do nível 1.'); } });
   });
-  rows.push({ head: true, text: '— Criaturas (mascote + montaria) —' });
+  rows.push({ head: true, text: '— Pets —' });
   rows.push({ text: '🐾 Loja de Criaturas\n' + PETS.length + ' criaturas para comprar ou invocar. Você tem ' + state.pets.length + '.', btn: 'ABRIR', fn: () => openPets() });
   openPanel('🎓 VOCAÇÕES', rows);
 }
@@ -1098,11 +1106,11 @@ const priceTxt = (pr) => pr.cash ? '🔮' + pr.cash : pr.gems ? '💎' + pr.gems
 const canPay = (pr) => pr.cash ? state.cash >= pr.cash : pr.gems ? state.gems >= pr.gems : state.gold >= pr.gold;
 function openPets(msg, keep) {
   const st = keep ? $('card').scrollTop : 0;
-  const rows = [{ head: true, text: (msg ? msg + '\n' : '') + '🐾 CRIATURAS\nCada criatura é mascote (ataca com você) e montaria. Compre a que quiser ou invoque uma surpresa. Repetida = +10% de dano.' }];
+  const rows = [{ head: true, text: (msg ? msg + '\n' : '') + '🐾 PETS\nCada pet te acompanha e ataca com você. Compre a que quiser ou invoque uma surpresa. Repetida = +10% de dano.' }];
   rows.push({ text: '🎲 Invocar criatura surpresa\nPode vir qualquer uma da loja', btn: '💎40', enabled: state.gems >= 40, fn: summonPet });
   PETS.forEach(p => {
     const owned = state.pets.includes(p.id);
-    const text = p.name + '\nDano ' + Math.round(p.dmg * 100) + '%  •  Velocidade montado x' + p.speed + (owned ? '  •  ★' + (state.petStars[p.id] || 0) : '') + '\nBônus: ' + p.perk.txt;
+    const text = p.name + '\nDano ' + Math.round(p.dmg * 100) + '%' + (owned ? '  •  ★' + (state.petStars[p.id] || 0) : '') + '\nBônus: ' + p.perk.txt;
     if (owned) rows.push({ img: 'pets/' + p.id + '.webp', text, btn: state.activePet === p.id ? 'ATIVO' : 'USAR', enabled: state.activePet !== p.id, fn: () => { state.activePet = p.id; save(state); setPet(); openPets(null, true); } });
     else if (p.price) rows.push({ img: 'pets/' + p.id + '.webp', text, btn: priceTxt(p.price), enabled: canPay(p.price), fn: () => { if (p.price.cash) state.cash -= p.price.cash; else if (p.price.gems) state.gems -= p.price.gems; else state.gold -= p.price.gold; state.pets.push(p.id); state.activePet = p.id; save(state); refreshHud(); setPet(); openPets('🎉 ' + p.name.split(',')[0] + ' comprada e ativada!'); } });
     else rows.push({ img: 'pets/' + p.id + '.webp', text, btn: 'BLOQUEADO', enabled: false });
@@ -1175,22 +1183,12 @@ function unlockHero(id) {
   toast('✨ ' + h.name + ' entrou para a sua história (veja no INDEX)'); save(state);
 }
 
-function toggleMount() {
-  if (isPaused()) return;
-  mounted = !mounted;
-  pet.scale.setScalar(mounted ? petDef.mountScale : petDef.scale);
-  $('mount').innerHTML = mounted ? '<span class="i">⬇</span><small>DESMONTAR</small>' : '<span class="i">🐾</span><small>MONTAR</small>';
-  toast(mounted ? 'Montado em ' + petDef.name.split(',')[0] + '!' : 'Você desmontou');
-  if (!mounted) player.position.y = 0;
-  { const q = pet.position; vfx.burst(q, { color: petDef.color, n: 26, speed: 5, up: 0.9, size: 0.5, life: 0.7, grav: 1.5 }); vfx.shock(q, petDef.color, 2.6, 0.45); vfx.flash(q, petDef.color, 4, 0.25, 1); }
-}
 
 $('b-mount').onclick = () => { if (!dialogOpen && !picking && !invOpen) openPets(); };
 $('b-crew').onclick = () => { if (!dialogOpen && !picking) openCrew(); };
 $('b-bag').onclick = () => { if (!dialogOpen && !picking && !invOpen) openProfile(); };
 $('b-index').onclick = () => { if (!dialogOpen && !picking) openIndex(); };
 $('b-home').onclick = () => { if (!picking) { closePanel(); closeInv(); } };
-$('mount').addEventListener('pointerdown', (e) => { e.stopPropagation(); toggleMount(); });
 $('hr').addEventListener('pointerdown', (e) => { e.stopPropagation(); openWallet(); });
 $('skill').addEventListener('pointerdown', (e) => { e.stopPropagation(); useSkill(); });
 
@@ -1874,7 +1872,7 @@ cv.addEventListener('pointerup', endJoy); cv.addEventListener('pointercancel', e
 window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase(); keys[k] = true;
   if (e.key === 'Escape') { if (invOpen) closeInv(); else if (panelOpen && !picking) closePanel(); else if (decor.on) toggleDecor(false); else if (inHome) leaveHome(); return; }
-  if (k === ' ') useSkill(); if (k === 'm') toggleMount();
+  if (k === ' ') useSkill();
   if (k === 'e' && nearNpc && !isPaused()) openNpc(nearNpc);
   if (k === '[') camYawT += 0.4; if (k === ']') camYawT -= 0.4;
   if (k === '+' || k === '=') setZoom(zoomT * 0.85); if (k === '-') setZoom(zoomT * 1.18);
@@ -2933,7 +2931,6 @@ setHero();
 startNet();
 const qs = new URLSearchParams(location.search);
 if (qs.get('pet') && PETS.some(p => p.id === qs.get('pet'))) state.activePet = qs.get('pet');
-if (qs.get('mount')) { mounted = true; $('mount').innerHTML = '<span class="i">⬇</span><small>DESMONTAR</small>'; }
 if (qs.get('team')) { const ids = qs.get('team').split(',').filter(id => HEROES.some(h => h.id === id)).slice(0, MAX_TEAM); if (ids.length) { state.owned = Array.from(new Set(state.owned.concat(ids))); state.team = ids; activeIdx = 0; setHero(); } }
 if (qs.get('act')) { state.act = Math.min(ACTS.length - 1, +qs.get('act') || 0); applyAct(); refreshHud(); }
 setPet(); renderSkillChips();
@@ -3059,8 +3056,8 @@ function runSelfTest() {
     }
     out.push('modelos 3D x classes x elmo: ok (3D=' + (player.userData.glb ? 'sim' : 'NAO, fallback') + ')');
     state.owned = HEROES.map(h => h.id); state.owned.push('player');
-    for (const p of PETS) { state.activePet = p.id; setPet(); toggleMount(); update(0.05); toggleMount(); update(0.05); }
-    out.push('criaturas + montaria: ok');
+    for (const p of PETS) { state.activePet = p.id; setPet(); update(0.05); }
+    out.push('pets: ok');
     state.team = ['kaito', 'ren', 'thalia']; activeIdx = 0; setHero(); switchReady = 0; switchHero(2); switchReady = 0; switchHero(1);
     out.push('troca de herois: ok (ativo=' + hero.id + ')');
     // skills de nível
@@ -3141,6 +3138,7 @@ function runSelfTest() {
     mm.dq[0].have = mm.dq[0].need; if (questsClaimable() < 2) throw new Error('missao nao contou'); openQuests(); closePanel();
     track('kill', 20000); if (!state.meta.ach.k10000) throw new Error('conquista');
     const lr = claimLogin(state); if (!lr || claimLogin(state)) throw new Error('login diario');
+    { mm.dq[0].claimed = false; mm.dq[0].have = mm.dq[0].need; const g0 = state.gold + state.gems; openQuests(); const bt = [...document.querySelectorAll('#card button')].find(b => b.textContent.startsWith('RECEBER TUDO')); if (!bt) throw new Error('botao receber tudo'); bt.click(); if (!mm.dq[0].claimed || state.gold + state.gems <= g0) throw new Error('receber tudo nao pagou'); closePanel(); }
     const el = spawnEnemy(false); el.elite = true; damageEnemy(el, 1e9);
     startEvent(); if (!ev) throw new Error('evento'); const evEn = enemies.filter(x => x.ev); evEn.forEach(x => damageEnemy(x, 1e9)); if (ev) throw new Error('evento nao terminou');
     dayT = 0; updateWorld(0.1); if (night < 0.8) throw new Error('noite'); dayT = 0.5; updateWorld(0.1); if (night > 0.2) throw new Error('dia');
