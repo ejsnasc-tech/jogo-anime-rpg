@@ -20,6 +20,7 @@ import { createAmbient } from './ambient.js';
 import { buildCave } from './cave.js';
 import { makeCreature, CREATURE_TYPES, hordeWeights, hordeTitle } from './creatures.js';
 import { createVfx } from './vfx.js';
+import { createGrass } from './grass.js';
 const IMG = ((import.meta.env && import.meta.env.BASE_URL) || './') + 'img/';
 import { QUESTS, ACH, LOGIN_DAYS, ensureMeta, loginState, claimLogin, loginReward, questReward, offlineGain } from './meta.js';
 import { initSocial } from './social.js';
@@ -214,10 +215,11 @@ function applyAct() {
   if (!biomes[key]) { biomes[key] = makeBiome(key, { groundH, riverDepth, trailX, WORLD }); fieldGroup.add(biomes[key]); }
   biomes[key].visible = true;
   if (curBiome && curBiome !== key && biomeNotify) toast(r.icon + ' Novo setor: ' + bi.title + ' — ' + bi.sub + '\n⚔ Horda: ' + HORDES[key].name + ' (' + HORDES[key].sub + ')');
-  curBiome = key;
+  curBiome = key; grass.setRealm(key);
 }
 
 const fieldGroup = new THREE.Group(); scene.add(fieldGroup);
+const grass = createGrass(scene, { groundH, riverDepth, trailX });
 // Árvores e pedras (instanciadas: 3 chamadas de desenho no total) + borda do mundo
 (function decorate() {
   const N_TREE = 1500, N_ROCK = 380, N_EDGE = 420;
@@ -225,7 +227,7 @@ const fieldGroup = new THREE.Group(); scene.add(fieldGroup);
   const grove = (x, z) => Math.sin(x * 0.045 + 1) * Math.sin(z * 0.05) + 0.6 * Math.sin((x + z) * 0.03) > -0.25;
   const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.25, 0.35, 1.4, 6), new THREE.MeshStandardMaterial({ color: 0x6b4423 }), N_TREE + N_EDGE);
   const leaf = new THREE.InstancedMesh(new THREE.ConeGeometry(1.4, 3, 7), new THREE.MeshStandardMaterial({ color: 0x2f7d32 }), N_TREE + N_EDGE);
-  const rock = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(0.8), new THREE.MeshStandardMaterial({ color: 0x8a8f98, flatShading: true }), N_ROCK + N_EDGE);
+  const rock = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(0.8), new THREE.MeshStandardMaterial({ color: 0x8a8f98, roughness: 0.95 }), N_ROCK + N_EDGE);
   const d = new THREE.Object3D(); let ti = 0, ri = 0;
   const addTree = (x, z, sc) => {
     d.rotation.set(0, 0, 0); d.scale.setScalar(sc);
@@ -273,7 +275,7 @@ const SUN = { mares: 0xfff1c0, sombras: 0xb9a6ff, arcana: 0xd8c6ff, planalto: 0x
 let waterTex = null;
 const RUINS = [], chestMeshes = [];
 (function scenery() {
-  const mat = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 1, flatShading: true }, o));
+  const mat = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 1 }, o));
   mtnMat = mat(0x8fa6bd); capMat = mat(0xffffff);
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * Math.PI * 2 + Math.random() * 0.2, r = 115 + Math.random() * 25, h = 30 + Math.random() * 28, w = 22 + Math.random() * 16;
@@ -2874,6 +2876,7 @@ function frame() {
     const rb = $('camrot'); if (rb) rb.style.display = lc ? 'flex' : 'none'; }
   farGroup.position.set(p.x, 0, p.z);
   ambient.setVisible(!inCity && !cave && !decor.on); if (!inCity && !cave) ambient.update(dt, p);
+  grass.update(dt, p.x, p.z, T, !inCity && !cave && !decor.on && !inHome && !dg, gfx === 'low');
   sun.position.set(p.x + 10, 18, p.z + 7); sun.target.position.copy(p);
   vfx.update(dt, camera, renderer.domElement.height);
   if (composer && gfx === 'high') composer.render(dt); else renderer.render(scene, camera);

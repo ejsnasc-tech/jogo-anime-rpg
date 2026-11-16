@@ -9,7 +9,7 @@ export const SZ_MAX = 3;
 export const roomDims = (kind, sz) => { const R = ROOMS[kind], n = Math.max(0, Math.min(SZ_MAX, sz | 0)); return { w: R.w + R.ew * n, d: R.d + R.ed * n }; };
 export const FLOOR_TINT = [0xeadfc8, 0xdbe6f2, 0xf2dfe8, 0xdff0df];
 
-const M = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.9, flatShading: true }, o));
+const M = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.9 }, o));
 function part(parent, geo, mat, x, y, z) { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; parent.add(m); return m; }
 const B = (w, h, d) => new THREE.BoxGeometry(w, h, d);
 

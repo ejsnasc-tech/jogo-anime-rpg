@@ -2,6 +2,7 @@
 // predios de apartamentos a sudeste, parque com lago a nordeste, Academia a noroeste e o Castelo ao norte.
 // Toda a geometria estatica e fundida por "chunks" (uma malha por material e por quadrado do mapa) para ficar leve.
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { PREMADE, buildPlayerHero, BASE } from './data.js';
 import { makeHero, animateHero } from './actors.js';
 
@@ -217,41 +218,55 @@ const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quatern
 class Batch {
   constructor() { this.buckets = {}; this.units = {}; this.fx = 0; this.fz = 0; this.fy = 0; this.cs = 1; this.sn = 0; this.k = 'm'; }
   frame(x, z, ry = 0) { this.fx = x; this.fz = z; this.fy = ry; this.cs = Math.cos(ry); this.sn = Math.sin(ry); return this; }
-  unit(key, make) { return this.units[key] || (this.units[key] = (() => { let g = make(); if (g.index) g = g.toNonIndexed(); return g.attributes.position.array; })()); }
-  put(pos, sx, sy, sz, x, y, z, col, ry, rx, rz) {
+  unit(key, make, withN) { const u = this.units[key]; if (u && (!withN || u.n)) return u.p; let g = make(); if (g.index) g = g.toNonIndexed(); this.units[key] = { p: g.attributes.position.array, n: withN ? g.attributes.normal.array : null }; return this.units[key].p; }
+  // k: 'm' geral | 'w' parede (reboco) | 'r' telhado | 'b' pedra/tijolo | 's' folhagem (sombreado suave) | 'g' vidro | 'l' luz
+  put(pos, sx, sy, sz, x, y, z, col, ry, rx, rz, nrm) {
     const c = this.cs, s = this.sn, wx = this.fx + x * c + z * s, wz = this.fz - x * s + z * c;
     _m.compose(_p.set(wx, y, wz), _q.setFromEuler(_e.set(rx || 0, (ry || 0) + this.fy, rz || 0, 'YXZ')), _s.set(sx, sy, sz));
     const e = _m.elements; _c.set(col);
-    const cx = Math.floor(wx / 44), cz = Math.floor(wz / 44), key = this.k + '|' + cx + '|' + cz;
-    const b = this.buckets[key] || (this.buckets[key] = { p: [], c: [], k: this.k });
+    let k = this.k;
+    if (k === 'm') { if (col === STONE || col === DSTONE) k = 'b'; else if (WALLSET.has(col)) k = 'w'; }
+    const cx = Math.floor(wx / 44), cz = Math.floor(wz / 44), key = k + '|' + cx + '|' + cz;
+    const b = this.buckets[key] || (this.buckets[key] = { p: [], c: [], l: [], n: k === 's' ? [] : null, k });
     for (let i = 0; i < pos.length; i += 3) {
       const X = pos[i], Y = pos[i + 1], Z = pos[i + 2];
-      b.p.push(e[0] * X + e[4] * Y + e[8] * Z + e[12], e[1] * X + e[5] * Y + e[9] * Z + e[13], e[2] * X + e[6] * Y + e[10] * Z + e[14]);
-      b.c.push(_c.r, _c.g, _c.b);
+      const vx = e[0] * X + e[4] * Y + e[8] * Z + e[12], vy = e[1] * X + e[5] * Y + e[9] * Z + e[13], vz = e[2] * X + e[6] * Y + e[10] * Z + e[14];
+      b.p.push(vx, vy, vz); b.c.push(_c.r, _c.g, _c.b);
+      const dx = vx - this.fx, dz = vz - this.fz; b.l.push(dx * c - dz * s, vy, dx * s + dz * c);   // coordenada no referencial da construcao (para a textura acompanhar a casa)
+      if (b.n && nrm) { const nx = nrm[i] / sx, ny = nrm[i + 1] / sy, nz = nrm[i + 2] / sz; const ax = e[0] * nx + e[4] * ny + e[8] * nz, ay = e[1] * nx + e[5] * ny + e[9] * nz, az = e[2] * nx + e[6] * ny + e[10] * nz, L = Math.hypot(ax, ay, az) || 1; b.n.push(ax / L, ay / L, az / L); }
     }
   }
-  box(w, h, d, x, y, z, col, ry, rx, rz) { this.put(this.unit('box', () => new THREE.BoxGeometry(1, 1, 1)), w, h, d, x, y + h / 2, z, col, ry, rx, rz); }
+  // caixa com quinas arredondadas (paredes e blocos grandes); as pequenas continuam retas
+  box(w, h, d, x, y, z, col, ry, rx, rz) {
+    const m = Math.min(w, h, d);
+    if (m >= 0.55 && w * h * d > 2.5) { const r = Math.min(0.16, m * 0.2), key = 'rb' + w.toFixed(2) + '_' + h.toFixed(2) + '_' + d.toFixed(2); this.put(this.unit(key, () => new RoundedBoxGeometry(w, h, d, 1, r)), 1, 1, 1, x, y + h / 2, z, col, ry, rx, rz); }
+    else this.put(this.unit('box', () => new THREE.BoxGeometry(1, 1, 1)), w, h, d, x, y + h / 2, z, col, ry, rx, rz);
+  }
   cyl(rt, rb, h, seg, x, y, z, col, ry, rx, rz) { this.put(this.unit('cyl' + rt + '_' + rb + '_' + seg, () => new THREE.CylinderGeometry(rt, rb, 1, seg)), 1, h, 1, x, y + h / 2, z, col, ry, rx, rz); }
-  cone(r, h, seg, x, y, z, col, ry) { this.put(this.unit('cone' + seg, () => new THREE.ConeGeometry(1, 1, seg)), r, h, r, x, y + h / 2, z, col, ry); }
-  pyr(w, d, h, x, y, z, col, ry) { this.put(this.unit('pyr', () => new THREE.ConeGeometry(Math.SQRT1_2, 1, 4).rotateY(Math.PI / 4)), w, h, d, x, y + h / 2, z, col, ry); }
-  sph(r, x, y, z, col, sy = 1, seg = 8) { this.put(this.unit('sph' + seg, () => new THREE.SphereGeometry(1, seg, Math.max(4, seg * 0.7 | 0))), r, r * sy, r, x, y, z, col); }
+  cone(r, h, seg, x, y, z, col, ry) { const o = this.k; if (o === 'm') this.k = 's'; seg = Math.max(seg, 9); this.put(this.unit('coneS' + seg, () => new THREE.ConeGeometry(1, 1, seg), true), r, h, r, x, y + h / 2, z, col, ry, 0, 0, this.units['coneS' + seg].n); this.k = o; }
+  pyr(w, d, h, x, y, z, col, ry) { const o = this.k; this.k = 'r'; this.put(this.unit('pyr', () => new THREE.ConeGeometry(Math.SQRT1_2, 1, 4).rotateY(Math.PI / 4)), w, h, d, x, y + h / 2, z, col, ry); this.k = o; }
+  sph(r, x, y, z, col, sy = 1, seg = 8) { if (r < 0.3) { this.put(this.unit('sph' + seg, () => new THREE.SphereGeometry(1, seg, Math.max(4, seg * 0.7 | 0))), r, r * sy, r, x, y, z, col); return; } const o = this.k; if (o === 'm') this.k = 's'; seg = Math.max(seg, 10); const key = 'sphS' + seg; this.put(this.unit(key, () => new THREE.SphereGeometry(1, seg, Math.max(6, seg * 0.7 | 0)), true), r, r * sy, r, x, y, z, col, 0, 0, 0, this.units[key].n); this.k = o; }
   // prisma de telhado: cumeeira ao longo de x (comprimento len), vao em z (span), altura h
   gable(len, span, h, x, y, z, col, ry) {
+    const o = this.k; this.k = 'r';
     this.put(this.unit('gable', () => { const sh = new THREE.Shape(); sh.moveTo(-0.5, 0); sh.lineTo(0.5, 0); sh.lineTo(0, 1); const g = new THREE.ExtrudeGeometry(sh, { depth: 1, bevelEnabled: false }); g.translate(0, 0, -0.5); g.rotateY(Math.PI / 2); return g; }),
       len, h, span, x, y, z, col, ry);
+    this.k = o;
   }
   finish(group, mats) {
     Object.values(this.buckets).forEach(b => {
       const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.Float32BufferAttribute(b.p, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(b.c, 3));
+      g.setAttribute('position', new THREE.Float32BufferAttribute(b.p, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(b.c, 3)); g.setAttribute('lp', new THREE.Float32BufferAttribute(b.l, 3));
+      if (b.n) g.setAttribute('normal', new THREE.Float32BufferAttribute(b.n, 3));
       g.computeBoundingSphere();
-      const m = new THREE.Mesh(g, mats[b.k]); m.castShadow = b.k === 'm'; m.receiveShadow = true; m.matrixAutoUpdate = false; m.userData.noOutline = true; group.add(m);
+      const m = new THREE.Mesh(g, mats[b.k]); m.castShadow = b.k !== 'g' && b.k !== 'l'; m.receiveShadow = true; m.matrixAutoUpdate = false; m.userData.noOutline = true; group.add(m);
     });
     this.buckets = {};
   }
 }
 
 const WALL = [0xf1e6cf, 0xe8d4b0, 0xdde6ee, 0xf2d8d0, 0xdfe9cf], ROOF = [0xc0392b, 0x2e86c1, 0x8b5a2b, 0x2a9d8f, 0xd9822b], TIM = 0x5a3b1e, WOOD = 0x8a5a2b, STONE = 0xa9afb8, DSTONE = 0x7d8591, GLASS = 0x8fdcff;
+const WALLSET = new Set([...WALL, 0xe3d2b8, 0xcfdae4, 0xe9cdb7, 0xd7dfc6, 0xe6c9d0, 0xf0dcc0, 0xe6d3b3, 0xd9e4ec]);
 
 // janela de frente (plano z = zf): vidro + moldura + peitoril + venezianas
 function win(B, x, y, zf, w, h, shut) {
@@ -286,7 +301,7 @@ function house(B, i, p) {
   B.box(2.2, 0.28, 1.3, 0, 0.7, zd + 0.75, STONE); B.box(2.6, 0.22, 1.7, 0, 0.5, zd + 0.85, DSTONE);
   if (v === 1) { [-1.7, 1.7].forEach(x => B.cyl(0.14, 0.14, 2.7, 6, x, 0.7, zd + 1.7, 0xf2eee3)); B.box(4.2, 0.25, 2.2, 0, 3.4, zd + 0.9, rc, 0, 0.1); }
   if (v === 2) { B.gable(2.8, 2.8, 1.8, 0, top + rh * 0.12, d / 2 - 0.9, rc, 1.5708); B.k = 'g'; B.box(1.1, 0.9, 0.2, 0, top + 0.8, d / 2 + 0.55, GLASS); B.k = 'm'; }
-  if (v === 3) { const h = fl * fh + 1.4; B.cyl(1.5, 1.6, h, 10, -w / 2, 0, d / 2 - 0.2, wc2); B.cone(2.1, 3.2, 10, -w / 2, h, d / 2 - 0.2, rc); B.k = 'g'; B.box(0.8, 1.1, 0.2, -w / 2, h - 1.8, d / 2 + 1.3, GLASS); B.k = 'm'; }
+  if (v === 3) { const h = fl * fh + 1.4; B.cyl(1.5, 1.6, h, 10, -w / 2, 0, d / 2 - 0.2, wc2); B.k = 'r'; B.cone(2.1, 3.2, 10, -w / 2, h, d / 2 - 0.2, rc); B.k = 'm'; B.k = 'g'; B.box(0.8, 1.1, 0.2, -w / 2, h - 1.8, d / 2 + 1.3, GLASS); B.k = 'm'; }
   if (v === 4) { B.box(3.6, 2.8, d * 0.7, w / 2 + 1.8, 0, -0.5, wc2); B.gable(4.2, d * 0.7 + 1, 1.5, w / 2 + 1.8, 2.8, -0.5, rc, 1.5708); win(B, w / 2 + 1.8, 1.6, d * 0.35 - 0.5 + 0.02, 1.1, 1.1, shut); }
   // jardim da frente: caminho, cerquinha e um detalhe que muda de casa para casa
   const hs = Math.abs(Math.sin(i * 12.9898 + 4.1)) * 5 | 0, zg = d / 2 + 3.3;
@@ -447,11 +462,35 @@ function statue(B, x, z, ry, col) { B.frame(x, z, ry); B.box(2.2, 1.3, 2.2, 0, 0
 function barrel(B, x, z) { B.cyl(0.55, 0.55, 1, 7, x, 0, z, 0x8a5a2b); B.cyl(0.58, 0.58, 0.1, 7, x, 0.2, z, 0x3b3b3b); B.cyl(0.58, 0.58, 0.1, 7, x, 0.7, z, 0x3b3b3b); }
 function crate(B, x, z, ry) { B.box(0.9, 0.9, 0.9, x, 0, z, 0xb98a4f, ry); B.box(0.95, 0.12, 0.95, x, 0.4, z, 0x8a5a2b, ry); }
 
+// material com textura "triplanar" (parede, telhado, tijolo): a imagem e projetada pelas 3 direcoes usando a coordenada local da casa,
+// entao nao precisa de UV. A cor do vertice continua mandando no tom; a textura so adiciona o detalhe (telhas, reboco, tijolos).
+function triMat(name, scale, strength, avg, o) {
+  const m = new THREE.MeshStandardMaterial(Object.assign({ vertexColors: true, flatShading: true, side: THREE.DoubleSide }, o));
+  const uni = { uTri: { value: new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1) }, uTS: { value: scale }, uStr: { value: strength }, uAvg: { value: new THREE.Vector3(avg[0], avg[1], avg[2]) } };
+  uni.uTri.value.needsUpdate = true;
+  const im = new Image();
+  im.onload = () => { const t = new THREE.Texture(im); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace; t.generateMipmaps = true; t.needsUpdate = true; uni.uTri.value = t; };
+  im.src = BASE + 'img/pbr/' + name + '.webp';
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, uni);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 lp; varying vec3 vLP;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvLP = lp;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vLP; uniform sampler2D uTri; uniform float uTS; uniform float uStr; uniform vec3 uAvg;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+      { vec3 n3 = normalize(cross(dFdx(vLP), dFdy(vLP))); vec3 w3 = pow(abs(n3), vec3(6.0)); w3 /= (w3.x + w3.y + w3.z + 1e-4);
+        vec3 tx = texture2D(uTri, vLP.zy * uTS).rgb * w3.x + texture2D(uTri, vLP.xz * uTS).rgb * w3.y + texture2D(uTri, vLP.xy * uTS).rgb * w3.z;
+        diffuseColor.rgb *= mix(vec3(1.0), tx / uAvg, uStr); }`);
+  };
+  return m;
+}
 export function buildCity() {
   const group = new THREE.Group();
   const B = new Batch();
   const mats = {
     m: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true, side: THREE.DoubleSide }),
+    w: triMat('plaster', 0.22, 0.7, [0.681, 0.655, 0.631], { roughness: 0.9 }),
+    r: triMat('roof', 0.3, 0.85, [0.276, 0.106, 0.057], { roughness: 0.75 }),
+    b: triMat('brick', 0.28, 0.9, [0.362, 0.201, 0.13], { roughness: 0.95 }),
+    s: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide }),
     g: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.3, flatShading: true, emissive: 0x1a4a6a }),
     l: new THREE.MeshBasicMaterial({ vertexColors: true }),
   };

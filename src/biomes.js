@@ -36,8 +36,8 @@ export function groundTex(realm) {
 }
 
 const DENS = 3.2;
-const std = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.95, flatShading: true }, o));
-const glow = (c, i) => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: i || 0.8, flatShading: true });
+const std = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.9 }, o));
+const glow = (c, i) => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: i || 0.8 });
 
 // ctx: { groundH, riverDepth, trailX, WORLD, rand }
 export function makeBiome(realm, ctx) {
