@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { PREMADE, buildPlayerHero, BASE } from './data.js';
 import { makeHero, animateHero } from './actors.js';
+import { kkHas, kkClone, kkMesh } from './kk.js';
 
 export const CITY_R = 180;
 export const CITY_SPAWN = [0, CITY_R - 5];
@@ -279,9 +280,14 @@ function flowerBox(B, x, y, z, w) {
   B.box(w, 0.32, 0.45, x, y, z, WOOD);
   for (let i = 0; i < 4; i++) B.sph(0.17, x - w / 2 + 0.2 + i * (w - 0.4) / 3, y + 0.42, z, [0xff7f9f, 0xffd166, 0xffffff, 0xb28dff][i], 1, 5);
 }
+const KKCOL = ['blue', 'green', 'red', 'yellow'];
+let KKP = [], KKT = [];
 function house(B, i, p) {
   const { w, d, fl, v } = p, fh = 3.1;
   const wc = WALL[i % 5], wc2 = WALL[(i + 2) % 5], rc = ROOF[(i * 3 + 1) % 5], shut = [0x2e86c1, 0x2a9d8f, 0xc0392b, 0x6a4c93][i % 4];
+  const KV = KKCOL[(i * 7 + 3) % 4], KN = 'building_' + (i % 3 === 1 ? 'home_B' : 'home_A') + '_' + KV, useKK = kkHas(KN);
+  if (useKK) KKP.push({ n: KN, x: B.fx, z: B.fz, ry: B.fy, w, d, fl });
+  else {
   B.box(w + 0.5, 0.7, d + 0.5, 0, 0, 0, STONE);
   for (let f = 0; f < fl; f++) {
     const ww = w + (f ? 0.5 : 0), dd = d + (f ? 0.5 : 0), y = 0.7 + f * fh;
@@ -303,6 +309,7 @@ function house(B, i, p) {
   if (v === 2) { B.gable(2.8, 2.8, 1.8, 0, top + rh * 0.12, d / 2 - 0.9, rc, 1.5708); B.k = 'g'; B.box(1.1, 0.9, 0.2, 0, top + 0.8, d / 2 + 0.55, GLASS); B.k = 'm'; }
   if (v === 3) { const h = fl * fh + 1.4; B.cyl(1.5, 1.6, h, 10, -w / 2, 0, d / 2 - 0.2, wc2); B.k = 'r'; B.cone(2.1, 3.2, 10, -w / 2, h, d / 2 - 0.2, rc); B.k = 'm'; B.k = 'g'; B.box(0.8, 1.1, 0.2, -w / 2, h - 1.8, d / 2 + 1.3, GLASS); B.k = 'm'; }
   if (v === 4) { B.box(3.6, 2.8, d * 0.7, w / 2 + 1.8, 0, -0.5, wc2); B.gable(4.2, d * 0.7 + 1, 1.5, w / 2 + 1.8, 2.8, -0.5, rc, 1.5708); win(B, w / 2 + 1.8, 1.6, d * 0.35 - 0.5 + 0.02, 1.1, 1.1, shut); }
+  }
   // jardim da frente: caminho, cerquinha e um detalhe que muda de casa para casa
   const hs = Math.abs(Math.sin(i * 12.9898 + 4.1)) * 5 | 0, zg = d / 2 + 3.3;
   B.box(1.7, 0.06, 3.2, 0, 0.02, d / 2 + 2.3, 0xd9c9a6);
@@ -447,6 +454,7 @@ function stall(B, x, z, ry, col) {   // barraca: NPC fica na frente (direcao +z 
 function lamp(B, x, z) { B.cyl(0.13, 0.19, 3.6, 6, x, 0, z, 0x353b46); B.box(0.7, 0.14, 0.7, x, 3.6, z, 0x353b46); B.k = 'l'; B.sph(0.38, x, 4.0, z, 0xffe9a0, 1, 6); B.k = 'm'; B.pyr(0.8, 0.8, 0.45, x, 4.35, z, 0x353b46); }
 function tree(B, x, z, sc, type) {
   const t = type || 'pine';
+  if (kkHas('tree_single_A')) { KKT.push({ x, z, sc, t }); return; }
   if (t === 'pine') {
     B.cyl(0.25 * sc, 0.38 * sc, 1.5 * sc, 5, x, 0, z, 0x6b4423);
     [[1.8, 2.8, 1.1, 0x2f7d32], [1.45, 2.6, 2.5, 0x3c9a3f], [1.0, 2.3, 3.8, 0x4caf50]].forEach(([r, h, y, c]) => B.cone(r * sc, h * sc, 7, x, y * sc, z, c));
@@ -691,6 +699,18 @@ export function buildCity() {
   for (let n = 0; n < 70; n++) { const a = rnd() * 6.283, r = 40 + rnd() * 120, x = Math.cos(a) * r, z = Math.sin(a) * r; if (free(x, z, 3) && rnd() < 0.8) bush(B, x, z, rnd() < 0.6 ? FC[n % 5] : 0); }
 
   B.finish(group, mats);
+  // modelos 3D prontos: casas (uma por lote) e arvores (instanciadas)
+  KKP.forEach(o => { const m = kkClone(o.n); if (!m) return; const ax = o.w / 0.8 * 0.96, az = o.d / 0.77 * 0.96, u = Math.min(ax, az), sx = Math.min(ax, u * 1.3), sz = Math.min(az, u * 1.3), sy = u * (o.fl > 1 ? 1.25 : 1.05);
+    m.position.set(o.x, 0, o.z); m.rotation.y = o.ry; m.scale.set(sx, sy, sz); m.userData.noOutline = true; group.add(m); });
+  { const geoms = ['tree_single_A', 'tree_single_B'].map(kkMesh).filter(Boolean);
+    if (geoms.length && KKT.length) {
+      const per = geoms.map(() => []); KKT.forEach((o, k) => per[(o.t === 'pine' ? 1 : 0) % geoms.length === 0 && o.t !== 'pine' ? 0 : (geoms.length > 1 ? 1 : 0)].push(o));
+      const d = new THREE.Object3D();
+      geoms.forEach((g, gi) => { const L = per[gi]; if (!L.length) return; const im = new THREE.InstancedMesh(g.geometry, g.material, L.length);
+        L.forEach((o, k) => { d.position.set(o.x, 0, o.z); d.rotation.set(0, (o.x * 7.3 + o.z * 3.1) % 6.283, 0); d.scale.setScalar(o.sc * 3.4); d.updateMatrix(); im.setMatrixAt(k, d.matrix); });
+        im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false; im.userData.noOutline = true; group.add(im); });
+    } }
+  KKP = []; KKT = [];
 
   // ---- terrenos: marcador no chão (instanciado) + placas que aparecem só perto do jogador ----
   const ringMesh = new THREE.InstancedMesh(new THREE.RingGeometry(0.9, 1.2, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide }), PLOTS.length);

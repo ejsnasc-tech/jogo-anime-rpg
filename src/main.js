@@ -24,6 +24,7 @@ import { buildCave } from './cave.js';
 import { makeCreature, CREATURE_TYPES, hordeWeights, hordeTitle } from './creatures.js';
 import { createVfx } from './vfx.js';
 import { createGrass } from './grass.js';
+import { kkReady } from './kk.js';
 const IMG = ((import.meta.env && import.meta.env.BASE_URL) || './') + 'img/';
 import { QUESTS, ACH, LOGIN_DAYS, ensureMeta, loginState, claimLogin, loginReward, questReward, offlineGain } from './meta.js';
 import { initSocial } from './social.js';
@@ -2894,7 +2895,7 @@ function frame() {
 }
 
 // ===================== Início =====================
-await preloadModels((f) => { $('lfill').style.width = Math.round(f * 100) + '%'; });
+await kkReady; await preloadModels((f) => { $('lfill').style.width = Math.round(f * 100) + '%'; });
 $('loading').style.display = 'none';
 city = buildCity(); scene.add(city.group); refreshPlots();
 applyAct();
