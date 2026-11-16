@@ -323,6 +323,8 @@ function house(B, i, p) {
   else { B.box(2.2, 0.55, 1.2, px, 0.55, pz, WOOD); [-0.9, 0.9].forEach(x => B.cyl(0.42, 0.42, 0.12, 8, px + x, 0, pz + 0.7, TIM, 0, 0, 1.5708)); B.sph(0.4, px, 1.4, pz, 0xe5a13a, 1, 6); }
 }
 function apt(B, i, p) {
+  { const n = Math.max(1, Math.round(p.w / 7.5)), tw = p.w / n, hh = p.fl * 3.2 + 2.5, nm = 'building_' + (i % 2 ? 'tower_A' : 'tower_A') + '_' + KKCOL[(i * 3 + 1) % 4];
+    if (kkHas(nm)) { for (let k = 0; k < n; k++) KKP.push({ n: nm, x: B.fx + ((k - (n - 1) / 2) * tw) * B.cs, z: B.fz - ((k - (n - 1) / 2) * tw) * B.sn, ry: B.fy, w: tw, d: p.d, h: hh * (k % 2 ? 0.85 : 1) }); return; } }
   const { w, d, fl } = p, fh = 3.3, wc = [0xe3d2b8, 0xcfdae4, 0xe9cdb7, 0xd7dfc6, 0xe6c9d0][i % 5], ac = [0xc0392b, 0x2e86c1, 0x2a9d8f, 0xd9822b, 0x8e44ad][i % 5];
   B.box(w + 0.4, 1.2, d + 0.4, 0, 0, 0, DSTONE);
   B.box(w, fl * fh + 0.5, d, 0, 1.2, 0, wc);
@@ -342,7 +344,8 @@ function apt(B, i, p) {
   else { B.box(w + 0.4, 0.9, d + 0.4, 0, H + 0.7, 0, ac); [-1, 1].forEach(sx => [-1, 1].forEach(sz => B.box(0.55, 0.9, 0.55, sx * (w / 2 + 0.1), H + 1.6, sz * (d / 2 + 0.1), STONE))); B.box(2.2, 1.5, 2.2, w / 4, H + 1.6, -d / 4, WOOD); B.cyl(1.0, 1.0, 1.1, 8, w / 4, H + 3.1, -d / 4, DSTONE); }
   if (fl >= 5) { B.cyl(0.1, 0.1, 3, 4, 0, H + 3.5, 0, 0x333333); B.box(1.6, 0.9, 0.1, 0.8, H + 5.2, 0, 0xf5c542); }
 }
-function shop(B, i, ac, rf) {   // loja de dois andares do Mercado (frente +z)
+function shop(B, i, ac, rf, role) {   // loja de dois andares do Mercado (frente +z)
+  if (kkPlace(B, 'building_' + (role === 'smith' || role === 'armor' || role === 'craft' ? 'blacksmith' : i % 2 ? 'market' : 'home_B') + '_' + KKCOL[i % 4], 10.4, 7.6, role === 'smith' || role === 'armor' || role === 'craft' ? 6.5 : i % 2 ? 6 : 9)) return;
   const wc = [0xf0dcc0, 0xe6d3b3, 0xd9e4ec][i % 3];
   B.box(10.4, 0.6, 7.4, 0, 0, 0, STONE); B.box(10, 4.2, 7, 0, 0.6, 0, wc); B.box(10.6, 3.6, 7.6, 0, 4.8, 0, wc);
   [-5, 5].forEach(x => [-3.5, 3.5].forEach(z => B.box(0.45, 8.4, 0.45, x, 0.6, z, TIM)));
@@ -411,7 +414,7 @@ function signLabel(title, sub, border) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, fog: false, transparent: true })); s.scale.set(9.6, 2.38, 1); return s;
 }
 // poe um modelo pronto no lugar de uma construcao feita por codigo: ajusta largura/profundidade/altura finais (metros)
-function kkPlace(B, n, w, d, h) { if (!kkHas(n)) return false; KKP.push({ n, x: B.fx, z: B.fz, ry: B.fy, w, d, h }); return true; }
+function kkPlace(B, n, w, d, h, ox = 0, oz = 0) { if (!kkHas(n)) return false; const c = Math.cos(B.fy), sn = Math.sin(B.fy); KKP.push({ n, x: B.fx + ox * c + oz * sn, z: B.fz - ox * sn + oz * c, ry: B.fy, w, d, h }); return true; }
 function tavern(B) {
   if (kkPlace(B, 'building_tavern_red', 15, 10.4, 11)) return;
   B.box(15, 0.6, 10.4, 0, 0, 0, STONE); B.box(14.4, 4.4, 9.8, 0, 0.6, 0, 0xe9d3a8); B.box(15, 3.6, 10.4, 0, 5, 0, 0xd9bf8e);
@@ -439,6 +442,7 @@ function clocktower(B) {
   B.cyl(0.1, 0.1, 3, 4, 0, 26.9, 0, 0x333333); B.box(1.6, 0.9, 0.1, 0.8, 29, 0, 0xf5c542); B.box(1.6, 2.6, 0.2, 0, 0.6, 2.75, 0x5a3b1e);
 }
 function guild(B) {
+  if (kkHas('building_castle_yellow')) { kkPlace(B, 'building_castle_yellow', 9, 9, 18); kkPlace(B, 'building_tower_A_red', 6, 6, 13, -9, 1); kkPlace(B, 'building_tower_A_red', 6, 6, 13, 9, 1); kkPlace(B, 'building_market_green', 8, 6, 5, -2, 6.5); return; }
   B.box(18, 0.6, 9, 0, 0, 0, STONE); B.box(17.4, 6, 8.4, 0, 0.6, 0, 0xe2d7c1); B.box(18, 0.5, 9, 0, 6.6, 0, DSTONE);
   for (let i = 0; i < 8; i++) B.box(1.6, 1.4, 1.2, -7.7 + i * 2.2, 7.1, 4, DSTONE);
   [-7, 7].forEach(x => { B.cyl(2.2, 2.4, 11, 10, x, 0, 0, 0xcfc6b2); B.cone(3, 4.5, 10, x, 11, 0, 0xc0392b); });
@@ -571,9 +575,12 @@ export function buildCity() {
     B.frame(CASTLE.x, CASTLE.z, 0);
     B.box(46, 14, 22, 0, 0, 0, S); B.box(48, 1.2, 24, 0, 14, 0, S2);
     for (let i = 0; i < 17; i++) { const x = -23 + i * 2.875; B.box(1.6, 1.7, 1.2, x, 15.2, 11.7, S2); B.box(1.6, 1.7, 1.2, x, 15.2, -11.7, S2); }
+    if (!kkPlace(B, 'building_castle_red', 26, 24, 52, 0, -9)) {
     B.box(22, 32, 20, 0, 0, -9, S); B.box(24, 1.4, 22, 0, 32, -9, S2); B.pyr(26, 24, 15, 0, 33.4, -9, RD);
     B.cyl(0.15, 0.15, 7, 4, 0, 48.4, -9, 0x333333); B.box(4.5, 2.4, 0.15, 2.3, 52.5, -9, 0xf5c542);
+    }
     [-1, 1].forEach(s => {
+      if (kkPlace(B, s > 0 ? 'building_tower_A_blue' : 'building_tower_A_red', 11, 12, 34, s * 25, 5) && kkPlace(B, s > 0 ? 'building_tower_A_red' : 'building_tower_A_blue', 9, 10, 24, s * 25, -17)) return;
       B.cyl(5.4, 6, 30, 14, s * 25, 0, 5, S); B.cyl(6.4, 6.4, 1.4, 14, s * 25, 30, 5, S2); B.cone(7, 12, 14, s * 25, 31.4, 5, RD);
       B.cyl(0.12, 0.12, 5, 4, s * 25, 43.4, 5, 0x333333); B.box(3.2, 1.8, 0.12, s * 25 + 1.6, 46.4, 5, s > 0 ? 0xf5c542 : 0x2e86c1);
       B.cyl(4.2, 4.6, 20, 12, s * 25, 0, -17, S); B.cone(5.2, 8, 12, s * 25, 20, -17, RD);
@@ -610,8 +617,11 @@ export function buildCity() {
     B.frame(0, 0, 0);
   }
   // ---- Praça das Casas: poço e canteiros ----
+  if (kkHas('building_well_blue')) { B.frame(DECO_SQ.x - 4, DECO_SQ.z - 3, 0); kkPlace(B, 'building_well_blue', 4.2, 4.8, 5); }
+  else {
   B.cyl(1.3, 1.5, 1.1, 10, DECO_SQ.x - 4, 0, DECO_SQ.z - 3, STONE); B.cyl(0.9, 0.9, 0.05, 10, DECO_SQ.x - 4, 1.05, DECO_SQ.z - 3, 0x4fc3f7);
   [-1.2, 1.2].forEach(s => B.cyl(0.1, 0.1, 2.4, 5, DECO_SQ.x - 4 + s, 1.1, DECO_SQ.z - 3, TIM)); B.box(3, 0.2, 1.8, DECO_SQ.x - 4, 3.4, DECO_SQ.z - 3, TIM); B.gable(3.4, 2.6, 0.9, DECO_SQ.x - 4, 3.6, DECO_SQ.z - 3, 0xc0392b);
+  }
   for (let i = 0; i < 6; i++) { const a = i / 6 * 6.283 + 0.4; bench(B, DECO_SQ.x + Math.cos(a) * 8.5, DECO_SQ.z + Math.sin(a) * 8.5, -a + Math.PI / 2); }
 
   // ---- casas e predios (um por terreno) + aneis para tocar ----
@@ -636,7 +646,7 @@ export function buildCity() {
     summoner: { x: 86, z: 17.5, ry: PI, ac: 0xba68c8, rf: 0x2e5d9a, t: '🔮 Torre das Vocações', s: 'Aprenda novas vocações', y: 14.2 },
     herald: { x: 98, z: -17.5, ry: 0, ac: 0xe57373, rf: 0x8e3b2a, t: '📯 Arautos de Aurora', s: 'Rankings • Chefe • Missões', y: 14.2 },
   };
-  Object.entries(ROLE_SHOP).forEach(([role, o], k) => { B.frame(o.x, o.z, o.ry); shop(B, k, o.ac, o.rf); shopProps(B, role); sign(o.x, o.y, o.z, o.t, o.s); });
+  Object.entries(ROLE_SHOP).forEach(([role, o], k) => { B.frame(o.x, o.z, o.ry); shop(B, k, o.ac, o.rf, role); shopProps(B, role); sign(o.x, o.y, o.z, o.t, o.s); });
   LAND.forEach(l => { B.frame(l.x, l.z, Math.atan2(-l.x, -l.z)); ({ tavern, chapel, clock: clocktower, guild })[l.k](B); sign(l.x, { tavern: 13.8, chapel: 25.5, clock: 32, guild: 14.8 }[l.k], l.z, l.t, l.s, '#c9a7ff'); });
   signs.forEach(sp => group.add(sp));
   B.frame(0, 0, 0);
