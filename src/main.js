@@ -24,7 +24,7 @@ import { buildCave } from './cave.js';
 import { makeCreature, CREATURE_TYPES, hordeWeights, hordeTitle } from './creatures.js';
 import { createVfx } from './vfx.js';
 import { createGrass } from './grass.js';
-import { kkReady } from './kk.js';
+import { kkReady, kkMesh } from './kk.js';
 const IMG = ((import.meta.env && import.meta.env.BASE_URL) || './') + 'img/';
 import { QUESTS, ACH, LOGIN_DAYS, ensureMeta, loginState, claimLogin, loginReward, questReward, offlineGain } from './meta.js';
 import { initSocial } from './social.js';
@@ -231,6 +231,7 @@ function applyAct() {
 
 const fieldGroup = new THREE.Group(); scene.add(fieldGroup);
 const grass = createGrass(scene, { groundH, riverDepth, trailX });
+await kkReady;
 // Árvores e pedras (instanciadas: 3 chamadas de desenho no total) + borda do mundo
 (function decorate() {
   const N_TREE = 1500, N_ROCK = 380, N_EDGE = 420;
@@ -239,14 +240,18 @@ const grass = createGrass(scene, { groundH, riverDepth, trailX });
   const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.25, 0.35, 1.4, 6), new THREE.MeshStandardMaterial({ color: 0x6b4423 }), N_TREE + N_EDGE);
   const leaf = new THREE.InstancedMesh(new THREE.ConeGeometry(1.4, 3, 7), new THREE.MeshStandardMaterial({ color: 0x2f7d32 }), N_TREE + N_EDGE);
   const rock = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(0.8), new THREE.MeshStandardMaterial({ color: 0x8a8f98, roughness: 0.95 }), N_ROCK + N_EDGE);
+  // com os modelos prontos (KayKit): 2 tipos de arvore e 5 de pedra, instanciados
+  const KT = ['tree_single_A', 'tree_single_B'].map(kkMesh), KR = ['rock_single_A', 'rock_single_B', 'rock_single_C', 'rock_single_D', 'rock_single_E'].map(kkMesh), useKK = KT.every(Boolean) && KR.every(Boolean);
+  const kTree = useKK ? KT.map(m => new THREE.InstancedMesh(m.geometry, m.material, N_TREE + N_EDGE)) : [], kRock = useKK ? KR.map(m => new THREE.InstancedMesh(m.geometry, m.material, N_ROCK + N_EDGE)) : [], kt = [0, 0], kr = [0, 0, 0, 0, 0];
   const d = new THREE.Object3D(); let ti = 0, ri = 0;
   const addTree = (x, z, sc) => {
+    if (useKK) { const v = Math.random() < 0.5 ? 0 : 1; d.rotation.set(0, Math.random() * 6.28, 0); d.scale.setScalar(sc * 3.6); d.position.set(x, gh(x, z) - 0.05, z); d.updateMatrix(); if (kt[v] < N_TREE + N_EDGE) kTree[v].setMatrixAt(kt[v]++, d.matrix); ti++; return; }
     d.rotation.set(0, 0, 0); d.scale.setScalar(sc);
     const y0 = gh(x, z);
     d.position.set(x, 0.7 * sc + y0, z); d.updateMatrix(); trunk.setMatrixAt(ti, d.matrix);
     d.position.set(x, 2.7 * sc + y0, z); d.updateMatrix(); leaf.setMatrixAt(ti, d.matrix); ti++;
   };
-  const addRock = (x, z, sx, sy, sz) => { d.rotation.set(0, Math.random() * 6, 0); d.scale.set(sx, sy, sz); d.position.set(x, 0.4 * sy + gh(x, z), z); d.updateMatrix(); rock.setMatrixAt(ri++, d.matrix); };
+  const addRock = (x, z, sx, sy, sz) => { if (useKK) { const v = (Math.random() * 5) | 0; d.rotation.set(0, Math.random() * 6.28, 0); d.scale.set(sx * 5, sy * 5, sz * 5); d.position.set(x, gh(x, z) - 0.05, z); d.updateMatrix(); if (kr[v] < N_ROCK + N_EDGE) kRock[v].setMatrixAt(kr[v]++, d.matrix); ri++; return; } d.rotation.set(0, Math.random() * 6, 0); d.scale.set(sx, sy, sz); d.position.set(x, 0.4 * sy + gh(x, z), z); d.updateMatrix(); rock.setMatrixAt(ri++, d.matrix); };
   const R = WORLD + 12;
   for (let i = 0; i < N_TREE; i++) {
     const x = (Math.random() * 2 - 1) * R, z = (Math.random() * 2 - 1) * R;
@@ -267,8 +272,13 @@ const grass = createGrass(scene, { groundH, riverDepth, trailX });
   }
   for (; ti < N_TREE + N_EDGE; ti++) addTree(9999, 9999, 1);
   for (; ri < N_ROCK + N_EDGE; ri++) addRock(9999, 9999, 1, 1, 1);
+  if (useKK) {
+    kTree.forEach((m, v) => { m.count = kt[v]; }); kRock.forEach((m, v) => { m.count = kr[v]; });
+    [...kTree, ...kRock].forEach(m => { m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; m.instanceMatrix.needsUpdate = true; fieldGroup.add(m); });
+    baseTrees = kTree; baseRock = { set visible(v) { kRock.forEach(m => { m.visible = v; }); } };
+  } else {
   [trunk, leaf, rock].forEach(m => { m.castShadow = m !== rock || true; m.frustumCulled = false; m.instanceMatrix.needsUpdate = true; fieldGroup.add(m); });
-  baseTrees = [trunk, leaf]; baseRock = rock;
+  baseTrees = [trunk, leaf]; baseRock = rock; }
 })();
 
 // Cenário: montanhas, nuvens, torres, rio, trilha e flores

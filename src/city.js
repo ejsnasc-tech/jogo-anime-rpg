@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { PREMADE, buildPlayerHero, BASE } from './data.js';
 import { makeHero, animateHero } from './actors.js';
-import { kkHas, kkClone, kkMesh } from './kk.js';
+import { kkHas, kkClone, kkMesh, kkBox } from './kk.js';
 
 export const CITY_R = 180;
 export const CITY_SPAWN = [0, CITY_R - 5];
@@ -410,7 +410,10 @@ function signLabel(title, sub, border) {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, fog: false, transparent: true })); s.scale.set(9.6, 2.38, 1); return s;
 }
+// poe um modelo pronto no lugar de uma construcao feita por codigo: ajusta largura/profundidade/altura finais (metros)
+function kkPlace(B, n, w, d, h) { if (!kkHas(n)) return false; KKP.push({ n, x: B.fx, z: B.fz, ry: B.fy, w, d, h }); return true; }
 function tavern(B) {
+  if (kkPlace(B, 'building_tavern_red', 15, 10.4, 11)) return;
   B.box(15, 0.6, 10.4, 0, 0, 0, STONE); B.box(14.4, 4.4, 9.8, 0, 0.6, 0, 0xe9d3a8); B.box(15, 3.6, 10.4, 0, 5, 0, 0xd9bf8e);
   [-7.4, 7.4].forEach(x => [-5, 5].forEach(z => B.box(0.5, 8, 0.5, x, 0.6, z, TIM))); B.box(15.2, 0.35, 10.6, 0, 4.8, 0, TIM);
   B.gable(16, 12, 4.6, 0, 8.6, 0, 0x8a3b2a); B.box(1.3, 4.5, 1.3, -4.5, 9.6, -2, DSTONE); B.box(1.3, 4.5, 1.3, 4.5, 9.6, -2, DSTONE);
@@ -421,6 +424,7 @@ function tavern(B) {
   B.k = 'l'; [-4.6, 4.6].forEach(x => B.box(1.2, 1.0, 0.1, x, 1.8, 5.05, 0xffcf7a)); B.k = 'm';
 }
 function chapel(B) {
+  if (kkPlace(B, 'building_church_blue', 9, 13, 18)) return;
   const S = 0xefeadf; B.box(9, 0.5, 13, 0, 0, 1, STONE); B.box(8, 7.5, 12, 0, 0.5, 1, S); B.gable(13, 9.4, 4.4, 0, 8, 1, 0x9a4a37, 1.5708);
   B.box(4.6, 15, 4.6, 0, 0.5, 8.2, S); B.pyr(5.6, 5.6, 6.5, 0, 15.5, 8.2, 0x2e5d9a); B.box(0.2, 2.2, 0.2, 0, 21.8, 8.2, gold); B.box(1.2, 0.2, 0.2, 0, 22.8, 8.2, gold);
   B.k = 'g'; B.box(1.5, 2.8, 0.2, 0, 10.5, 10.55, GLASS); B.box(2.6, 4.2, 0.2, 0, 2.8, 10.55, 0xffd9a8); [-1, 1].forEach(s => [-2.5, 2.5].forEach(z => B.box(0.2, 3.4, 1.1, s * 4.03, 3.4, z + 1, GLASS))); B.k = 'm';
@@ -428,6 +432,7 @@ function chapel(B) {
   for (let i = 0; i < 3; i++) B.box(4.4 + i, 0.3, 1.2, 0, i * 0.3, 11.6 + (2 - i) * 1.2, i % 2 ? DSTONE : STONE);
 }
 function clocktower(B) {
+  if (kkPlace(B, 'building_tower_A_yellow', 6.4, 6.4, 26)) return;
   B.box(6.4, 0.6, 6.4, 0, 0, 0, STONE); B.box(5.4, 14, 5.4, 0, 0.6, 0, 0xd6cdbb); B.box(6.2, 0.6, 6.2, 0, 14.6, 0, DSTONE); B.box(5.6, 5.2, 5.6, 0, 15.2, 0, 0xd6cdbb); B.pyr(7, 7, 6.5, 0, 20.4, 0, 0x2e5d9a);
   [[0, 2.8, 0], [0, -2.8, 0], [2.8, 0, 1.5708], [-2.8, 0, 1.5708]].forEach(([x, z, r]) => { B.k = 'l'; B.cyl(2, 2, 0.2, 18, x, 17.8, z, 0xfff6d9, r, r ? 0 : 1.5708, r ? 1.5708 : 0); B.k = 'm'; });
   [-1, 1].forEach(s => B.box(0.18, 1.6, 0.1, 0, 17.8, s * 2.95, 0x23272e)); B.box(1.3, 0.14, 0.1, 0.5, 17.8, 3.0, 0x23272e);
@@ -700,8 +705,11 @@ export function buildCity() {
 
   B.finish(group, mats);
   // modelos 3D prontos: casas (uma por lote) e arvores (instanciadas)
-  KKP.forEach(o => { const m = kkClone(o.n); if (!m) return; const ax = o.w / 0.8 * 0.96, az = o.d / 0.77 * 0.96, u = Math.min(ax, az), sx = Math.min(ax, u * 1.3), sz = Math.min(az, u * 1.3), sy = u * (o.fl > 1 ? 1.25 : 1.05);
-    m.position.set(o.x, 0, o.z); m.rotation.y = o.ry; m.scale.set(sx, sy, sz); m.userData.noOutline = true; group.add(m); });
+  KKP.forEach(o => { const m = kkClone(o.n), bb = kkBox(o.n); if (!m || !bb) return; const bw = bb.max.x - bb.min.x, bd = bb.max.z - bb.min.z, bh = bb.max.y;
+    let rot = 0, W = o.w, D = o.d; if ((bw > bd * 1.15) !== (o.w > o.d * 1.15) && Math.abs(bw - bd) > 0.08 * Math.max(bw, bd)) { rot = Math.PI / 2; W = o.d; D = o.w; }
+    let sx = W / bw * 0.96, sz = D / bd * 0.96, sy;
+    if (o.h) sy = o.h / bh; else { const u = Math.min(sx, sz); sx = Math.min(sx, u * 1.3); sz = Math.min(sz, u * 1.3); sy = u * (o.fl > 1 ? 1.25 : 1.05); }
+    const w = new THREE.Group(); m.scale.set(sx, sy, sz); m.rotation.y = rot; w.add(m); w.position.set(o.x, 0, o.z); w.rotation.y = o.ry; w.userData.noOutline = true; group.add(w); });
   { const geoms = ['tree_single_A', 'tree_single_B'].map(kkMesh).filter(Boolean);
     if (geoms.length && KKT.length) {
       const per = geoms.map(() => []); KKT.forEach((o, k) => per[(o.t === 'pine' ? 1 : 0) % geoms.length === 0 && o.t !== 'pine' ? 0 : (geoms.length > 1 ? 1 : 0)].push(o));
