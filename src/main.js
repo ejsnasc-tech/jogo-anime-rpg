@@ -2813,7 +2813,8 @@ function chatLine(name, text, mine) {
   setTimeout(() => d.remove(), 14000);
 }
 function myHomes() { return PLOTS.filter(p => state.homes[p.id]); }
-function updateHomeBtn() { const b = $('homebtn'); if (b) b.style.display = inCity && !inHome && !cave && myHomes().length ? '' : 'none'; }
+function updateHomeBtn() { const b = $('homebtn'); if (b) b.style.display = inCity && !inHome && !cave && myHomes().length ? '' : 'none'; const a = $('arenabtn'); if (a) a.style.display = inCity && !inHome && !cave ? '' : 'none'; }
+$('arenabtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (isPaused() || !inCity) return; openArena(closePanel); });
 $('homebtn').addEventListener('pointerdown', (e) => {
   e.stopPropagation(); if (isPaused() || !inCity) return;
   const hs = myHomes(); if (!hs.length) return;
