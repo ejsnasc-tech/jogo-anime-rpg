@@ -1629,13 +1629,22 @@ function equipItem(it, key) {
   state.equip[key || keyFor(it)] = it.uid; recalcHp(); save(state); refreshLook();
 }
 function unequipItem(it) { EQUIP_KEYS.forEach(k => { if (state.equip[k] === it.uid) delete state.equip[k]; }); recalcHp(); save(state); refreshLook(); }
+const BAG_BASE = 60, BAG_STEP = 10, BAG_TOP = 200;
+const bagCap = () => Math.max(BAG_BASE, state.bagCap || BAG_BASE);
+const bagUpCost = () => 20 + 10 * Math.floor((bagCap() - BAG_BASE) / BAG_STEP); // 🔮 Veon por +10 espaços
+const gearScore = (it) => itemValue(it) + itemGemSum(it, itemStat(it));
 function giveItem(it) {
   track('drop');
-  if (state.items.length >= 60) { const g = sellPrice(it); state.gold += g; toast('Mochila cheia: ' + itemName(it) + ' vendido por 🪙' + g); return; }
+  // melhor que o equipado no mesmo espaço (mesmo atributo, contando gemas) = já vai equipado
+  const cur = equippedAt(keyFor(it)), better = !cur || (itemStat(it) === itemStat(cur) && gearScore(it) > gearScore(cur));
+  if (state.items.length >= bagCap() && !better) { const g = sellPrice(it); state.gold += g; toast('Mochila cheia: ' + itemName(it) + ' vendido por 🪙' + g); refreshHud(); return; }
   state.items.push(it);
-  const cur = equippedAt(keyFor(it)), better = !cur || itemValue(it) > itemValue(cur);
-  if (better) equipItem(it);
-  toast('🎁 ' + itemLine(it) + (better ? ' — equipado!' : ''));
+  if (better) {
+    equipItem(it);
+    // mochila lotada: o item substituído (sem refino nem gemas) é vendido para abrir espaço
+    if (cur && state.items.length > bagCap() && !cur.plus && !(cur.gems && cur.gems.length)) { const g = sellPrice(cur); state.items.splice(state.items.indexOf(cur), 1); state.gold += g; toast('Mochila cheia: ' + itemName(cur) + ' antigo vendido por 🪙' + g); }
+  }
+  toast('🎁 ' + itemLine(it) + (better ? ' — equipado, é melhor que o atual!' : ''));
   if (invOpen) renderInv();
 }
 function dropLoot(e) {
@@ -2480,7 +2489,7 @@ $('flbtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); cycleFl
 $('upbtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (!isPaused() && inHome && !homeVisit) openHomeUp(inHome); });
 
 // ===================== Telas: EQUIPAMENTO (boneco) e MOCHILA =====================
-let invSel = null, bagFilter = 'all', invMsg = '', invMode = 'eq';
+let invSel = null, bagFilter = 'all', invMsg = '', invMode = 'eq', sellMode = false, sellAsk = false, bagUpAsk = false; const sellSet = new Set();
 function el(tag, cls, text, parent) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; if (parent) parent.appendChild(e); return e; }
 function artImg(src, parent) { const i = document.createElement('img'); i.src = src; i.draggable = false; i.alt = ''; if (parent) parent.appendChild(i); return i; }
 // posição (em %) de cada espaço em volta do bonequinho
@@ -2488,7 +2497,7 @@ const DOLL_POS = { helm: [50, 9], amulet: [20, 24], ring: [80, 24], weapon: [14,
 const BAG_FILTERS = [['all', 'Tudo', null], ['wpn', 'Armas', ['weapon', 'offhand']], ['arm', 'Armaduras', ['helm', 'chest', 'legs', 'boots']], ['jew', 'Joias', ['amulet', 'ring']]];
 const ghostKey = (type) => type === 'weapon' ? (WEAPON_KIND[mainCls()] || 'sword') : type === 'offhand' ? (OFF_KIND[mainCls()] || 'shield') : type;
 
-function openInv(mode) { invOpen = true; invMode = mode || 'eq'; invSel = null; invMsg = ''; $('inv').classList.add('open'); renderInv(); }
+function openInv(mode) { invOpen = true; invMode = mode || 'eq'; invSel = null; invMsg = ''; sellMode = false; sellAsk = false; bagUpAsk = false; sellSet.clear(); $('inv').classList.add('open'); renderInv(); }
 function closeInv() { invOpen = false; $('inv').classList.remove('open'); }
 function toggleInv(mode) { if (invOpen && invMode === (mode || 'eq')) closeInv(); else openInv(mode); }
 const closeBoxes = closeInv;
@@ -2540,8 +2549,7 @@ function buildDetail(det, sel) {
   const acts = el('div', 'det-acts', null, det);
   if (on) el('button', 'bigbtn off', 'Desequipar', acts).onclick = () => unequipItem(sel);
   else el('button', 'bigbtn', '✔ EQUIPAR', acts).onclick = () => { equipItem(sel); invMsg = ''; };
-  if (!on && inCity) el('button', 'bigbtn sell', 'Vender 🪙' + sellPrice(sel), acts).onclick = () => { state.items.splice(state.items.indexOf(sel), 1); state.gold += sellPrice(sel); invSel = null; save(state); refreshHud(); renderInv(); };
-  if (!inCity && invMode === 'bag') el('div', 'det-note', 'Vender e melhorar: só na cidade 🏰', det);
+  if (!on) el('button', 'bigbtn sell', 'Vender 🪙' + sellPrice(sel), acts).onclick = () => { state.items.splice(state.items.indexOf(sel), 1); state.gold += sellPrice(sel); invSel = null; save(state); refreshHud(); renderInv(); };
 }
 
 function filterList(onlyFree) {
@@ -2556,6 +2564,7 @@ function buildTabs(parent) {
 }
 
 function renderInv() {
+  let side = null;
   const root = $('inv'), old = root.querySelector('.bgrid,.traygrid'), keepScroll = old ? [old.scrollTop, old.scrollLeft] : [0, 0];
   root.innerHTML = '';
   const wrap = el('div', 'invwrap', null, root); wrap.dataset.mode = invMode;
@@ -2599,21 +2608,54 @@ function renderInv() {
     // ---- mochila em forma de bolsa ----
     const bag = el('div', 'bag', null, wrap);
     const bh = el('div', 'bag-hd', null, bag);
-    el('div', 'bag-title', '🎒 BOLSA DE ITENS', bh); el('div', 'bag-count', state.items.length + ' / 60', bh);
+    el('div', 'bag-title', '🎒 BOLSA DE ITENS', bh); el('div', 'bag-count', state.items.length + ' / ' + bagCap(), bh);
+    // barra de ferramentas: vender vários + mais espaço
+    side = el('div', 'inv-side', null, wrap); const tb = el('div', 'bag-tools', null, side);
+    el('button', 'btool' + (sellMode ? ' on' : ''), sellMode ? '✖ Sair da venda' : '💰 Vender vários', tb).onclick = () => { sellMode = !sellMode; sellAsk = false; sellSet.clear(); invSel = null; invMsg = ''; renderInv(); };
+    const full = bagCap() >= BAG_TOP, upb = el('button', 'btool up' + (bagUpAsk ? ' ask' : ''), full ? '🎒 Mochila no máximo' : (bagUpAsk ? 'Confirmar: 🔮' + bagUpCost() + ' por +' + BAG_STEP + '?' : '⬆ +' + BAG_STEP + ' espaços 🔮' + bagUpCost()), tb);
+    if (full) upb.disabled = true;
+    upb.onclick = () => {
+      if (full) return;
+      if (state.cash < bagUpCost()) { invMsg = '🔮 Veon insuficiente: precisa de ' + bagUpCost() + ' (você tem ' + state.cash + ').'; bagUpAsk = false; renderInv(); return; }
+      if (!bagUpAsk) { bagUpAsk = true; renderInv(); setTimeout(() => { if (bagUpAsk) { bagUpAsk = false; if (invOpen) renderInv(); } }, 4000); return; }
+      state.cash -= bagUpCost(); state.bagCap = bagCap() + BAG_STEP; bagUpAsk = false; invMsg = '✔ Mochila ampliada: agora cabem ' + bagCap() + ' itens!'; save(state); refreshHud(); renderInv();
+    };
+    if (sellMode) {
+      const q = el('div', 'bag-quick', null, side), safe = (it) => !isEquipped(it) && !it.plus && !(it.gems && it.gems.length);
+      const pick = (f) => { sellSet.clear(); state.items.filter(it => safe(it) && f(it)).forEach(it => sellSet.add(it.uid)); sellAsk = false; renderInv(); };
+      [['Comuns', (it) => it.rar === 0], ['Até Raros', (it) => it.rar <= 1], ['Todos livres', () => true], ['Limpar', null]].forEach(([l, f]) => { el('button', 'qbtn', l, q).onclick = () => f ? pick(f) : (sellSet.clear(), sellAsk = false, renderInv()); });
+    }
     buildTabs(bag);
-    const list = filterList(false), grid = el('div', 'bgrid', null, bag), total = Math.max(60, Math.ceil(list.length / 5) * 5);
+    const list = filterList(false), grid = el('div', 'bgrid', null, bag), total = Math.max(bagCap(), Math.ceil(list.length / 5) * 5);
     for (let i = 0; i < total; i++) {
-      const it = list[i], c = el('button', 'cell' + (it ? '' : ' empty') + (it && invSel === it.uid ? ' sel' : ''), null, grid);
+      const it = list[i], c = el('button', 'cell' + (it ? '' : ' empty') + (it && (sellMode ? sellSet.has(it.uid) : invSel === it.uid) ? ' sel' : ''), null, grid);
       if (!it) continue;
       c.style.borderColor = RAR[it.rar].color; artImg(itemArt(it), c);
       if (it.plus) el('span', 'pl', '+' + it.plus, c);
       if (isEquipped(it)) el('span', 'eqd', '✔', c);
-      c.onclick = () => { invSel = it.uid; invMsg = ''; renderInv(); };
+      if (sellMode && sellSet.has(it.uid)) el('span', 'sellck', '💰', c);
+      c.onclick = () => {
+        if (sellMode) { if (isEquipped(it)) { toast('Item equipado não pode ser vendido. Desequipe antes.'); return; } if (sellSet.has(it.uid)) sellSet.delete(it.uid); else sellSet.add(it.uid); sellAsk = false; renderInv(); return; }
+        invSel = it.uid; invMsg = ''; renderInv();
+      };
     }
     if (!list.length) el('div', 'bag-empty', state.items.length ? 'Nenhum item desse tipo.' : 'Mochila vazia. Derrote monstros nas florestas para coletar equipamentos!', bag);
     grid.scrollTop = keepScroll[0];
   }
-  buildDetail(el('div', 'inv-det', null, wrap), sel);
+  if (invMode === 'bag' && sellMode) {
+    const det = el('div', 'inv-det', null, side), arr = state.items.filter(i => sellSet.has(i.uid) && !isEquipped(i)), gold = arr.reduce((a, i) => a + sellPrice(i), 0), hi = arr.filter(i => i.rar >= 2).length;
+    el('div', 'hint', invMsg || (arr.length ? arr.length + ' item(ns) marcado(s) = 🪙' + gold + (hi ? '  ⚠️ ' + hi + ' épico/lendário' : '') : '👆 Toque nos itens que quer vender, ou use os atalhos acima. Equipados, refinados (+) e com gemas não entram nos atalhos.'), det);
+    const acts = el('div', 'det-acts', null, det), sb = el('button', 'bigbtn sell', arr.length ? (sellAsk ? 'Confirmar venda: 🪙' + gold + '?' : 'VENDER ' + arr.length + ' • 🪙' + gold) : 'Nada marcado', acts);
+    sb.disabled = !arr.length; sb.style.flex = '1';
+    sb.onclick = () => {
+      if (!arr.length) return;
+      if (!sellAsk) { sellAsk = true; renderInv(); return; }
+      for (let k = state.items.length - 1; k >= 0; k--) if (sellSet.has(state.items[k].uid) && !isEquipped(state.items[k])) state.items.splice(k, 1);
+      state.gold += gold; sellSet.clear(); sellAsk = false; invMsg = '✔ ' + arr.length + ' item(ns) vendido(s) por 🪙' + gold; save(state); refreshHud(); renderInv();
+    };
+    return;
+  }
+  buildDetail(el('div', 'inv-det', null, side || wrap), sel);
 }
 $('inv').addEventListener('pointerdown', (e) => { if (e.target === $('inv')) closeInv(); });
 $('eqbtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (!panelOpen && !dialogOpen && !creatorOpen) toggleInv('eq'); });
@@ -3182,6 +3224,20 @@ function runSelfTest() {
       out.push('skills por classe (' + Object.keys(CLASSES).length + ' classes x 15, todas Nv.5, ativas disparadas): ok  maxHp=' + maxHp);
     }
     state.skills = {}; renderSkillChips();
+    // mochila: drop melhor ja equipa, vender varios, ampliar mochila com Veon
+    { state.items = []; state.equip = {}; state.cash = 500; state.bagCap = 0; state.gold = 0; invSel = null;
+      const w1 = newItem('helm', 1, 0, 'warrior'); state.items.push(w1); state.equip.helm = w1.uid;
+      const w2 = newItem('helm', 3, 0, 'warrior'); giveItem(w2); if (state.equip.helm !== w2.uid) throw new Error('drop melhor nao equipou');
+      const w3 = newItem('helm', 0, 0, 'warrior'); giveItem(w3); if (state.equip.helm !== w2.uid || !state.items.includes(w3)) throw new Error('drop pior mexeu no equipado');
+      openInv('bag'); const bt = (txt) => [...document.querySelectorAll('#inv button')].find(b => b.textContent.startsWith(txt));
+      bt('💰 Vender vários').click(); bt('Todos livres').click(); const g0 = state.gold; const sb = bt('VENDER'); if (!sb) throw new Error('botao vender sumiu'); sb.click(); bt('Confirmar venda').click();
+      if (state.items.length !== 1 || state.items[0] !== w2 || state.gold <= g0) throw new Error('venda em massa falhou ' + state.items.length);
+      bt('✖ Sair da venda').click();
+      const c0 = state.cash, cap0 = bagCap(); bt('⬆').click(); bt('Confirmar:').click();
+      if (state.cash !== c0 - 20 || bagCap() !== cap0 + 10) throw new Error('upgrade de mochila falhou ' + state.cash + ' ' + bagCap());
+      closeInv(); state.bagCap = 0; state.cash = 500;
+      out.push('mochila (auto-equipar, vender varios, ampliar com Veon): ok');
+    }
     // cidade, equipamentos, drops e mapa
     state.items = []; state.equip = {}; state.mats = {}; state.gold = 1e6; state.maxAct = 5; state.act = 0; state.endless = false; state.stage = 1;
     setCityMode(true);
