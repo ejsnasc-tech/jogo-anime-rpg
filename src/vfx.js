@@ -39,10 +39,12 @@ export function createVfx(scene) {
     life[i] = maxL[i] = lf; s0[i] = sa; s1[i] = sb; _c.set(color); col[i * 4] = _c.r; col[i * 4 + 1] = _c.g; col[i * 4 + 2] = _c.b; a0[i] = alpha == null ? 1 : alpha; grav[i] = g || 0; drag[i] = d || 0;
   }
   const R = () => Math.random() - 0.5;
+  let gnd = () => 0;   // altura do terreno em (x,z): o jogo informa com setGround
+  const gy = (p) => Math.max(p.y || 0, gnd(p.x, p.z));
 
   // explosao de particulas: n particulas em todas as direcoes (up = tendencia para cima)
   function burst(p, o) {
-    o = o || {}; const n = o.n || 18, sp = o.speed || 5, up = o.up == null ? 0.4 : o.up, y0 = (o.y == null ? 1 : o.y) + (p.y || 0);
+    o = o || {}; const n = o.n || 18, sp = o.speed || 5, up = o.up == null ? 0.4 : o.up, y0 = (o.y == null ? 1 : o.y) + gy(p);
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2, u = (Math.random() - 0.3) * 2 * up, f = 0.35 + Math.random() * 0.65, s = sp * f;
       emit(p.x, y0, p.z, Math.cos(a) * s, u * sp * 0.8, Math.sin(a) * s, (o.life || 0.7) * (0.6 + Math.random() * 0.6), (o.size || 0.5) * (0.7 + Math.random() * 0.6), 0.04, o.color == null ? 0xffffff : o.color, 1, o.grav == null ? 6 : o.grav, o.drag == null ? 1.2 : o.drag);
@@ -50,14 +52,14 @@ export function createVfx(scene) {
   }
   // particulas que sobem em espiral/colunas (cura, bencao)
   function rise(p, color, n, radius, height, size) {
-    for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * radius; emit(p.x + Math.cos(a) * r, 0.1, p.z + Math.sin(a) * r, 0, 1.5 + Math.random() * 2.2, 0, (height || 2.4) / 2.5 * (0.7 + Math.random() * 0.6), (size || 0.35) * (0.7 + Math.random() * 0.6), 0.05, color, 1, -0.3, 0.3); }
+    for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * radius; emit(p.x + Math.cos(a) * r, 0.1 + gy(p), p.z + Math.sin(a) * r, 0, 1.5 + Math.random() * 2.2, 0, (height || 2.4) / 2.5 * (0.7 + Math.random() * 0.6), (size || 0.35) * (0.7 + Math.random() * 0.6), 0.05, color, 1, -0.3, 0.3); }
   }
   // anel de particulas que se expande no chao
   function ringSparks(p, color, radius, n, size) {
-    for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2 + Math.random() * 0.2, s = radius * 2.4; emit(p.x, 0.3, p.z, Math.cos(a) * s, 0.8 + Math.random() * 1.2, Math.sin(a) * s, 0.45 + Math.random() * 0.2, size || 0.5, 0.05, color, 1, 3, 3.2); }
+    for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2 + Math.random() * 0.2, s = radius * 2.4; emit(p.x, 0.3 + gy(p), p.z, Math.cos(a) * s, 0.8 + Math.random() * 1.2, Math.sin(a) * s, 0.45 + Math.random() * 0.2, size || 0.5, 0.05, color, 1, 3, 3.2); }
   }
   function spiral(p, color, radius, n) {   // vortice: particulas girando para fora
-    for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 6, k = i / n, r0 = 0.6 + k * radius * 0.25; emit(p.x + Math.cos(a) * r0, 0.4 + k * 2.2, p.z + Math.sin(a) * r0, Math.cos(a + 1.4) * radius * 1.5, 0.8 + Math.random(), Math.sin(a + 1.4) * radius * 1.5, 0.7 + Math.random() * 0.3, 0.55, 0.05, color, 1, -0.4, 1.0); }
+    for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 6, k = i / n, r0 = 0.6 + k * radius * 0.25; emit(p.x + Math.cos(a) * r0, 0.4 + k * 2.2 + gy(p), p.z + Math.sin(a) * r0, Math.cos(a + 1.4) * radius * 1.5, 0.8 + Math.random(), Math.sin(a + 1.4) * radius * 1.5, 0.7 + Math.random() * 0.3, 0.55, 0.05, color, 1, -0.4, 1.0); }
   }
   function trail(p, color, size, y) { emit(p.x + R() * 0.15, (y == null ? p.y : y) + R() * 0.15, p.z + R() * 0.15, R() * 0.6, R() * 0.6 + 0.3, R() * 0.6, 0.35 + Math.random() * 0.15, size || 0.45, 0.02, color, 0.9, 0, 2); }
 
@@ -71,33 +73,33 @@ export function createVfx(scene) {
   }
   function flash(p, color, size, dur, y) {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
-    s.position.set(p.x, y == null ? 1.2 : y, p.z); s.renderOrder = 7;
+    s.position.set(p.x, (y == null ? 1.2 : y) + gy(p), p.z); s.renderOrder = 7;
     add(s, dur || 0.3, (k) => { s.scale.setScalar(size * (0.35 + 0.9 * ease(k))); s.material.opacity = (1 - k) * (1 - k); }, () => s.material.dispose());
   }
   function shock(p, color, radius, dur, y) {
-    const m = new THREE.Mesh(PLANE, addMat(RING, color, 1)); m.rotation.x = -Math.PI / 2; m.position.set(p.x, y || 0.18, p.z); m.renderOrder = 4;
+    const m = new THREE.Mesh(PLANE, addMat(RING, color, 1)); m.rotation.x = -Math.PI / 2; m.position.set(p.x, (y || 0.18) + gy(p), p.z); m.renderOrder = 4;
     add(m, dur || 0.5, (k) => { m.scale.setScalar(2 * radius * (0.12 + 0.88 * ease(k))); m.material.opacity = Math.pow(1 - k, 1.4); }, () => m.material.dispose());
   }
   function column(p, color, h, w, dur) {   // coluna de luz (duas faces cruzadas)
     const g = new THREE.Group();
     for (let i = 0; i < 2; i++) { const m = new THREE.Mesh(PLANE, addMat(COLUMN, color, 1)); m.rotation.y = i * Math.PI / 2; m.scale.set(w, h, 1); m.position.y = h / 2; g.add(m); }
-    g.position.set(p.x, p.y || 0, p.z); g.renderOrder = 6;
+    g.position.set(p.x, gy(p), p.z); g.renderOrder = 6;
     add(g, dur || 0.5, (k) => { const s = 1 - k * 0.5; g.scale.set(s, 1, s); g.children.forEach(m => { m.material.opacity = Math.pow(1 - k, 1.2); }); }, () => g.children.forEach(m => m.material.dispose()));
   }
   function slash(p, ang, r, arc, color, dur, y) {   // corte em meia-lua no ar
     const m = new THREE.Mesh(PLANE, addMat(SLASH, color, 1)); m.rotation.x = -Math.PI / 2; m.rotation.z = ang - Math.PI / 2; m.renderOrder = 5;
-    const g = new THREE.Group(); g.add(m); g.position.set(p.x, y == null ? 0.9 : y, p.z);
+    const g = new THREE.Group(); g.add(m); const gb = gy(p); g.position.set(p.x, (y == null ? 0.9 : y) + gb - (p.y || 0) * 0, p.z);
     const wide = Math.max(0.6, arc / (Math.PI * 0.7));
     add(g, dur || 0.28, (k) => { const s = r * 2 * (0.7 + 0.45 * ease(k)); m.scale.set(s, s * wide, 1); m.material.opacity = Math.pow(1 - k, 1.1); g.rotation.y = (k - 0.5) * 0.5; }, () => m.material.dispose());
-    for (let i = 0; i < 7; i++) { const a = ang + (Math.random() - 0.5) * arc, rr = r * (0.7 + Math.random() * 0.4); emit(p.x + Math.sin(a) * rr, (y == null ? 0.9 : y) + R() * 0.5, p.z + Math.cos(a) * rr, Math.sin(a) * 3, R() * 2, Math.cos(a) * 3, 0.3 + Math.random() * 0.2, 0.35, 0.03, color, 1, 2, 2.5); }
+    for (let i = 0; i < 7; i++) { const a = ang + (Math.random() - 0.5) * arc, rr = r * (0.7 + Math.random() * 0.4); emit(p.x + Math.sin(a) * rr, (y == null ? 0.9 : y) + gb + R() * 0.5, p.z + Math.cos(a) * rr, Math.sin(a) * 3, R() * 2, Math.cos(a) * 3, 0.3 + Math.random() * 0.2, 0.35, 0.03, color, 1, 2, 2.5); }
   }
   function scorch(p, r, dur) {   // marca queimada no chao
-    const m = new THREE.Mesh(PLANE, new THREE.MeshBasicMaterial({ map: GLOW, color: 0x1a0c05, transparent: true, opacity: 0.55, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.position.set(p.x, 0.07, p.z); m.scale.setScalar(r * 2.2);
+    const m = new THREE.Mesh(PLANE, new THREE.MeshBasicMaterial({ map: GLOW, color: 0x1a0c05, transparent: true, opacity: 0.55, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.position.set(p.x, 0.07 + gy(p), p.z); m.scale.setScalar(r * 2.2);
     add(m, dur || 2.5, (k) => { m.material.opacity = 0.55 * (1 - k); }, () => m.material.dispose());
   }
   function bolt(p, color, h) {   // raio serrilhado do ceu ate o alvo
     const pts = []; const H = h || 16, N = 9;
-    for (let i = 0; i <= N; i++) { const t = i / N; pts.push(new THREE.Vector3(p.x + (i === 0 || i === N ? 0 : R() * 1.6), H * (1 - t), p.z + (i === 0 || i === N ? 0 : R() * 1.6))); }
+    for (let i = 0; i <= N; i++) { const t = i / N; pts.push(new THREE.Vector3(p.x + (i === 0 || i === N ? 0 : R() * 1.6), gy(p) + H * (1 - t), p.z + (i === 0 || i === N ? 0 : R() * 1.6))); }
     const grp = new THREE.Group();
     [[color, 1], [0xffffff, 1]].forEach(([c, w], j) => {
       const g = new THREE.BufferGeometry().setFromPoints(pts), l = new THREE.Line(g, new THREE.LineBasicMaterial({ color: c, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
@@ -124,5 +126,5 @@ export function createVfx(scene) {
     }
   }
   function clear() { list.forEach(f => { scene.remove(f.obj); if (f.end) f.end(); }); list.length = 0; life.fill(0); }
-  return { emit, burst, rise, ringSparks, spiral, trail, flash, shock, column, slash, scorch, bolt, glowSprite, update, clear };
+  return { emit, burst, rise, ringSparks, spiral, trail, flash, shock, column, slash, scorch, bolt, glowSprite, update, clear, setGround: (f) => { gnd = f; } };
 }

@@ -142,7 +142,10 @@ function applyGfx() {
       const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4 });
       composer = new EffectComposer(renderer, rt);
       composer.addPass(new RenderPass(scene, camera));
-      if (!/Android|iPhone|iPad/i.test(navigator.userAgent)) { try { ao = new GTAOPass(scene, camera, innerWidth, innerHeight); ao.output = GTAOPass.OUTPUT.Default; ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.2, thickness: 1.0, scale: 0.8, samples: 12 }); ao.blendIntensity = 0.5; composer.addPass(ao); } catch (e) { ao = null; } }
+      if (!/Android|iPhone|iPad/i.test(navigator.userAgent)) { try { ao = new GTAOPass(scene, camera, innerWidth, innerHeight); ao.output = GTAOPass.OUTPUT.Default; ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.2, thickness: 1.0, scale: 0.8, samples: 12 }); ao.blendIntensity = 0.5;
+        // o AO le profundidade/normais da cena: sprites e efeitos translucidos (brilho das orbes, aneis, colunas de luz) viravam quadrados escuros. Fora do pre-passe.
+        { const ov = ao._overrideVisibility.bind(ao); ao._overrideVisibility = function () { ov(); const c = this._visibilityCache; this.scene.traverse(o => { if (o.visible && (o.isSprite || (o.isMesh && o.material && o.material.transparent && o.material.depthWrite === false))) { o.visible = false; c.push(o); } }); }; }
+        composer.addPass(ao); } catch (e) { ao = null; } }
       bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.3, 0.5, 1.05);   // so o que e bem claro brilha: tochas, magias, raios
       composer.addPass(bloom);
       // correcao de cor de cinema: contraste suave, mais saturacao, sombras frias e luzes quentes
@@ -164,6 +167,7 @@ scene.add(sun, sun.target);
 
 const ambient = createAmbient(scene);
 const vfx = createVfx(scene);
+vfx.setGround((x, z) => (inCity || inHome) ? 0 : walkY(x, z));
 const flashEl = (() => { const d = document.createElement('div'); d.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:2;opacity:0'; $('game').appendChild(d); return d; })();
 function screenFlash(color, a, ms) { flashEl.style.transition = 'none'; flashEl.style.background = 'radial-gradient(circle at 50% 60%,' + color + ' 0%,rgba(0,0,0,0) 75%)'; flashEl.style.opacity = a; void flashEl.offsetWidth; flashEl.style.transition = 'opacity ' + ms + 'ms ease-out'; flashEl.style.opacity = 0; }
 function setSky(colors) {
@@ -1775,7 +1779,7 @@ function nearestEnemy(pos, maxR) {
 function fire(from, to, color, dmg, opt) {
   opt = opt || {};
   const b = new THREE.Mesh(bulletGeo, new THREE.MeshBasicMaterial({ color }));
-  b.position.copy(from).setY(1.2); b.scale.setScalar(opt.size || 1);
+  b.position.copy(from).setY(1.2 + ((inCity || inHome) ? 0 : walkY(from.x, from.z))); b.scale.setScalar(opt.size || 1);
   const dir = to.clone().sub(from).setY(0).normalize();
   if (opt.arrow) { b.scale.set(0.35, 0.35, 2.4); b.rotation.y = Math.atan2(dir.x, dir.z); }
   scene.add(b);
@@ -2073,7 +2077,7 @@ function runSkills(dt) {
     const r = 2.2 + A * 0.4;
     if (!auraRing) { auraRing = new THREE.Mesh(new THREE.RingGeometry(0.94, 1, 48), new THREE.MeshBasicMaterial({ color: ad.color, transparent: true, opacity: 0.55, side: THREE.DoubleSide })); auraRing.rotation.x = -Math.PI / 2; scene.add(auraRing); }
     auraRing.material.color.set(ad.color);
-    auraRing.position.set(p.x, 0.12, p.z); auraRing.scale.setScalar(r);
+    auraRing.position.set(p.x, playerGy + 0.12, p.z); auraRing.scale.setScalar(r);
     if (T >= nextAura) { nextAura = T + 0.5; const dmg = Math.round(atkPower() * (0.15 + A * 0.07)); enemies.slice().forEach(e => { if (dist2(e.mesh.position, p) < r + e.radius * 0.5) damageEnemy(e, dmg); }); }
   } else if (auraRing) { scene.remove(auraRing); auraRing = null; }
   const O = sk('orbs'), od = O ? fxDefOf(cls, 'orbs') : null, oc = od ? od.color : 0xb28dff;
@@ -2084,7 +2088,7 @@ function runSkills(dt) {
     orbAngle += dt * 2.8; const n = O + 1;
     orbMeshes.forEach((m, i) => {
       if (i >= n) return;
-      const a = orbAngle + i / n * Math.PI * 2; m.position.set(p.x + Math.cos(a) * 2.5, 1.2, p.z + Math.sin(a) * 2.5); vfx.trail(m.position, oc, 0.5);
+      const a = orbAngle + i / n * Math.PI * 2; m.position.set(p.x + Math.cos(a) * 2.5, playerGy + 1.2, p.z + Math.sin(a) * 2.5); vfx.trail(m.position, oc, 0.5);
       enemies.slice().forEach(e => { if (T >= (e.orbCd || 0) && Math.hypot(e.mesh.position.x - m.position.x, e.mesh.position.z - m.position.z) < e.radius + 0.6) { e.orbCd = T + 0.5; damageEnemy(e, Math.round(atkPower() * 0.6)); } });
     });
   }
@@ -2991,7 +2995,7 @@ function update(dt) {
   // projéteis inimigos
   for (let i = eshots.length - 1; i >= 0; i--) {
     const b = eshots[i]; if (!b) continue;   // (clearEnemies pode esvaziar a lista se o tiro matar o jogador)
-    b.mesh.position.addScaledVector(b.dir, b.speed * dt); b.life -= dt; vfx.trail(b.mesh.position, b.color, 0.55);
+    b.mesh.position.addScaledVector(b.dir, b.speed * dt); b.life -= dt; b.mesh.position.y = 1.2 + ((inCity || inHome) ? 0 : walkY(b.mesh.position.x, b.mesh.position.z)); vfx.trail(b.mesh.position, b.color, 0.55);
     const hit = !b.vis && Math.hypot(b.mesh.position.x - p.x, b.mesh.position.z - p.z) < 0.8;
     if (hit) { hitPlayer({ dmg: b.dmg }); if (b.splash) ringFx(b.mesh.position, b.color, b.splash, 0.35); }
     let hitR = false;
