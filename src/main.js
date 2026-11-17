@@ -1164,7 +1164,7 @@ function openProfile(keep) {
 function openIndex() {
   const rows = [];
   const a = curAct();
-  rows.push({ img: 'acts/' + a.realm + '.webp', head: true, text: '📖 HISTÓRIA\n' + (state.endless ? 'Tomo restaurado! Aventura Infinita.' : 'Mapa ' + (state.act + 1) + '/' + ACTS.length + ' — ' + REALMS[a.realm].icon + ' ' + a.name + '\nEstágio ' + state.stage + '/5') });
+  rows.push({ img: 'acts/' + baseRealm(a.realm) + '.webp', head: true, text: '📖 HISTÓRIA\n' + (state.endless ? 'Tomo restaurado! Aventura Infinita.' : 'Mapa ' + (state.act + 1) + '/' + ACTS.length + ' — ' + REALMS[a.realm].icon + ' ' + a.name + '\nEstágio ' + state.stage + '/5') });
   const er = baseRealm(a.realm);
   rows.push({ text: 'Inimigos deste reino: ' + REALMS[a.realm].icon + ' ' + REALMS[a.realm].name + '\nVantagem: heróis de ' + Object.keys(REALMS).filter(k => REALMS[k].strong === er).map(k => REALMS[k].name).join(', ') + ' (+25% dano)' });
   rows.push({ text: '🐾 Monstros por estágio neste reino:\n' + [1, 2, 3, 4, 5].map(i => (i === 5 ? 'Chefe' : 'Estágio ' + i) + ' — ' + hordeTitle(a.realm, i)).join('\n') });
@@ -1265,7 +1265,7 @@ function spawnProxy(r) {
     mesh.traverse(o => { if (o.isMesh && o.material) { if (o.material.emissive) o.material.emissive.setHex(0x664400); if (o.material.color) o.material.color.setHex(0xffd36b); } });
   }
   enemies.push(e);
-  if (boss) { { const bi = $('bossimg'); bi.src = BASE + 'img/monsters/' + curAct().realm + '.webp'; bi.style.display = 'block'; } bossRef = e; $('bossname').textContent = '👑 ' + (state.endless ? 'Eco: ' + curAct().boss.name : info.name); $('bossfill').style.width = '100%'; $('bossbar').style.display = 'block'; }
+  if (boss) { { const bi = $('bossimg'); bi.src = BASE + 'img/monsters/' + baseRealm(curAct().realm) + '.webp'; bi.style.display = 'block'; } bossRef = e; $('bossname').textContent = '👑 ' + (state.endless ? 'Eco: ' + curAct().boss.name : info.name); $('bossfill').style.width = '100%'; $('bossbar').style.display = 'block'; }
   return e;
 }
 function applySnap(d) {
