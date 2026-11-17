@@ -11,6 +11,37 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0b0f1a">
 <script>
+// Diagnostico: se o jogo travar ao abrir (tela em branco), mostra o erro na tela com botoes de recarregar, em vez de ficar mudo.
+(function () {
+  var shown = false;
+  function loadingOn() { var l = document.getElementById('loading'); return !l || getComputedStyle(l).display !== 'none'; }
+  function show(msg) {
+    if (shown) return; shown = true;
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#0b0f1a;color:#fff;font:15px Arial,sans-serif;padding:24px;overflow:auto;text-align:center';
+    var info = ''; try { info = (navigator.userAgent || '').slice(0, 160); } catch (e) {}
+    d.innerHTML = '<div style="font-size:42px">😵</div><div style="font:bold 20px Arial;color:#f5c542;margin:8px 0">O jogo nao conseguiu abrir</div>'
+      + '<div style="opacity:.85;margin-bottom:14px">Toque em Recarregar. Se continuar, toque em Limpar e recarregar (seu personagem fica salvo).</div>'
+      + '<button id="dg1" style="font:bold 16px Arial;padding:12px 22px;border-radius:12px;border:0;background:#2e8b57;color:#fff;margin:4px">Recarregar</button>'
+      + '<button id="dg2" style="font:bold 16px Arial;padding:12px 22px;border-radius:12px;border:0;background:#b7791f;color:#fff;margin:4px">Limpar e recarregar</button>'
+      + '<div style="margin-top:18px;font:12px monospace;opacity:.6;word-break:break-all;text-align:left">Mande uma foto desta tela para o suporte:<br>' + String(msg).replace(/</g, '&lt;').slice(0, 400) + '<br>' + info.replace(/</g, '&lt;') + '</div>';
+    document.body.appendChild(d);
+    document.getElementById('dg1').onclick = function () { location.reload(); };
+    document.getElementById('dg2').onclick = function () {
+      var go = function () { var u = new URL(location.href); u.searchParams.set('v', Date.now()); location.replace(u.toString()); };
+      try { sessionStorage.clear(); } catch (e) {}
+      try { if (window.caches) caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }).then(go, go); else go(); } catch (e) { go(); }
+    };
+  }
+  window.__diagShow = show;
+  window.addEventListener('error', function (e) { var t = e.target; if (t && t !== window && t.tagName !== 'SCRIPT') return; if (loadingOn()) show(t && t.tagName === 'SCRIPT' ? 'nao baixou o script ' + String(t.src || '').split('/').pop() : (e.message || 'erro') + ' @' + String(e.filename || '').split('/').pop() + ':' + (e.lineno || 0)); }, true);
+  window.addEventListener('unhandledrejection', function (e) { if (loadingOn()) show('promessa: ' + (e.reason && (e.reason.message || e.reason))); });
+  window.addEventListener('webglcontextlost', function () { show('o celular pausou os graficos (memoria). Recarregue.'); }, true);
+  setTimeout(function () { if (loadingOn()) { var t = document.getElementById('ltxt'); show('demorou demais para carregar (' + (t ? t.textContent : '?') + ')'); } }, 60000);
+})();
+</script>
+<noscript><div style="color:#fff;background:#0b0f1a;padding:24px;font:16px Arial">Ative o JavaScript do navegador para jogar.</div></noscript>
+<script>
 // Atualizacao automatica: o navegador guarda a pagina por ate 10 min; aqui comparamos com o version.json (sempre fresco).
 (function () {
   var B = '__BUILD__'; if (B.indexOf('__') === 0 || location.protocol.indexOf('http') !== 0) return;
