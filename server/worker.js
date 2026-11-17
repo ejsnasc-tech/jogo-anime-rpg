@@ -12,7 +12,7 @@ const newCode = () => { const b = crypto.getRandomValues(new Uint8Array(16)); co
 const normCode = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 const rndHex = (n) => hex(crypto.getRandomValues(new Uint8Array(n)));
 const ITEM_SLOTS = ['helm', 'chest', 'legs', 'boots', 'weapon', 'offhand', 'amulet', 'ring'];
-const okItem = (it) => !!it && typeof it === 'object' && ITEM_SLOTS.includes(it.slot) && Number.isInteger(it.tier) && it.tier >= 0 && it.tier <= 5 && Number.isInteger(it.rar) && it.rar >= 0 && it.rar <= 3 && Number.isInteger(it.plus || 0) && (it.plus || 0) >= 0 && (it.plus || 0) <= 10 && typeof it.uid === 'string' && it.uid.length <= 24;
+const okItem = (it) => !!it && typeof it === 'object' && ITEM_SLOTS.includes(it.slot) && Number.isInteger(it.tier) && it.tier >= 0 && it.tier <= 9 && Number.isInteger(it.rar) && it.rar >= 0 && it.rar <= 3 && Number.isInteger(it.plus || 0) && (it.plus || 0) >= 0 && (it.plus || 0) <= 10 && typeof it.uid === 'string' && it.uid.length <= 24;
 const cleanItem = (it) => { const o = { uid: it.uid.replace(/[^a-z0-9]/gi, ''), slot: it.slot, tier: it.tier, rar: it.rar, plus: it.plus | 0 }; if (it.kind && /^[a-z]{3,12}$/.test(it.kind)) o.kind = it.kind; if (Array.isArray(it.gems)) o.gems = it.gems.slice(0, 3).map(g => ({ t: String(g.t || '').replace(/[^a-z]/g, '').slice(0, 8), l: Math.max(1, Math.min(3, g.l | 0)) })); return o; };
 const WB_PERIOD = 3600e3, WB_LIFE = 30 * 60e3;
 const WB_BOSSES = [{ name: 'Kraken Espectral', icon: '🐙', color: 0x2c8fb5 }, { name: 'Dragão das Brasas', icon: '🐉', color: 0xe8572a }, { name: 'Titã de Cristal', icon: '💎', color: 0x6c63ff }, { name: 'Rainha Sombria', icon: '👑', color: 0x7a3a9a }, { name: 'Colosso Primevo', icon: '🌳', color: 0x3d9a4a }, { name: 'Devorador do Vazio', icon: '🕳️', color: 0x30303a }];
@@ -94,8 +94,8 @@ export class Arena3 {
     const me = ws.deserializeAttachment() || {};
     if (m.t === 'join') {
       me.name = clean(m.name, 16) || 'Viajante'; me.look = m.look && JSON.stringify(m.look).length < 2500 ? m.look : null; me.x = num(m.x, 400); me.z = num(m.z, 400); me.f = 0; me.mv = 0;
-      me.w = m.w === 'city' ? 'city' : /^(home:p\d{1,3}|field:(\d|inf|wb|dg))$/.test(String(m.w)) ? m.w : 'field';
-      me.rm = /^f(inf|\ds\d)$/.test(String(m.rm)) && me.w.startsWith('field:') ? String(m.rm) : ''; if (me.rm) me.rt = Date.now();
+      me.w = m.w === 'city' ? 'city' : /^(home:p\d{1,3}|field:(\d{1,2}|inf|wb|dg))$/.test(String(m.w)) ? m.w : 'field';
+      me.rm = /^f(inf|\d{1,2}s\d)$/.test(String(m.rm)) && me.w.startsWith('field:') ? String(m.rm) : ''; if (me.rm) me.rt = Date.now();
       me.pid = clean(m.pid, 40); me.oid = me.pid ? await oidOf(me.pid) : ''; ws.serializeAttachment(me);
       // a mesma conta so pode ficar conectada em um lugar: o mais antigo e desconectado
       if (me.pid) this.state.getWebSockets().forEach(o => { if (o === ws) return; const a = o.deserializeAttachment(); if (a && a.pid === me.pid) { this.send(o, { t: 'kicked' }); try { o.close(4001, 'conta em outro aparelho'); } catch (e) {} } });
@@ -104,8 +104,8 @@ export class Arena3 {
       this.broadcast({ t: 'join', p: this.pubP(me) }, ws);
     } else if (!me.name) { return; }
     else if (m.t === 'move') {
-      me.x = num(m.x, 400); me.z = num(m.z, 400); me.f = num(m.f, 7); me.mv = m.mv ? 1 : 0; me.w = m.w === 'city' ? 'city' : /^(home:p\d{1,3}|field:(\d|inf|wb|dg))$/.test(String(m.w)) ? m.w : 'other';
-      const rm = me.w.startsWith('field:') && /^f(inf|\ds\d)$/.test(String(m.rm)) ? String(m.rm) : '', old = me.rm || '';
+      me.x = num(m.x, 400); me.z = num(m.z, 400); me.f = num(m.f, 7); me.mv = m.mv ? 1 : 0; me.w = m.w === 'city' ? 'city' : /^(home:p\d{1,3}|field:(\d{1,2}|inf|wb|dg))$/.test(String(m.w)) ? m.w : 'other';
+      const rm = me.w.startsWith('field:') && /^f(inf|\d{1,2}s\d)$/.test(String(m.rm)) ? String(m.rm) : '', old = me.rm || '';
       if (rm !== old) { me.rm = rm; me.rt = Date.now(); }
       ws.serializeAttachment(me);
       this.broadcast({ t: 'move', id: me.id, x: me.x, z: me.z, f: me.f, mv: me.mv, w: me.w, rm }, ws);

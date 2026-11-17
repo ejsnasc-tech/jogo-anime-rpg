@@ -1,9 +1,14 @@
 // Equipamentos, materiais e drops. Cada floresta (ato) é um "tier" 0..5 com nível de força próprio.
 export const MAX_PLUS = 10;
-export const FOREST_LV = [1, 7, 14, 21, 28, 36];   // nível dos inimigos no início de cada floresta
+export const FOREST_LV = [1, 7, 14, 21, 28, 36, 41, 46, 51, 56, 61, 66, 71, 76, 81, 86, 91, 96, 100, 104];   // nível dos inimigos no início de cada mapa (20 mapas)
+export const MAX_TIER = 9;
+export const MAP_COUNT = 20;
+// faixa de equipamento/material de cada mapa: 0..5 como antes; os mapas novos sobem até 9
+export const tierOf = (act) => act <= 5 ? Math.max(0, act) : Math.min(MAX_TIER, 5 + Math.ceil((act - 5) / 3.5));
 export const MATS = [
   { icon: '🐚', name: 'Conchas do Mar' }, { icon: '🕸️', name: 'Essência Sombria' }, { icon: '🔷', name: 'Cristal Arcano' },
   { icon: '🪨', name: 'Minério do Planalto' }, { icon: '🌿', name: 'Seiva Primeva' }, { icon: '🌌', name: 'Fragmento do Vazio' },
+  { icon: '🌋', name: 'Obsidiana Vulcânica' }, { icon: '⚙️', name: 'Mithril Rúnico' }, { icon: '⭐', name: 'Poeira Astral' }, { icon: '☁️', name: 'Essência Celestial' },
 ];
 const MATERIAL = ['Concha', 'Ferro', 'Cristal', 'Rocha', 'Raiz', 'Vazio', 'Obsidiana', 'Mithril', 'Astral', 'Celestial'];   // "Espada de Ferro", "Elmo de Cristal"...
 
@@ -109,7 +114,7 @@ export function dropTier(act, boss) {
   let t = act; const r = Math.random();
   if (boss) { if (r < 0.02 && act >= 3) t += 3; else if (r < 0.10) t += 2; else if (r < 0.40) t += 1; }
   else { if (r < 0.01) t += 2; else if (r < 0.07) t += 1; else if (r < 0.45) t -= 1; }
-  return Math.max(0, Math.min(6, t));
+  return Math.max(0, Math.min(8, t));
 }
 
 export function rollDrop(kind, tier, boss, cls) {

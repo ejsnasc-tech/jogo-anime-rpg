@@ -1,6 +1,7 @@
 // Grama de verdade: tufos de laminas finas (gradiente escuro na raiz -> claro na ponta) que balancam com o vento.
 // Um unico InstancedMesh que acompanha o jogador: so nasce em volta dele, entao e leve. Cada reino tem cor/densidade proprias.
 import * as THREE from 'three';
+import { REALMS, baseRealm } from './data.js';
 
 const hash2 = (ix, iz, s) => { const x = Math.sin(ix * 127.1 + iz * 311.7 + s * 74.7) * 43758.5453; return x - Math.floor(x); };
 
@@ -71,7 +72,7 @@ export function createGrass(scene, ctx) {
   }
   return {
     mesh,
-    setRealm(key) { realm = key; cfg = REALM[key] || null; mesh.visible = !!cfg; ax = 1e9; if (cfg) { uni.uBase.value.setHex(cfg.base); uni.uTip.value.setHex(cfg.tip); } },
+    setRealm(key) { realm = key; const bk = baseRealm(key), rv = REALMS[key]; cfg = REALM[bk] || null; mesh.visible = !!cfg; ax = 1e9; if (cfg) { uni.uBase.value.setHex(cfg.base); uni.uTip.value.setHex(cfg.tip); if (rv && rv.base) { const t = new THREE.Color(rv.tint); uni.uBase.value.multiply(t); uni.uTip.value.lerp(t, 0.5); } } },
     // on = false esconde (cidade, casa, caverna, mini-mundos); low = menos grama (celular fraco)
     update(dt, px, pz, T, on, low) {
       mesh.visible = !!cfg && on; if (!mesh.visible) return;

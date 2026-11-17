@@ -1,3 +1,4 @@
+import { tierOf } from './items.js';
 // Passe da temporada, loja de aparências e (futura) compra de gemas com dinheiro real.
 export const AURAS = [
   { id: 'gold', name: 'Aura Dourada', color: 0xffc83d, price: 120 },
@@ -47,7 +48,7 @@ export function initShop(c) {
   function give(r) {
     state.gold += r.gold || 0; state.gems += r.gems || 0;
     if (r.gem) craft.giveGem(null, r.gem);
-    if (r.item) giveItem(newItem(SLOT_ORDER[Math.floor(Math.random() * SLOT_ORDER.length)], Math.min(5, state.maxAct), r.item, mainCls()));
+    if (r.item) giveItem(newItem(SLOT_ORDER[Math.floor(Math.random() * SLOT_ORDER.length)], tierOf(state.maxAct), r.item, mainCls()));
     if (r.aura) cos().owned[r.aura] = 1;
     if (r.title) { state.meta.title = r.title; }
   }

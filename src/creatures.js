@@ -1,5 +1,6 @@
 // Monstros alem dos esqueletos: corpos procedurais (sem modelos externos) e as hordas de cada estagio de cada reino.
 import * as THREE from 'three';
+import { hordeRealm } from './data.js';
 
 const M = (c, em, ei, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.65, metalness: 0.05, emissive: em == null ? 0x000000 : em, emissiveIntensity: ei == null ? 0.5 : ei }, o || {}));
 const W = M(0xffffff, 0xffffff, 0.35), K = M(0x111111);
@@ -177,7 +178,7 @@ export const SKEL_HORDE = (act) => ({ minion: 50, warrior: 22, runner: 14, arche
 
 // pesos de monstros do estagio (st 1..5; 5 e infinito = mistura de tudo do reino)
 export function hordeWeights(realm, st, act) {
-  const fam = STAGE_HORDES[realm];
+  const fam = STAGE_HORDES[hordeRealm(realm)];
   if (!fam || st <= 1) return SKEL_HORDE(act);
   if (st <= 4) return Object.assign({}, fam[st - 2].w);
   const w = { warrior: 8, archer: 6 };
@@ -185,6 +186,6 @@ export function hordeWeights(realm, st, act) {
   return w;
 }
 export const hordeTitle = (realm, st) => {
-  const fam = STAGE_HORDES[realm];
+  const fam = STAGE_HORDES[hordeRealm(realm)];
   return !fam || st <= 1 ? 'Esqueletos' : st <= 4 ? fam[st - 2].name : 'Todas as hordas do reino';
 };

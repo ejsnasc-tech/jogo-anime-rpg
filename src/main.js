@@ -6,14 +6,14 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
-import { ULT_LV, ULT_EVO, CLASSES, CLASS_MODELS, REALMS, RARITY, HEROES, ACTS, INTRO, ENDING, PREMADE, buildPlayerHero, portraitUrl, BASE } from './data.js';
+import { ULT_LV, ULT_EVO, CLASSES, CLASS_MODELS, REALMS, baseRealm, groundRealm, hordeRealm, isVariant, RARITY, HEROES, ACTS, INTRO, ENDING, PREMADE, buildPlayerHero, portraitUrl, BASE } from './data.js';
 import { std, metal, glow, shadowAll } from './models.js';
 import { makeHero, makeSkeleton, animateHero, playOnce, preloadModels } from './actors.js';
 import { openCreator, CLASS_LIST } from './creator.js';
 import { SKILLS, SKILL_MAX, skillById, rollChoices } from './skills.js';
 import { initCraft } from './craft.js';
 import { initShop } from './shop.js';
-import { itemGemSum, SLOTS, SLOT_ORDER, EQUIP_KEYS, KINDS, WEAPON_KIND, OFF_KIND, RAR, MATS, FOREST_LV, MAX_PLUS, newItem, itemValue, itemStat, itemIcon, itemFmt, statFmt, itemName, itemLine, sellPrice, buyPrice, upgradeCost, rollDrop, migrateItems } from './items.js';
+import { itemGemSum, SLOTS, SLOT_ORDER, EQUIP_KEYS, KINDS, WEAPON_KIND, OFF_KIND, RAR, MATS, FOREST_LV, MAX_PLUS, MAX_TIER, tierOf, newItem, itemValue, itemStat, itemIcon, itemFmt, statFmt, itemName, itemLine, sellPrice, buyPrice, upgradeCost, rollDrop, migrateItems } from './items.js';
 import { itemArt, ghostArt } from './itemart.js';
 import { buildCity, CITY_R, CITY_SPAWN, PLOTS, DISTRICTS, drawCityBase, pushOutCity, cityPath, camClear } from './city.js';
 import { createNet, nameTag, NET_URL } from './net.js';
@@ -63,7 +63,11 @@ function load() {
   if (s.maxAct < s.act) s.maxAct = s.act;
   migrateItems(s);
   if (!s.pid) s.pid = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)).replace(/-/g, '');
-  if (s.endless) { s.storyDone = true; s.maxAct = 5; }
+  // 20 mapas: quem tinha terminado a história dos 6 primeiros mantém a Aventura Infinita (infOk) e ganha os mapas novos
+  if (!s.v20) {
+    s.v20 = 1;
+    if (s.endless || s.storyDone) { s.infOk = true; s.storyDone = false; s.maxAct = Math.max(s.maxAct, 6); if (s.endless) { s.endless = false; s.act = 6; s.stage = 1; s.stageKills = 0; } }
+  }
   const ids = HEROES.map(h => h.id);
   if (s.active && !s.team.length) s.team = [s.active];
   s.owned = s.owned.filter(id => ids.includes(id)); if (!s.owned.length) s.owned = ['kaito'];
@@ -214,20 +218,28 @@ ground.visible = false;   // começa no campo; o chão plano só aparece na cida
 let trailMat = null; const TRAIL = { mares: 0xd9b77a, sombras: 0x5d5070, arcana: 0x6c68a8, planalto: 0xcfa468, primeva: 0x8a6c48, vazio: 0x3c3150 };
 const biomes = {}; let biomeNotify = false, curBiome = null, biomeFar = 140, baseTrees = [], baseRock = null, mtnMat = null, capMat = null, cloudMat = null;
 function applyAct() {
-  const key = ACTS[state.act].realm, r = REALMS[key], bi = BIOME_INFO[key];
+  const key = ACTS[state.act].realm, r = REALMS[key], bk = baseRealm(key), bi = BIOME_INFO[key], variant = isVariant(key);
   setSky(r.sky); scene.fog.color.set(r.fog);
-  ambient.setRealm(key);
-  skyGlow.material.color.setHex(SUN[key] || 0xfff1c0);
-  if (trailMat) trailMat.color.setHex(TRAIL[key] || 0xd9b77a);
-  ground.material.map = groundTex(key); ground.material.color.set(key === 'arcana' ? 0xaeb4d8 : key === 'vazio' ? 0xc8c0d8 : 0xe8e8e8); ground.material.needsUpdate = true;
+  ambient.setRealm(bk);
+  skyGlow.material.color.setHex(SUN[key] || SUN[bk] || 0xfff1c0);
+  if (trailMat) trailMat.color.setHex(TRAIL[key] || TRAIL[bk] || 0xd9b77a);
+  const gk = groundRealm(key);
+  ground.material.map = groundTex(key); ground.material.color.set(variant ? r.gtint : gk === 'arcana' ? 0xaeb4d8 : gk === 'vazio' ? 0xc8c0d8 : 0xe8e8e8); ground.material.needsUpdate = true;
   hemi.groundColor.set(bi.hemi); scene.fog.near = bi.fog[0]; biomeFar = bi.fog[1];
   if (mtnMat) { mtnMat.color.set(bi.mtn); capMat.color.set(bi.cap); cloudMat.color.set(bi.cloud); }
-  baseTrees.forEach(m => { m.visible = key === 'primeva'; }); if (baseRock) baseRock.visible = key !== 'mares';
-  Object.keys(biomes).forEach(k => { biomes[k].visible = k === key; });
-  if (!biomes[key]) { biomes[key] = makeBiome(key, { groundH, riverDepth, trailX, WORLD }); fieldGroup.add(biomes[key]); }
-  biomes[key].visible = true;
-  if (curBiome && curBiome !== key && biomeNotify) toast(r.icon + ' Novo setor: ' + bi.title + ' — ' + bi.sub + '\n⚔ Horda: ' + HORDES[key].name + ' (' + HORDES[key].sub + ')');
+  baseTrees.forEach(m => { m.visible = bk === 'primeva'; }); if (baseRock) baseRock.visible = bk !== 'mares';
+  // o cenário é do reino-base (um só na memória); os reinos novos só repintam por cima
+  Object.keys(biomes).forEach(k => { biomes[k].visible = k === bk; });
+  if (!biomes[bk]) { biomes[bk] = makeBiome(bk, { groundH, riverDepth, trailX, WORLD }); fieldGroup.add(biomes[bk]); tintBiome(biomes[bk], null); }
+  tintBiome(biomes[bk], variant ? r.tint : null);
+  biomes[bk].visible = true;
+  if (curBiome && curBiome !== key && biomeNotify) toast(r.icon + ' Novo setor: ' + bi.title + ' — ' + bi.sub + '\n⚔ Horda: ' + (HORDES[key] || HORDES[bk]).name + ' (' + (HORDES[key] || HORDES[bk]).sub + ')');
   curBiome = key; grass.setRealm(key);
+}
+// guarda a cor original de cada material do cenário e multiplica pela cor do reino
+function tintBiome(g, tint) {
+  const c = tint == null ? null : new THREE.Color(tint);
+  g.traverse(o => { const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []; ms.forEach(m => { if (!m.color) return; if (!m.userData.c0) m.userData.c0 = m.color.clone(); m.color.copy(m.userData.c0); if (c) m.color.multiply(c); }); });
 }
 
 const fieldGroup = new THREE.Group(); scene.add(fieldGroup);
@@ -533,12 +545,22 @@ const dist2 = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const angDiff = (a, b) => Math.abs(((a - b + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI);
 function angleLerp(a, b, t) { const d = ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI; return a + d * t; }
 const curAct = () => ACTS[state.act];
-const zoneLv = () => dg ? dg.lv + (dg.floor - 1) * 2 : state.endless ? 36 + Math.floor(state.stageKills / 25) : FOREST_LV[state.act] + state.stage - 1;
+const zoneLv = () => dg ? dg.lv + (dg.floor - 1) * 2 : state.endless ? FOREST_LV[ACTS.length - 1] + 6 + Math.floor(state.stageKills / 25) : FOREST_LV[state.act] + state.stage - 1;
 const xpNeed = () => 6 + Math.round(state.level * 2.5);
-const quota = () => (8 + state.stage * 3 + state.act * 2) * rmN;
+// XP por abate: acompanha o nível da zona (≈12 abates por nível no nível do mapa); abaixo do nível rende menos, acima rende mais
+function xpPerKill(e) {
+  const zl = zoneLv(), d = state.level - zl;
+  const f = d < -3 ? 1.35 : d <= 4 ? 1 : Math.max(0.15, 1 - (d - 4) * 0.09);
+  return Math.max(1, (6 + zl * 2.5) / 12) * f * (e && e.boss ? 25 : e && e.elite ? 3 : 1);
+}
+// dificuldade dos mapas novos cresce mais devagar que o número do mapa (o jogador também fica mais forte)
+const scaleAct = () => { const a = state.endless ? ACTS.length - 1 : state.act; return a <= 5 ? a : 5 + (a - 5) * 0.4; };
+const endlessAct = () => (6 + Math.floor(state.stageKills / 150)) % ACTS.length;
+const tierNow = () => tierOf(state.endless ? ACTS.length - 1 : state.act);
+const quota = () => (8 + state.stage * 3 + Math.round(scaleAct() * 2)) * rmN;
 
 function realmMult() {
-  const er = curAct().realm, hr = hero.realm;
+  const er = baseRealm(curAct().realm), hr = hero.realm;
   if (REALMS[hr].strong === er) return 1.25;
   if (REALMS[er].strong === hr) return 0.85;
   return 1;
@@ -607,7 +629,7 @@ function refreshHud() {
   $('hgems').innerHTML = CUR.gems + state.gems; $('hgold').innerHTML = CUR.gold + state.gold; $('hcash').innerHTML = CUR.cash + state.cash;
   const a = curAct();
   $('stage').textContent = dg && dg.cave ? '🐉 CAVERNA — ' + REALMS[dg.realm].icon + ' ' + ACTS[dg.ai].boss.name + (bossRef ? ' — CHEFE' : ' (siga o caminho)') : dg ? '🏰 MASMORRA — andar ' + dg.floor + '/5' + (dg.floor < 5 ? '  (' + dg.kills + '/' + dg.need + ')' : ' — CHEFE') : wb ? '🐉 CHEFE MUNDIAL — derrotem juntos!' : inHome ? '\u{1F3E0} ' + (homeVisit ? 'Visitando a casa de ' + homeVisit.name : inHome.name + ' \u2014 ' + ROOMS[inHome.kind].label) : inCity ? '🏰 Cidade de Aurora — fale com os moradores' : state.endless ? '♾ Aventura Infinita • abates ' + state.stageKills + (rmN > 1 ? '  👥 ' + rmN + ' jogadores (monstros ×' + rmN + ')' : '')
-    : 'Ato ' + (state.act + 1) + ' (Nv.' + zoneLv() + ') • ' + a.name + ' — ' + (state.stage === 5 ? 'CHEFE' : 'Estágio ' + state.stage + '/5  (' + Math.min(state.stageKills, quota()) + '/' + quota() + ')') + (rmN > 1 ? '  👥 ' + rmN + ' jogadores (monstros ×' + rmN + ')' : '');
+    : 'Mapa ' + (state.act + 1) + ' (Nv.' + zoneLv() + ') • ' + a.name + ' — ' + (state.stage === 5 ? 'CHEFE' : 'Estágio ' + state.stage + '/5  (' + Math.min(state.stageKills, quota()) + '/' + quota() + ')') + (rmN > 1 ? '  👥 ' + rmN + ' jogadores (monstros ×' + rmN + ')' : '');
 }
 
 function refreshTeam() {
@@ -694,7 +716,7 @@ function updateWorld(dt) {
 }
 function openChest(c) {
   const m = ensureMeta(state); m.chests[c.i] = Date.now() + 5 * 60 * 1000;
-  const gold = Math.round((60 + state.level * 30) * (1 + Math.random() * 0.6)), gems = 2 + Math.floor(Math.random() * 5), tier = Math.min(5, state.act);
+  const gold = Math.round((60 + state.level * 30) * (1 + Math.random() * 0.6)), gems = 2 + Math.floor(Math.random() * 5), tier = tierNow();
   state.gold += gold; state.gems += gems; state.mats[tier] = (state.mats[tier] || 0) + 3; ringFx(player.position, 0xffd54f, 4, 0.7);
   toast('🎁 Baú aberto! +🪙' + gold + ' +💎' + gems + ' +' + MATS[tier].icon + '3');
   if (Math.random() < 0.35) giveItem(newItem(SLOT_ORDER[Math.floor(Math.random() * SLOT_ORDER.length)], tier, Math.random() < 0.2 ? 2 : 1, mainCls()));
@@ -803,7 +825,7 @@ function spawnWander() {
   const a = Math.random() * 6.283, x = THREE.MathUtils.clamp(player.position.x + Math.cos(a) * 12, -WORLD + 6, WORLD - 6), z = THREE.MathUtils.clamp(player.position.z + Math.sin(a) * 12, -WORLD + 6, WORLD - 6);
   const mesh = makeHero(buildPlayerHero(Object.assign({}, PREMADE[3], { name: 'Mercador Andarilho' }))); mesh.position.set(x, walkY(x, z), z); scene.add(mesh);
   const tag = nameTag('🧙 Mercador Andarilho'); tag.position.set(x, walkY(x, z) + 3.4, z); scene.add(tag);
-  const tier = Math.min(5, state.act), offers = [1, 1, 2].map(rar => { const it = newItem(SLOT_ORDER[Math.floor(Math.random() * SLOT_ORDER.length)], tier, rar, mainCls()); return { it, price: Math.round(buyPrice(tier, rar) * 0.75), sold: false }; });
+  const tier = tierNow(), offers = [1, 1, 2].map(rar => { const it = newItem(SLOT_ORDER[Math.floor(Math.random() * SLOT_ORDER.length)], tier, rar, mainCls()); return { it, price: Math.round(buyPrice(tier, rar) * 0.75), sold: false }; });
   wander = { mesh, tag, life: 150, cool: 0, offers }; toast('🧙 Um Mercador Andarilho apareceu perto de você! Ele fica 2 minutos e meio.');
 }
 function dropWander() { if (!wander) return; scene.remove(wander.mesh); scene.remove(wander.tag); wander = null; nextWander = T + 240 + Math.random() * 240; }
@@ -826,7 +848,7 @@ function updateWander(dt) {
 let dg = null;
 function dgLeft() { const m = ensureMeta(state); if (m.dgDay !== m.day) { m.dgDay = m.day; m.dgUsed = 0; m.cvUsed = 0; } return 3 - (m.dgUsed || 0); }
 function openDungeon(back) {
-  const left = dgLeft(), lv = FOREST_LV[Math.min(5, state.maxAct)] + 6;
+  const left = dgLeft(), lv = FOREST_LV[Math.min(ACTS.length - 1, state.maxAct)] + 6;
   openPanel('🏰 MASMORRA', [
     { text: '◀ Voltar', btn: 'VOLTAR', fn: back },
     { head: true, text: '🏰 Masmorra Sombria\n5 andares com monstros nível ~' + lv + '+ (mais fortes que a floresta), elites frequentes e um chefe no último andar.\nSe você cair, perde a tentativa.' },
@@ -837,7 +859,7 @@ function openDungeon(back) {
 function enterDungeon() {
   if (dgLeft() <= 0) return; ensureMeta(state).dgUsed = (ensureMeta(state).dgUsed || 0) + 1;
   closePanel(); setCityMode(false); clearEnemies();
-  dg = { lv: FOREST_LV[Math.min(5, state.maxAct)] + 6, floor: 1, kills: 0, need: 16 };
+  dg = { lv: FOREST_LV[Math.min(ACTS.length - 1, state.maxAct)] + 6, floor: 1, kills: 0, need: 16 };
   save(state); toast('🏰 Andar 1: derrote ' + dg.need + ' monstros'); refreshHud();
 }
 // ---- Cavernas dos chefes: corredor fechado ate a camara do chefe de cada reino ----
@@ -900,7 +922,7 @@ function dgKill() {
 }
 function dgBossDone() {
   const d = dg; dg = null; clearEnemies(); track(d.cave ? 'boss' : 'dungeon'); track('boss');
-  const gold = d.lv * (d.cave ? 220 : 160), tier = d.cave ? d.ai : Math.min(5, state.maxAct); state.gold += gold; state.gems += d.cave ? 30 + d.ai * 5 : 25; state.mats[Math.min(5, tier)] = (state.mats[Math.min(5, tier)] || 0) + 8;
+  const gold = d.lv * (d.cave ? 220 : 160), tier = tierOf(d.cave ? d.ai : state.maxAct); state.gold += gold; state.gems += d.cave ? 30 + d.ai * 5 : 25; state.mats[tier] = (state.mats[tier] || 0) + 8;
   giveItem(newItem(SLOT_ORDER[Math.floor(Math.random() * SLOT_ORDER.length)], Math.min(6, tier + (d.cave && Math.random() < 0.3 ? 1 : 0)), Math.random() < 0.2 ? 3 : 2, mainCls()));
   if (d.cave) giveItem(newItem(SLOT_ORDER[Math.floor(Math.random() * SLOT_ORDER.length)], Math.min(6, tier), Math.random() < 0.3 ? 3 : 2, mainCls()));
   craft.giveGem(null, 2); craft.giveGem(null, Math.random() < 0.2 ? 3 : 1);
@@ -913,7 +935,7 @@ let fishing = null;
 function catchFish() {
   const r = Math.random(), lv = state.level; let msg;
   if (r < 0.58) { const g = 20 + lv * 3; state.gold += g; msg = '🐟 Peixinho: +🪙' + g; }
-  else if (r < 0.86) { const g = 60 + lv * 6, tier = Math.min(5, state.act); state.gold += g; state.mats[tier] = (state.mats[tier] || 0) + 1; msg = '🐠 Peixe grande: +🪙' + g + ' +' + MATS[tier].icon + '1'; }
+  else if (r < 0.86) { const g = 60 + lv * 6, tier = tierNow(); state.gold += g; state.mats[tier] = (state.mats[tier] || 0) + 1; msg = '🐠 Peixe grande: +🪙' + g + ' +' + MATS[tier].icon + '1'; }
   else if (r < 0.96) { const g = 160 + lv * 12; state.gold += g; msg = '🦈 Peixe raro: +🪙' + g; if (Math.random() < 0.3) craft.giveGem(null, 1); }
   else { const gm = 6 + Math.floor(Math.random() * 6); state.gems += gm; msg = '🦪 PÉROLA! +💎' + gm; }
   toast('🎣 ' + msg); track('fish'); save(state); refreshHud();
@@ -1142,10 +1164,10 @@ function openProfile(keep) {
 function openIndex() {
   const rows = [];
   const a = curAct();
-  rows.push({ img: 'acts/' + a.realm + '.webp', head: true, text: '📖 HISTÓRIA\n' + (state.endless ? 'Tomo restaurado! Aventura Infinita.' : 'Ato ' + (state.act + 1) + '/6 — ' + REALMS[a.realm].icon + ' ' + a.name + '\nEstágio ' + state.stage + '/5') });
-  const er = a.realm;
-  rows.push({ text: 'Inimigos deste reino: ' + REALMS[er].icon + ' ' + REALMS[er].name + '\nVantagem: heróis de ' + Object.keys(REALMS).filter(k => REALMS[k].strong === er).map(k => REALMS[k].name).join(', ') + ' (+25% dano)' });
-  rows.push({ text: '🐾 Monstros por estágio neste reino:\n' + [1, 2, 3, 4, 5].map(i => (i === 5 ? 'Chefe' : 'Estágio ' + i) + ' — ' + hordeTitle(er, i)).join('\n') });
+  rows.push({ img: 'acts/' + a.realm + '.webp', head: true, text: '📖 HISTÓRIA\n' + (state.endless ? 'Tomo restaurado! Aventura Infinita.' : 'Mapa ' + (state.act + 1) + '/' + ACTS.length + ' — ' + REALMS[a.realm].icon + ' ' + a.name + '\nEstágio ' + state.stage + '/5') });
+  const er = baseRealm(a.realm);
+  rows.push({ text: 'Inimigos deste reino: ' + REALMS[a.realm].icon + ' ' + REALMS[a.realm].name + '\nVantagem: heróis de ' + Object.keys(REALMS).filter(k => REALMS[k].strong === er).map(k => REALMS[k].name).join(', ') + ' (+25% dano)' });
+  rows.push({ text: '🐾 Monstros por estágio neste reino:\n' + [1, 2, 3, 4, 5].map(i => (i === 5 ? 'Chefe' : 'Estágio ' + i) + ' — ' + hordeTitle(a.realm, i)).join('\n') });
   rows.push({ head: true, text: '⚔️ CLASSES' });
   Object.entries(CLASSES).forEach(([k, c0]) => { const c = Object.assign({ k }, c0); rows.push({ text: c.icon + ' ' + c.name + ' — ' + c.role + '\n' + c.desc + '\nULT: ' + c.ult + '  →  Nv.' + ULT_LV[0] + ': ' + ULT_EVO[c.k][0].name + '  →  Nv.' + ULT_LV[1] + ': ' + ULT_EVO[c.k][1].name }); });
   rows.push({ head: true, text: '👹 MONSTROS E FRAQUEZAS' });
@@ -1243,7 +1265,7 @@ function spawnProxy(r) {
     mesh.traverse(o => { if (o.isMesh && o.material) { if (o.material.emissive) o.material.emissive.setHex(0x664400); if (o.material.color) o.material.color.setHex(0xffd36b); } });
   }
   enemies.push(e);
-  if (boss) { { const bi = $('bossimg'); bi.src = BASE + 'img/monsters/' + curAct().realm + '.webp'; bi.style.display = 'block'; } bossRef = e; $('bossname').textContent = '👑 ' + (state.endless ? 'Eco do Apagador' : info.name); $('bossfill').style.width = '100%'; $('bossbar').style.display = 'block'; }
+  if (boss) { { const bi = $('bossimg'); bi.src = BASE + 'img/monsters/' + curAct().realm + '.webp'; bi.style.display = 'block'; } bossRef = e; $('bossname').textContent = '👑 ' + (state.endless ? 'Eco: ' + curAct().boss.name : info.name); $('bossfill').style.width = '100%'; $('bossbar').style.display = 'block'; }
   return e;
 }
 function applySnap(d) {
@@ -1285,7 +1307,7 @@ const rmTxt = (rm) => { const mm = /^f(\d)s(\d)$/.exec(rm || ''); return rm === 
 function joinRoom(rm) {
   const mm = /^f(\d)s(\d)$/.exec(rm);
   if (inHome || dg || wb) { toast('Saia daqui primeiro (casa, masmorra ou chefe mundial)'); return; }
-  if (rm === 'finf') { if (!state.storyDone) { toast('🔒 Aventura Infinita ainda não liberada'); return; } state.endless = true; }
+  if (rm === 'finf') { if (!(state.storyDone || state.infOk)) { toast('🔒 Aventura Infinita ainda não liberada'); return; } state.endless = true; }
   else if (mm) { const a = +mm[1], s = +mm[2]; if (a > state.maxAct) { toast('🔒 Você ainda não chegou nesse ato'); return; } state.endless = false; state.act = a; state.stage = s; applyAct(); }
   else return;
   closePanel(); state.stageKills = 0; clearEnemies(); if (inCity) setCityMode(false); save(state); refreshHud(); toast('➡ Você foi ajudar: ' + rmTxt(rm));
@@ -1328,9 +1350,21 @@ const BOSSES = {
   primeva:  { proc: true, model: 'Skeleton_Minion',  size: 5.2, r: 1.7, spd: 1.0, tint: 0x7dff9b, fx: 0x7dff9b, moves: ['roots', 'poison', 'sum:bomber', 'roots'] },
   vazio:    { proc: true, model: 'Skeleton_Mage',    size: 5.6, r: 1.6, spd: 1.5, tint: 0xffffff, fx: 0xffffff, moves: ['erase', 'rain', 'blink', 'charge', 'slam', 'roots', 'sum:summoner'] },
 };
+// reinos novos: horda e chefe derivados do reino-base (nome, cores e ataques do chefe vêm dos dados do ato)
+Object.keys(REALMS).forEach((k) => {
+  const r = REALMS[k]; if (!r.base) return;
+  const act = ACTS.find(a => a.realm === k), hb = hordeRealm(k);
+  HORDES[k] = Object.assign({}, HORDES[hb], { name: HORDES[hb].name });
+  BOSSES[k] = Object.assign({}, BOSSES[r.base], { tint: act.boss.color, fx: act.boss.color, size: BOSSES[r.base].size * 1.06, moves: act.boss.moves || BOSSES[r.base].moves });
+});
+// pinta o monstro/chefe com a cor do reino novo (materiais são de cada monstro, não compartilhados)
+function tintVariant(mesh, hex, amt) {
+  const c = new THREE.Color(hex);
+  mesh.traverse(o => { if (!o.isMesh || !o.material || o.userData.noOutline) return; (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if (m.color && m.side !== THREE.BackSide && !m.transparent) m.color.lerp(c, amt); }); });
+}
 const BNAME = { tide: '🌊 Maré!', cannon: '💣 Canhonaço!', blink: '👤 Sombra!', lines: '🗡 Lâminas!', rain: '☄ Chuva arcana!', erase: '⚪ Apagar!', slam: '💥 Pancada!', charge: '🐂 Investida!', roots: '🌿 Raízes!', poison: '☠ Veneno!' };
-function bossLook(mesh, realm) {
-  const B = BOSSES[realm]; if (!B) return;
+function bossLook(mesh, realmKey) {
+  const B = BOSSES[realmKey]; if (!B) return; const realm = baseRealm(realmKey);
   const bm = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o == null ? 0.9 : o, depthWrite: false });
   const add = (g, geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); g.add(m); return m; };
   const spin = new THREE.Group(); spin.position.y = B.size * 0.55; mesh.add(spin); mesh.userData.spinG = spin;
@@ -1342,7 +1376,8 @@ function bossLook(mesh, realm) {
   }
 }
 // corpos procedurais dos chefes que nao sao esqueletos (Rei Abissal, Serafim, Flor-Titã, Árvore-Mãe, Apagador)
-function bossBody(realm) {
+function bossBody(realmKey) {
+  const realm = baseRealm(realmKey);
   const g = new THREE.Group(), U = g.userData; U.parts = {};
   const sm = (c, em, ei) => new THREE.MeshStandardMaterial({ color: c, emissive: em == null ? 0x000000 : em, emissiveIntensity: ei == null ? 0.7 : ei, roughness: 0.6, metalness: 0.1 });
   const mk = (geo, mat, x, y, z, par) => { const m = new THREE.Mesh(geo, mat); m.position.set(x || 0, y || 0, z || 0); (par || g).add(m); return m; };
@@ -1473,17 +1508,18 @@ function spawnEnemy(boss, info, forceType, at) {
   const kind = BS ? BS.model : T0.model;
   const mesh = (!boss && T0.body && makeCreature(T0.body, T0.tint, T0.size)) || (BS && BS.proc && bossBody(bossRealm())) || makeSkeleton(kind, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run, bsize: BS && BS.size }) || makeEnemy(boss ? info.color : realm.enemy, boss);
   if (BS && !BS.proc) bossLook(mesh, bossRealm());
+  if (isVariant(boss ? bossRealm() : curAct().realm)) { const vk = boss ? bossRealm() : curAct().realm; tintVariant(mesh, boss ? BOSSES[vk].tint : REALMS[vk].enemy, boss ? 0.45 : 0.3); }
   mesh.position.set(x, 0, z); scene.add(mesh);
   { const bs = new THREE.Mesh(BLOB_GEO, BLOB_MAT); bs.rotation.x = -Math.PI / 2; bs.position.y = 0.04; bs.scale.setScalar((boss ? 2.2 : 1) * (T0.r || 1) * 1.2); bs.userData.noOutline = true; bs.renderOrder = 1; mesh.add(bs); }   // sombra de contato
   const lv = zoneLv();
   // o mundo acompanha o jogador: passar do nível da zona deixa os bichos mais fortes
   const over = Math.max(0, state.level - lv), catchup = 1 + over * 0.1, catchD = 1 + over * 0.05;
-  const base = (18 + lv * 7) * (1 + state.act * 0.3) * 2.4 * catchup;
+  const base = (18 + lv * 7) * (1 + scaleAct() * 0.3) * 2.4 * catchup;
   const hpv = boss ? base * 14 * (state.endless ? 1.5 : 1) * 1.3 * rmN : base * T0.hp;
-  const dmgBase = ((6 + lv * 0.8) * (1 + state.act * 0.12)) * 1.6 * catchD;
+  const dmgBase = ((6 + lv * 0.8) * (1 + scaleAct() * 0.12)) * 1.6 * catchD;
   const e = { nid: ++nidSeq, mesh, hp: hpv, maxHp: hpv, speed: boss ? 1.5 * (BS ? BS.spd / 1.2 : 1) : (1.9 + Math.random() * 1.0) * T0.spd, boss: !!boss, bk: boss ? bossRealm() : null, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? (BS ? BS.r : 1.4) : T0.r, t: Math.random() * 10, dmg: dmgBase * (boss ? 1.6 : T0.dmg), stun: 0, slow: 0, flash: 0, ranged: boss ? null : T0.ranged || null, res: boss ? null : T0.res || null, shotAt: T + 1 + Math.random() * 2, beh: boss ? (BS ? 'boss' : null) : T0.beh || null, cdAt: T + 1 + Math.random() * 3 };
   if (dg) { e.hp = e.maxHp = e.hp * 1.35; e.dmg *= 1.3; }
-  if (!boss && !forceType && Math.random() < 0.04 + state.act * 0.01 + (night > 0.55 ? 0.03 : 0) + (dg ? 0.12 : 0)) {
+  if (!boss && !forceType && Math.random() < 0.04 + scaleAct() * 0.01 + (night > 0.55 ? 0.03 : 0) + (dg ? 0.12 : 0)) {
     e.elite = true; e.hp = e.maxHp = e.hp * 4; e.dmg *= 1.4; e.radius *= 1.3; mesh.scale.multiplyScalar(1.35);
     mesh.traverse(o => { if (o.isMesh && o.material) { if (o.material.emissive) o.material.emissive.setHex(0x664400); if (o.material.color) o.material.color.setHex(0xffd36b); } });
     ftAt(mesh.position, '★ ELITE', '#ffd166', 3);
@@ -1511,7 +1547,7 @@ function enemyShoot(e, p) {
 }
 
 function spawnBoss() {
-  if (!isHost()) return; const b = curAct().boss; spawnEnemy(true, { name: state.endless ? 'Eco do Apagador' : b.name, color: b.color }); }
+  if (!isHost()) return; const b = curAct().boss; spawnEnemy(true, { name: state.endless ? 'Eco: ' + b.name : b.name, color: b.color }); }
 
 function autoSpawn() {
   if (inCity || wb) return;
@@ -1550,11 +1586,11 @@ function onKill(e) {
   if (e.elite) { if (Math.random() < 0.3) craft.giveGem(null, Math.random() < 0.1 ? 2 : 1); }
   if (e.elite) { track('elite'); dropLoot(e); dropLoot(e); state.gold += 40 + state.level * 8; state.gems += Math.random() < 0.4 ? 2 : 1; ftAt(e.mesh.position, '★ +elite', '#ffd166', 2.4); }
   if (e.ev && ev === e.ev) { ev.left--; if (ev.left <= 0) finishEvent(); else toast('⚔ ' + ev.name + ': faltam ' + ev.left); }
-  state.kills++; state.gold += Math.round((5 + state.level + state.act * 2) * (1 + sk('greed') * 0.2 + petPerk('gold') + homeBonus().gold));
+  state.kills++; state.gold += Math.round((5 + state.level + scaleAct() * 2) * (1 + sk('greed') * 0.2 + petPerk('gold') + homeBonus().gold));
   if (Math.random() < 0.05 + sk('greed') * 0.01) state.gems++;
   if (sk('vamp')) heal(maxHp * 0.01 * sk('vamp'));
-  state.xp++;
-  if (state.xp >= xpNeed()) { state.xp = 0; state.level++; state.skillPts++; ftAt(player.position, 'LEVEL UP!', '#7CFC00', 2.8); if (ULT_LV.includes(state.level)) timers.push({ at: T + 1.2, fn: () => { toast('🌟 Sua ULT evoluiu: ' + ultName() + '!'); updateSkillLabel(true, 0); } }); }
+  state.xp = Math.round((state.xp + xpPerKill(e)) * 10) / 10;
+  while (state.xp >= xpNeed()) { state.xp = Math.round((state.xp - xpNeed()) * 10) / 10; state.level++; state.skillPts++; ftAt(player.position, 'LEVEL UP!', '#7CFC00', 2.8); if (ULT_LV.includes(state.level)) timers.push({ at: T + 1.2, fn: () => { toast('🌟 Sua ULT evoluiu: ' + ultName() + '!'); updateSkillLabel(true, 0); } }); }
   if (e.boss && dg) dgBossDone();
   else if (e.boss) {
     if (state.endless) { track('boss'); bossRef = null; $('bossbar').style.display = 'none'; state.gems += 5; state.gold += 200 * state.level; toast('🏆 Chefe derrotado! +5💎'); }
@@ -1565,7 +1601,11 @@ function onKill(e) {
     /* adversários do chefe mundial não avançam estágios */
   } else {
     state.stageKills++;
-    if (state.endless) { if (state.stageKills % 30 === 0) spawnBoss(); }
+    if (state.endless) {
+      if (state.stageKills % 30 === 0) spawnBoss();
+      // a Aventura Infinita passa por todos os reinos: troca de cenário a cada 150 abates
+      const ni = endlessAct(); if (ni !== state.act) { state.act = ni; applyAct(); toast('🌀 ' + REALMS[curAct().realm].icon + ' ' + curAct().name + ' — nível ' + zoneLv()); }
+    }
     else if (state.stage < 5 && state.stageKills >= quota()) stageClear();
   }
   save(state); refreshHud();
@@ -1588,7 +1628,7 @@ function giveItem(it) {
   if (invOpen) renderInv();
 }
 function dropLoot(e) {
-  const tier = Math.min(5, state.act), r = rollDrop(e.kind, tier, e.boss, mainCls());
+  const tier = tierNow(), r = rollDrop(e.kind, tier, e.boss, mainCls());
   if (r.mat) { state.mats[tier] = (state.mats[tier] || 0) + r.mat; ftAt(e.mesh.position, MATS[tier].icon + '+' + r.mat, '#9be3ff', 1.2); }
   if (r.item) giveItem(r.item);
 }
@@ -1603,13 +1643,13 @@ function stageClear() {
 
 function bossDefeated() {
   track('boss'); const act = curAct(); clearEnemies();
-  const replay = state.act < state.maxAct || state.storyDone;
-  state.gold += 300 * (state.act + 1); state.gems += replay ? 4 : 10;
+  const replay = state.act < state.maxAct || (state.storyDone && state.act >= ACTS.length - 1);
+  state.gold += 300 * (Math.round(scaleAct()) + 1); state.gems += replay ? 4 : 10;
   toast('🏆 Chefe derrotado! +' + (replay ? 4 : 10) + '💎');
   save(state); refreshHud();
   if (replay) { state.stage = 1; state.stageKills = 0; save(state); refreshHud(); return; }
   showDialog(act.outro, () => {
-    unlockHero(act.reward);
+    if (act.reward) unlockHero(act.reward);
     if (state.act < ACTS.length - 1) {
       state.act++; state.maxAct = Math.max(state.maxAct, state.act); state.stage = 1; state.stageKills = 0; applyAct(); save(state); refreshHud();
       showDialog(curAct().intro);
@@ -2018,7 +2058,7 @@ function setCityMode(on, at) {
 }
 
 function doUpgrade(it) {
-  const c = upgradeCost(it), mi = Math.min(5, it.tier), have = state.mats[mi] || 0;
+  const c = upgradeCost(it), mi = Math.min(MAX_TIER, it.tier), have = state.mats[mi] || 0;
   if (it.plus >= MAX_PLUS || state.gold < c.gold || have < c.mat) return false;
   state.gold -= c.gold; state.mats[mi] = have - c.mat; it.plus++; recalcHp(); save(state); refreshHud(); return true;
 }
@@ -2040,7 +2080,7 @@ function openGear(title, slots, mode, back, keep) {
         const row = { text: (isEquipped(it) ? '✅ ' : '') + itemLine(it), color: RAR[it.rar].color };
         if (maxed) { row.btn = 'MÁX'; row.enabled = false; }
         else row.btns = [
-          { label: '⬆ 🪙' + c.gold + ' ' + MATS[Math.min(5, it.tier)].icon + c.mat, enabled: state.gold >= c.gold && (state.mats[Math.min(5, it.tier)] || 0) >= c.mat, fn: () => { doUpgrade(it); again(); } },
+          { label: '⬆ 🪙' + c.gold + ' ' + MATS[Math.min(MAX_TIER, it.tier)].icon + c.mat, enabled: state.gold >= c.gold && (state.mats[Math.min(MAX_TIER, it.tier)] || 0) >= c.mat, fn: () => { doUpgrade(it); again(); } },
           { label: '⚡🔮' + ky, enabled: state.cash >= ky, fn: () => { state.cash -= ky; it.plus++; recalcHp(); save(state); refreshHud(); again(); } },
         ];
         rows.push(row);
@@ -2050,7 +2090,7 @@ function openGear(title, slots, mode, back, keep) {
       if (!sellable.length) rows.push({ text: 'Nada para vender aqui (itens equipados não são vendidos).' });
       sellable.forEach(it => rows.push({ text: itemLine(it), color: RAR[it.rar].color, btn: '🪙' + sellPrice(it), fn: () => { state.items.splice(state.items.indexOf(it), 1); state.gold += sellPrice(it); save(state); refreshHud(); again(); } }));
     } else if (mode === 'buy') {
-      const t = Math.min(5, state.maxAct);
+      const t = tierOf(state.maxAct);
       for (const tt of t > 0 ? [t, t - 1] : [t]) [0, 1].forEach(rar => {
         const prev = newItem(slot, tt, rar, mainCls()), price = buyPrice(tt, rar);
         rows.push({ text: '🛒 ' + itemLine(prev), color: RAR[rar].color, btn: '🪙' + price, enabled: state.gold >= price, fn: () => { state.gold -= price; giveItem(newItem(slot, tt, rar, mainCls())); refreshHud(); again(); } });
@@ -2536,22 +2576,23 @@ $('bagbtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (!p
 $('minimap').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (isPaused()) return; if (inCity) openCityMap(); else openMap(); });
 
 function openMap() {
-  const rows = [{ head: true, text: '🗺️ Cada floresta tem inimigos mais fortes e drops melhores.\nSeu nível: ' + state.level }];
+  const rows = [{ head: true, text: '🗺️ ' + ACTS.length + ' mapas: cada um tem inimigos mais fortes, drops melhores e mais XP por abate.\nSeu nível: ' + state.level + '  •  XP: ' + Math.floor(state.xp) + '/' + xpNeed() }];
+  const xpAt = (zl) => { const d = state.level - zl, f = d < -3 ? 1.35 : d <= 4 ? 1 : Math.max(0.15, 1 - (d - 4) * 0.09); return Math.max(1, (6 + zl * 2.5) / 12) * f; };
   ACTS.forEach((a, i) => {
-    const r = REALMS[a.realm], lv = FOREST_LV[i], open = i <= state.maxAct, here = !state.endless && state.act === i;
+    const r = REALMS[a.realm], lv = FOREST_LV[i], open = i <= state.maxAct, here = !state.endless && state.act === i, ti = tierOf(i), xk = xpAt(lv + 2);
     rows.push({
-      text: (open ? '' : '🔒 ') + (i + 1) + '. ' + r.icon + ' ' + a.name + (here ? '   ← você está aqui' : '') + '\nInimigos Nv.' + lv + '–' + (lv + 4) + (state.level + 3 < lv ? '   ⚠ Perigoso' : '') + '\nDrops: equipamento T' + (i + 1) + ' • ' + MATS[i].icon + ' ' + MATS[i].name,
+      text: (open ? '' : '🔒 ') + (i + 1) + '. ' + r.icon + ' ' + a.name + (here ? '   ← você está aqui' : '') + '\nInimigos Nv.' + lv + '–' + (lv + 4) + (state.level + 3 < lv ? '   ⚠ Perigoso' : state.level > lv + 8 ? '   (fácil: pouco XP)' : '') + '\nXP por abate: ' + (Math.round(xk * 10) / 10) + '  •  Chefe: ' + Math.round(xk * 25) + ' XP\nDrops: equipamento T' + (ti + 1) + ' • ' + MATS[ti].icon + ' ' + MATS[ti].name,
       btn: open ? (here ? 'AQUI' : 'IR') : '🔒', enabled: open && !here, fn: () => travelTo(i),
     });
   });
-  if (state.storyDone) rows.push({ text: '♾ Aventura Infinita\nInimigos Nv.36+ • os melhores drops', btn: state.endless ? 'AQUI' : 'IR', enabled: !state.endless, fn: () => travelTo('endless') });
+  if (state.storyDone || state.infOk) rows.push({ text: '♾ Aventura Infinita\nPassa por todos os ' + ACTS.length + ' reinos • Inimigos Nv.' + (FOREST_LV[ACTS.length - 1] + 6) + '+ • os melhores drops\nXP por abate: ' + (Math.round(xpAt(FOREST_LV[ACTS.length - 1] + 8) * 10) / 10), btn: state.endless ? 'AQUI' : 'IR', enabled: !state.endless, fn: () => travelTo('endless') });
   openPanel('🗺️ MAPA', rows);
 }
 
 function travelTo(i) {
   closePanel(); clearEnemies();
-  if (i === 'endless') { state.endless = true; state.act = ACTS.length - 1; } else { state.endless = false; state.act = i; }
   state.stage = 1; state.stageKills = 0;
+  if (i === 'endless') { state.endless = true; state.act = endlessAct(); } else { state.endless = false; state.act = i; }
   if (inCity) setCityMode(false); else { applyAct(); player.position.set(0, 0, 0); pet.position.copy(player.position); }
   save(state); refreshHud(); toast('🗺️ ' + (i === 'endless' ? 'Aventura Infinita' : ACTS[i].name));
 }
@@ -2954,7 +2995,7 @@ if (qs.has('city')) setCityMode(true);
 if (qs.has('at')) { const [ax, az] = qs.get('at').split(',').map(Number); if (!qs.has('city')) setCityMode(true); player.position.set(ax, 0, az); syncCam(); }
 if (qs.has('night')) dayT = +qs.get('night') || 0;
 if (qs.has('quests')) setTimeout(() => openQuests(), 1500);
-if (qs.has('dbg')) window.__g = { editCharacter, get remotes() { return remotes; }, get net() { return net; }, curW, setDay: (v, w) => { dayT = v; if (w) weather = w; weatherLeft = 1e6; }, craft, enterCave, caveTick, get cave() { return cave; }, state, useSkill, castSkill, get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
+if (qs.has('dbg')) window.__g = { damageEnemy, enemies, editCharacter, get remotes() { return remotes; }, get net() { return net; }, curW, setDay: (v, w) => { dayT = v; if (w) weather = w; weatherLeft = 1e6; }, craft, enterCave, caveTick, get cave() { return cave; }, state, useSkill, castSkill, get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
 if (qs.get('pos')) { const iv = setInterval(() => { if (!gameStarted) return; clearInterval(iv); setTimeout(() => { const [px, pz] = qs.get('pos').split(',').map(Number); if (inCity) setCityMode(false); player.position.set(px || 0, 0, pz || 0); playerGy = walkY(px || 0, pz || 0); }, 600); }, 300); }
 if (qs.get('cam') === 'low') { camMode = 'low'; $('camb').querySelector('small').textContent = 'IMERSIVA'; }
 if (qs.has('yaw')) { camYaw = camYawT = +qs.get('yaw'); }
@@ -3233,7 +3274,7 @@ function runSelfTest() {
           for (const k in w) if (w[k] > 0) { if (!ETYPES[k]) throw new Error('tipo inexistente ' + k); const e = spawnEnemy(false, null, k); if (!e || !e.mesh) throw new Error('nao nasceu ' + k); n++; } }
         if (new Set(seen.slice(0, 4)).size < 4) throw new Error('estagios 1-4 repetem monstros em ' + realm);
         if (seen[0].includes('crab') || !/minion/.test(seen[0])) throw new Error('estagio 1 nao e de esqueletos em ' + realm); }
-      clearEnemies(); state.act = act0; state.stage = st0; applyAct(); out.push('hordas por estagio (6 reinos x 5 estagios, ' + n + ' monstros): ok'); }
+      clearEnemies(); state.act = act0; state.stage = st0; applyAct(); out.push('hordas por estagio (' + ACTS.length + ' reinos x 5 estagios, ' + n + ' monstros): ok'); }
 
     // casa ampliada e andares
     { const pl = PLOTS.find(x => x.kind === 'house'); state.homes[pl.id] = { furn: [], sz: 0, fls: 1 }; enterHome(pl); const hw0 = homeRoom.hw; leaveHome();

@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { kkMesh } from './kk.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { REALMS, baseRealm, groundRealm } from './data.js';
 
 export const BIOME_INFO = {
   mares:    { title: 'Mar das Marés',    sub: 'praias, palmeiras, corais e poças de maré', fog: [60, 300], mtn: 0x6fb7d9, cap: 0xffffff, cloud: 0xffffff, hemi: 0xa8e6ff },
@@ -12,9 +13,24 @@ export const BIOME_INFO = {
   vazio:    { title: 'O Vazio',          sub: 'cacos flutuantes e pilares quebrados', fog: [25, 110], mtn: 0x1a1a26, cap: 0x4a3a6a, cloud: 0x3a3050, hemi: 0x6a5a8a },
 };
 
+// reinos novos: herdam névoa/atmosfera do reino-base e ganham título, subtítulo e cores próprias
+const VAR_SUB = {
+  gelo: 'cristais de gelo, ventos cortantes e lobos brancos', carmesim: 'dunas vermelhas, cactos e escorpiões', pantano: 'lodo, névoa verde e criaturas venenosas',
+  coral: 'corais que cantam e piscinas rosadas', vulcao: 'rios de lava, pedra negra e brasas', catacumba: 'túmulos reais e espíritos inquietos',
+  outono: 'folhas douradas e cogumelos de outono', esmeralda: 'cristais verdes e magia viva', solar: 'templos dourados sob o sol eterno',
+  tempestade: 'raios, nuvens negras e pedras flutuantes', abismo: 'ruínas afundadas e algas luminosas', fantasma: 'árvores com rosto e vozes sem dono',
+  obsidiana: 'vidro vulcânico e a muralha do Esquecimento', trono: 'o trono de sombras do fim de todas as histórias',
+};
+Object.keys(REALMS).forEach((k) => {
+  const r = REALMS[k]; if (!r.base) return;
+  const t = new THREE.Color(r.tint);
+  BIOME_INFO[k] = Object.assign({}, BIOME_INFO[r.base], { title: r.name, sub: VAR_SUB[k] || BIOME_INFO[r.base].sub, mtn: t.clone().multiplyScalar(0.55).getHex(), cap: t.clone().lerp(new THREE.Color(0xffffff), 0.6).getHex(), cloud: new THREE.Color(r.sky[2]).getHex(), hemi: t.clone().multiplyScalar(0.8).getHex() });
+});
+
 // ---- texturas de chão ----
 const texCache = {};
-export function groundTex(realm) {
+export function groundTex(realmKey) {
+  const realm = groundRealm(realmKey);
   if (texCache[realm]) return texCache[realm];
   const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
   const P = {
@@ -69,7 +85,8 @@ const std = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, r
 const glow = (c, i) => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: i || 0.8 });
 
 // ctx: { groundH, riverDepth, trailX, WORLD, rand }
-export function makeBiome(realm, ctx) {
+export function makeBiome(realmKey, ctx) {
+  const realm = baseRealm(realmKey);
   const { groundH, riverDepth, trailX, WORLD } = ctx, R = WORLD + 10, grp = new THREE.Group(), d = new THREE.Object3D();
   const ok = (x, z, wet) => Math.hypot(x, z) > 8 && Math.abs(x - trailX(z)) > 3 && (wet || riverDepth(x, z) < 0.02);
   // espalha n instancias; place(i,x,z) devolve {y, sx, sy, sz, ry, col}

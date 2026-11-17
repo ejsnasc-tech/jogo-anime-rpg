@@ -1,5 +1,5 @@
 // Ofício: forjar equipamentos, lapidar/fundir gemas e encaixá-las nos itens.
-import { GEMS, GEM_KEYS, gemFmt, MATS, RAR, MAX_PLUS, upgradeCost, itemFmt } from './items.js';
+import { GEMS, GEM_KEYS, gemFmt, MATS, RAR, MAX_PLUS, MAX_TIER, MAP_COUNT, tierOf, upgradeCost, itemFmt } from './items.js';
 
 export function initCraft(c) {
   const { state, toast, openPanel, save, refreshHud, itemLine, isEquipped, giveItem, newItem, SLOT_ORDER, slotLabel, slotIcon, mainCls, track, recalcHp } = c;
@@ -9,7 +9,7 @@ export function initCraft(c) {
   const add = (t, l, n) => { bag()[key(t, l)] = Math.max(0, have(t, l) + (n || 1)); };
   const bagList = () => Object.keys(bag()).filter(k => bag()[k] > 0).map(k => { const [t, l] = k.split(':'); return { t, l: +l, n: bag()[k] }; }).sort((a, b) => a.t < b.t ? -1 : a.t > b.t ? 1 : a.l - b.l);
   const giveGem = (t, l) => { t = t || GEM_KEYS[Math.floor(Math.random() * GEM_KEYS.length)]; l = l || 1; add(t, l, 1); toast('💎 Gema: ' + gemFmt(t, l)); };
-  const maxTier = () => Math.min(5, state.maxAct);
+  const maxTier = () => tierOf(state.maxAct);
 
   const menu = (back) => () => openCraft(back);
   function openCraft(back) {
@@ -22,7 +22,7 @@ export function initCraft(c) {
 
   // ---- melhorar equipamento: escolhe a peça que você usa e vê o que precisa ----
   const MAXLV = 10;                                            // níveis 1..10 (tier 0..9)
-  const matIdx = (it) => Math.min(5, it.tier);
+  const matIdx = (it) => Math.min(MAX_TIER, it.tier);
   const evoNeed = (it) => (it.tier < 2 ? 3 : it.tier < 6 ? 4 : 5);   // quantas peças iguais (contando a sua)
   const evoCost = (it) => ({ gold: Math.round(150 * Math.pow(it.tier + 1, 1.45)), mats: 6 + it.tier * 2, ky: 12 + it.tier * 10 });
   const refineKy = (c) => Math.max(5, Math.round(c.gold / 40) + c.mat * 2);
@@ -105,7 +105,7 @@ export function initCraft(c) {
 
   // ---- gemas ----
   function openGems(back) {
-    const tier = Math.min(5, state.act), rows = [{ text: '◀ Voltar', btn: 'VOLTAR', fn: menu(back) }];
+    const tier = tierOf(state.endless ? MAP_COUNT - 1 : state.act), rows = [{ text: '◀ Voltar', btn: 'VOLTAR', fn: menu(back) }];
     rows.push({ head: true, text: '🪙' + state.gold + '   ' + MATS[tier].icon + (state.mats[tier] || 0) });
     rows.push({ text: '✨ Lapidar uma gema aleatória (nível 1)\nCusto: 🪙250 + ' + MATS[tier].icon + '5', btn: 'LAPIDAR', enabled: state.gold >= 250 && (state.mats[tier] || 0) >= 5, fn: () => {
       state.gold -= 250; state.mats[tier] -= 5; giveGem(null, 1); track('craft'); save(state); refreshHud(); openGems(back);
