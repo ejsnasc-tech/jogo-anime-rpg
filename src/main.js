@@ -555,6 +555,8 @@ function xpPerKill(e) {
 }
 // dificuldade dos mapas novos cresce mais devagar que o número do mapa (o jogador também fica mais forte)
 const scaleAct = () => { const a = state.endless ? ACTS.length - 1 : state.act; return a <= 5 ? a : 5 + (a - 5) * 0.4; };
+// chefes duravam 5 a 18 s no simulador: vida extra (x1.8 nos 6 primeiros mapas, de x2.8 a x6.7 nos novos)
+const bossMul = () => { const a = state.endless ? ACTS.length - 1 : state.act; return a <= 5 ? 1.8 : 2.5 + (a - 5) * 0.3; };
 const endlessAct = () => (6 + Math.floor(state.stageKills / 150)) % ACTS.length;
 const tierNow = () => tierOf(state.endless ? ACTS.length - 1 : state.act);
 const quota = () => (8 + state.stage * 3 + Math.round(scaleAct() * 2)) * rmN;
@@ -1515,8 +1517,9 @@ function spawnEnemy(boss, info, forceType, at) {
   // o mundo acompanha o jogador: passar do nível da zona deixa os bichos mais fortes
   const over = Math.max(0, state.level - lv), catchup = 1 + over * 0.1, catchD = 1 + over * 0.05;
   const base = (18 + lv * 7) * (1 + scaleAct() * 0.3) * 2.4 * catchup;
-  const hpv = boss ? base * 14 * (state.endless ? 1.5 : 1) * 1.3 * rmN : base * T0.hp;
-  const dmgBase = ((6 + lv * 0.8) * (1 + scaleAct() * 0.12)) * 1.6 * catchD;
+  const hpv = boss ? base * 14 * (state.endless ? 1.5 : 1) * 1.3 * rmN * bossMul() : base * T0.hp;
+  const dmgLv = lv <= 36 ? lv : 36 + (lv - 36) * 0.45;   // acima do nivel 36 o dano dos monstros cresce mais devagar (a vida do jogador nao acompanha)
+  const dmgBase = ((6 + dmgLv * 0.8) * (1 + scaleAct() * 0.12)) * 1.6 * catchD;
   const e = { nid: ++nidSeq, mesh, hp: hpv, maxHp: hpv, speed: boss ? 1.5 * (BS ? BS.spd / 1.2 : 1) : (1.9 + Math.random() * 1.0) * T0.spd, boss: !!boss, bk: boss ? bossRealm() : null, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? (BS ? BS.r : 1.4) : T0.r, t: Math.random() * 10, dmg: dmgBase * (boss ? 1.6 : T0.dmg), stun: 0, slow: 0, flash: 0, ranged: boss ? null : T0.ranged || null, res: boss ? null : T0.res || null, shotAt: T + 1 + Math.random() * 2, beh: boss ? (BS ? 'boss' : null) : T0.beh || null, cdAt: T + 1 + Math.random() * 3 };
   if (dg) { e.hp = e.maxHp = e.hp * 1.35; e.dmg *= 1.3; }
   if (!boss && !forceType && Math.random() < 0.04 + scaleAct() * 0.01 + (night > 0.55 ? 0.03 : 0) + (dg ? 0.12 : 0)) {
@@ -2995,7 +2998,7 @@ if (qs.has('city')) setCityMode(true);
 if (qs.has('at')) { const [ax, az] = qs.get('at').split(',').map(Number); if (!qs.has('city')) setCityMode(true); player.position.set(ax, 0, az); syncCam(); }
 if (qs.has('night')) dayT = +qs.get('night') || 0;
 if (qs.has('quests')) setTimeout(() => openQuests(), 1500);
-if (qs.has('dbg')) window.__g = { damageEnemy, enemies, editCharacter, get remotes() { return remotes; }, get net() { return net; }, curW, setDay: (v, w) => { dayT = v; if (w) weather = w; weatherLeft = 1e6; }, craft, enterCave, caveTick, get cave() { return cave; }, state, useSkill, castSkill, get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
+if (qs.has('dbg')) window.__g = { update, clearEnemies, applyAct, setCityMode, atkPower, zoneLv, xpNeed, calcMaxHp, recalcHp, scaleAct, nearestEnemy, get hp() { return hp; }, set hp(v) { hp = v; }, get maxHp() { return maxHp; }, get inCity() { return inCity; }, get bossRef() { return bossRef; }, get hero() { return hero; }, damageEnemy, enemies, editCharacter, get remotes() { return remotes; }, get net() { return net; }, curW, setDay: (v, w) => { dayT = v; if (w) weather = w; weatherLeft = 1e6; }, craft, enterCave, caveTick, get cave() { return cave; }, state, useSkill, castSkill, get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
 if (qs.get('pos')) { const iv = setInterval(() => { if (!gameStarted) return; clearInterval(iv); setTimeout(() => { const [px, pz] = qs.get('pos').split(',').map(Number); if (inCity) setCityMode(false); player.position.set(px || 0, 0, pz || 0); playerGy = walkY(px || 0, pz || 0); }, 600); }, 300); }
 if (qs.get('cam') === 'low') { camMode = 'low'; $('camb').querySelector('small').textContent = 'IMERSIVA'; }
 if (qs.has('yaw')) { camYaw = camYawT = +qs.get('yaw'); }
