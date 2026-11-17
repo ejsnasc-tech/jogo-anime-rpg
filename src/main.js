@@ -10,7 +10,7 @@ import { ULT_LV, ULT_EVO, CLASSES, CLASS_MODELS, REALMS, baseRealm, groundRealm,
 import { std, metal, glow, shadowAll } from './models.js';
 import { makeHero, makeSkeleton, animateHero, playOnce, preloadModels } from './actors.js';
 import { openCreator, CLASS_LIST } from './creator.js';
-import { SKILLS, SKILL_MAX, skillById, rollChoices } from './skills.js';
+import { SKILLS, SKILL_MAX, skillById, rollChoices, skillsOf, PERIOD_FX, FX_IDS, fxDefOf, migrateSkills } from './skills.js';
 import { initCraft } from './craft.js';
 import { initShop } from './shop.js';
 import { itemGemSum, SLOTS, SLOT_ORDER, EQUIP_KEYS, KINDS, WEAPON_KIND, OFF_KIND, RAR, MATS, FOREST_LV, MAX_PLUS, MAX_TIER, tierOf, newItem, itemValue, itemStat, itemIcon, itemFmt, statFmt, itemName, itemLine, sellPrice, buyPrice, upgradeCost, rollDrop, migrateItems } from './items.js';
@@ -67,6 +67,13 @@ function load() {
   if (!s.v20) {
     s.v20 = 1;
     if (s.endless || s.storyDone) { s.infOk = true; s.storyDone = false; s.maxAct = Math.max(s.maxAct, 6); if (s.endless) { s.endless = false; s.act = 6; s.stage = 1; s.stageKills = 0; } }
+  }
+  // skills por classe: ids genericos antigos viram a skill equivalente da classe; o que nao existe na classe volta como ponto de evolucao
+  if (!s.v21) {
+    s.v21 = 1;
+    const mig = (sk0, cls) => { const n0 = Object.values(sk0 || {}).reduce((a, b) => a + (b | 0), 0), o = migrateSkills(sk0, cls); return { o, lost: n0 - Object.values(o).reduce((a, b) => a + b, 0) }; };
+    const m0 = mig(s.skills, (s.custom && s.custom.cls) || 'warrior'); s.skills = m0.o; s.skillPts = (s.skillPts || 0) + Math.max(0, m0.lost);
+    Object.keys(s.profs || {}).forEach(c => { const p = s.profs[c]; if (!p) return; const m = mig(p.skills, c); p.skills = m.o; p.skillPts = (p.skillPts || 0) + Math.max(0, m.lost); });
   }
   const ids = HEROES.map(h => h.id);
   if (s.active && !s.team.length) s.team = [s.active];
@@ -511,7 +518,8 @@ const bulletGeo = new THREE.SphereGeometry(0.2, 10, 10);
 let T = 0;                                   // tempo de jogo em segundos (pausa junto com o jogo)
 let activeIdx = 0, hero = HEROES.find(h => h.id === state.team[0]);
 let player = null, facing = 0;
-const sk = (id) => state.skills[id] || 0;
+// sk('might') soma o nível das skills da classe com esse efeito; sk('w_rage') devolve o nível daquela skill
+const sk = (k) => { const a = FX_IDS[k], s = state.skills; if (!a) return s[k] || 0; let v = 0; for (let i = 0; i < a.length; i++) v += s[a[i]] || 0; return v; };
 const petPerk = (k) => (petDef && petDef.perk && petDef.perk[k]) || 0;
 const equippedAt = (key) => state.items.find(i => i.uid === state.equip[key]);
 const isEquipped = (it) => EQUIP_KEYS.some(k => state.equip[k] === it.uid);
@@ -1939,32 +1947,35 @@ const orbMeshes = [];
 let auraRing = null;
 
 const skBtn = {};
+let skBarCls = '';
 function buildSkillBar() {
-  const box = $('skillbar'); box.innerHTML = '';
-  SKILLS.forEach(sd => {
-    const b = document.createElement('button'); b.className = 'sk ' + sd.kind;
+  const box = $('skillbar'); box.innerHTML = ''; skBarCls = mainCls();
+  Object.keys(skBtn).forEach(k => delete skBtn[k]);
+  skillsOf(skBarCls).forEach(sd => {
+    const b = document.createElement('button'); b.className = 'sk ' + sd.kind; b.title = sd.name;
     b.innerHTML = '<i class="cd"></i><span class="ic">' + sd.icon + '</span><b class="lv"></b>';
     b.addEventListener('pointerdown', (e) => { e.stopPropagation(); skillTap(sd.id); });
     box.appendChild(b); skBtn[sd.id] = b;
   });
 }
 function renderSkillChips() {
-  if (!skBtn.lightning) buildSkillBar();
-  SKILLS.forEach(sd => { const b = skBtn[sd.id], l = sk(sd.id); b.classList.toggle('on', l > 0); b.querySelector('.lv').textContent = l || ''; });
+  if (skBarCls !== mainCls()) buildSkillBar();
+  skillsOf(skBarCls).forEach(sd => { const b = skBtn[sd.id], l = sk(sd.id); b.classList.toggle('on', l > 0); b.querySelector('.lv').textContent = l || ''; });
 }
 function updateSkillCd() {
-  for (const id of ['lightning', 'nova', 'frost']) {
-    const l = sk(id), b = skBtn[id]; if (!b) continue;
-    b.querySelector('.cd').style.height = (l && nx[id] > T ? Math.min(100, (nx[id] - T) / PERIOD[id](l) * 100) : 0) + '%';
+  for (const sd of skillsOf(mainCls())) {
+    if (!PERIOD_FX[sd.fx]) continue;
+    const l = sk(sd.id), b = skBtn[sd.id]; if (!b) continue;
+    b.querySelector('.cd').style.height = (l && nx[sd.id] > T ? Math.min(100, (nx[sd.id] - T) / PERIOD_FX[sd.fx](l) * 100) : 0) + '%';
   }
 }
 function skillTap(id) {
   if (isPaused()) return;
   const sd = skillById(id), l = sk(id);
   if (!l) { toast(sd.icon + ' ' + sd.name + ' — ainda não aprendida. Suba de nível para escolher!'); return; }
-  if (nx[id] !== undefined) {
-    if (T < nx[id]) { toast(sd.icon + ' ' + sd.name + ' recarregando: ' + Math.ceil(nx[id] - T) + 's'); return; }
-    if (castSkill(id)) nx[id] = T + PERIOD[id](l); else toast('Sem inimigos por perto');
+  if (PERIOD_FX[sd.fx]) {
+    if (T < (nx[id] || 0)) { toast(sd.icon + ' ' + sd.name + ' recarregando: ' + Math.ceil(nx[id] - T) + 's'); return; }
+    if (castSkill(sd)) nx[id] = T + PERIOD_FX[sd.fx](l); else toast(sd.fx === 'pulse' ? 'Sua vida já está cheia' : 'Sem inimigos por perto');
     return;
   }
   toast(sd.icon + ' ' + sd.name + ' Nv.' + l + ' — ' + sd.desc(l));
@@ -1987,53 +1998,84 @@ function openSkillPicker() {
 
 function pickSkill(id) {
   state.skills[id] = Math.min(SKILL_MAX, sk(id) + 1); state.skillPts = Math.max(0, state.skillPts - 1);
-  if (id === 'vigor') { maxHp = calcMaxHp(); hp = Math.min(maxHp, hp + 25); }
+  if (skillById(id).fx === 'vigor') { maxHp = calcMaxHp(); hp = Math.min(maxHp, hp + 25); }
   picking = false; closePanel();
   const sd = skillById(id); toast(sd.icon + ' ' + sd.name + ' Nv.' + state.skills[id] + '!');
   renderSkillChips(); save(state);
 }
 
-const nx = { lightning: 2, nova: 4, frost: 5 };
-const PERIOD = { lightning: (l) => 3.6 - l * 0.4, nova: (l) => 7 - l * 0.7, frost: (l) => 8 - l * 0.8 };
-function castSkill(id) {
-  const l = sk(id), p = player.position;
-  if (id === 'lightning') {
-    const tg = enemies.filter(e => dist2(e.mesh.position, p) < 16).sort((a, b) => dist2(a.mesh.position, p) - dist2(b.mesh.position, p)).slice(0, l + 1);
-    if (!tg.length) return false;
-    tg.forEach(e => {
-      vfx.bolt(e.mesh.position, 0xfff27a, 18);
-      ringFx(e.mesh.position, 0xfff27a, 1.8, 0.3); damageEnemy(e, Math.round(atkPower() * (1.2 + l * 0.25)));
-    });
+const nx = {};
+function castSkill(sd) {
+  const l = sk(sd.id), p = player.position, fx = sd.fx, col = sd.color || 0xffffff, atk = atkPower();
+  const near = (r2, n) => enemies.filter(e => dist2(e.mesh.position, p) < r2).sort((a, b) => dist2(a.mesh.position, p) - dist2(b.mesh.position, p)).slice(0, n);
+  if (fx === 'pulse') { if (hp >= maxHp * 0.97) return false; heal(maxHp * (0.08 + l * 0.04)); ringFx(p, col, 3.5, 0.6); vfx.rise(p, col, 30, 3, 3.5, 0.5); return true; }
+  if (!enemies.length) return false;
+  if (fx === 'lightning') {
+    const tg = near(16, l + 1); if (!tg.length) return false;
+    tg.forEach(e => { vfx.bolt(e.mesh.position, col, 18); ringFx(e.mesh.position, col, 1.8, 0.3); damageEnemy(e, Math.round(atk * (1.2 + l * 0.25))); });
     return true;
   }
-  if (!enemies.length) return false;
-  if (id === 'nova') { vfx.shock(p, 0xff8a3a, 4.5 + l * 0.7, 0.5); explode(p, 3.5 + l * 0.7, Math.round(atkPower() * (1.4 + l * 0.3)), 0xff6a2f); return true; }
-  if (id === 'frost') {
-    const r = 5 + l * 0.6; ringFx(p, 0x7fdcff, r, 0.5); vfx.burst(p, { color: 0xc4f4ff, n: 44, speed: r * 1.7, up: 0.3, size: 0.55, life: 0.9, grav: 2 }); vfx.flash(p, 0x9fe8ff, r * 1.8, 0.4, 0.8);
-    enemies.slice().forEach(e => { if (dist2(e.mesh.position, p) < r) { e.slow = 2.5 + l * 0.4; damageEnemy(e, Math.round(atkPower() * (0.8 + l * 0.2))); } });
+  if (fx === 'volley') {
+    const tg = near(100, l + 2); if (!tg.length) return false;
+    tg.forEach(e => { vfx.bolt(e.mesh.position, col, 14); ringFx(e.mesh.position, col, 1.3, 0.25); damageEnemy(e, Math.round(atk * (0.9 + l * 0.2))); });
+    return true;
+  }
+  if (fx === 'nova') { vfx.shock(p, col, 4.5 + l * 0.7, 0.5); explode(p, 3.5 + l * 0.7, Math.round(atk * (1.4 + l * 0.3)), col); return true; }
+  if (fx === 'frost') {
+    const r = 5 + l * 0.6; ringFx(p, col, r, 0.5); vfx.burst(p, { color: col, n: 44, speed: r * 1.7, up: 0.3, size: 0.55, life: 0.9, grav: 2 }); vfx.flash(p, col, r * 1.8, 0.4, 0.8);
+    enemies.slice().forEach(e => { if (dist2(e.mesh.position, p) < r) { e.slow = 2.5 + l * 0.4; damageEnemy(e, Math.round(atk * (0.8 + l * 0.2))); } });
+    return true;
+  }
+  if (fx === 'slam') {
+    const r = 4 + l * 0.5; ringFx(p, col, r, 0.5); vfx.shock(p, col, r + 1, 0.5); shake = Math.max(shake, 0.25);
+    enemies.slice().forEach(e => { if (dist2(e.mesh.position, p) < r) { e.stun = Math.max(e.stun || 0, 1 + l * 0.2); damageEnemy(e, Math.round(atk * (1.3 + l * 0.3))); } });
+    return true;
+  }
+  if (fx === 'meteor') {
+    const tg = near(144, 1); if (!tg.length) return false;
+    const at = tg[0].mesh.position.clone(), r = 3 + l * 0.4, dmg = Math.round(atk * (2 + l * 0.4));
+    ringFx(at, col, r, 0.8);
+    timers.push({ at: T + 0.8, fn: () => { vfx.shock(at, col, r + 1, 0.5); explode(at, r, dmg, col); } });
+    return true;
+  }
+  if (fx === 'ward') { if (shield > 0) return false; shield = Math.round(maxHp * (0.1 + l * 0.05)); shieldUntil = T + 6; ringFx(p, col, 2.5, 0.6); vfx.column(p, col, 8, 3, 0.7); return true; }
+  if (fx === 'shadow') {
+    const tg = near(81, 1); if (!tg.length) return false;
+    const e = tg[0], ep = e.mesh.position, a = Math.atan2(p.z - ep.z, p.x - ep.x);
+    vfx.burst(p, { color: col, n: 24, speed: 5, up: 0.5, size: 0.5, life: 0.6, grav: 1 });
+    player.position.set(ep.x + Math.cos(a) * 1.2, p.y, ep.z + Math.sin(a) * 1.2);
+    vfx.burst(player.position, { color: col, n: 24, speed: 5, up: 0.5, size: 0.5, life: 0.6, grav: 1 });
+    invuln = Math.max(invuln, T + 0.5 + l * 0.1); damageEnemy(e, Math.round(atk * (1.8 + l * 0.3)));
     return true;
   }
   return false;
 }
 function runSkills(dt) {
-  const p = player.position;
-  for (const id of ['lightning', 'nova', 'frost']) { const l = sk(id); if (l && T >= nx[id] && castSkill(id)) nx[id] = T + PERIOD[id](l); }
+  const p = player.position, cls = mainCls(); if (skBarCls !== cls) renderSkillChips();
+  for (const sd of skillsOf(cls)) {
+    if (!PERIOD_FX[sd.fx]) continue;
+    const l = sk(sd.id); if (!l) continue;
+    if (nx[sd.id] === undefined) nx[sd.id] = T + 2 + Math.random() * 3;
+    if (T >= nx[sd.id] && castSkill(sd)) nx[sd.id] = T + PERIOD_FX[sd.fx](l);
+  }
   updateSkillCd();
-  const A = sk('aura');
-  if (A) {
+  const A = sk('aura'), ad = A ? fxDefOf(cls, 'aura') : null;
+  if (A && ad) {
     const r = 2.2 + A * 0.4;
-    if (!auraRing) { auraRing = new THREE.Mesh(new THREE.RingGeometry(0.94, 1, 48), new THREE.MeshBasicMaterial({ color: 0x9be37b, transparent: true, opacity: 0.55, side: THREE.DoubleSide })); auraRing.rotation.x = -Math.PI / 2; scene.add(auraRing); }
+    if (!auraRing) { auraRing = new THREE.Mesh(new THREE.RingGeometry(0.94, 1, 48), new THREE.MeshBasicMaterial({ color: ad.color, transparent: true, opacity: 0.55, side: THREE.DoubleSide })); auraRing.rotation.x = -Math.PI / 2; scene.add(auraRing); }
+    auraRing.material.color.set(ad.color);
     auraRing.position.set(p.x, 0.12, p.z); auraRing.scale.setScalar(r);
     if (T >= nextAura) { nextAura = T + 0.5; const dmg = Math.round(atkPower() * (0.15 + A * 0.07)); enemies.slice().forEach(e => { if (dist2(e.mesh.position, p) < r + e.radius * 0.5) damageEnemy(e, dmg); }); }
   } else if (auraRing) { scene.remove(auraRing); auraRing = null; }
-  const O = sk('orbs');
+  const O = sk('orbs'), od = O ? fxDefOf(cls, 'orbs') : null, oc = od ? od.color : 0xb28dff;
   orbMeshes.forEach((m, i) => { m.visible = O > 0 && i < O + 1; });
-  if (O) {
-    while (orbMeshes.length < O + 1) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 10), new THREE.MeshBasicMaterial({ color: 0xb28dff })); m.add(vfx.glowSprite(0xb28dff, 1.9)); scene.add(m); orbMeshes.push(m); m.visible = true; }
+  if (O && od) {
+    while (orbMeshes.length < O + 1) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 10), new THREE.MeshBasicMaterial({ color: oc })); m.userData.g = vfx.glowSprite(oc, 1.9); m.add(m.userData.g); scene.add(m); orbMeshes.push(m); m.visible = true; }
+    orbMeshes.forEach(m => { if (m.userData.c !== oc) { m.userData.c = oc; m.material.color.set(oc); if (m.userData.g && m.userData.g.material) m.userData.g.material.color.set(oc); } });
     orbAngle += dt * 2.8; const n = O + 1;
     orbMeshes.forEach((m, i) => {
       if (i >= n) return;
-      const a = orbAngle + i / n * Math.PI * 2; m.position.set(p.x + Math.cos(a) * 2.5, 1.2, p.z + Math.sin(a) * 2.5); vfx.trail(m.position, 0xb28dff, 0.5);
+      const a = orbAngle + i / n * Math.PI * 2; m.position.set(p.x + Math.cos(a) * 2.5, 1.2, p.z + Math.sin(a) * 2.5); vfx.trail(m.position, oc, 0.5);
       enemies.slice().forEach(e => { if (T >= (e.orbCd || 0) && Math.hypot(e.mesh.position.x - m.position.x, e.mesh.position.z - m.position.z) < e.radius + 0.6) { e.orbCd = T + 0.5; damageEnemy(e, Math.round(atkPower() * 0.6)); } });
     });
   }
@@ -3119,13 +3161,26 @@ function runSelfTest() {
     state.team = ['kaito', 'ren', 'thalia']; activeIdx = 0; setHero(); switchReady = 0; switchHero(2); switchReady = 0; switchHero(1);
     out.push('troca de herois: ok (ativo=' + hero.id + ')');
     // skills de nível
-    state.skills = {}; SKILLS.forEach(x => { state.skills[x.id] = SKILL_MAX; }); renderSkillChips();
-    state.team = ['kaito']; activeIdx = 0; setHero(); player.position.set(0, 0, 0); clearEnemies(); maxHp = calcMaxHp(); hp = maxHp;
-    for (let i = 0; i < 10; i++) spawnEnemy(false);
-    enemies.forEach((e, i) => e.mesh.position.set(Math.cos(i) * 4, 0, Math.sin(i) * 4));
-    for (let i = 0; i < 160; i++) { update(0.05); if (enemies.length < 4) for (let k = 0; k < 6; k++) { const e = spawnEnemy(false); e.mesh.position.set(Math.cos(k) * 4, 0, Math.sin(k) * 4); } }
-    const ch = rollChoices({}); if (ch.length !== 3) throw new Error('rollChoices');
-    out.push('skills (' + SKILLS.length + ', todas Nv.5): ok  maxHp=' + maxHp);
+    state.team = ['kaito']; activeIdx = 0; setHero();
+    { const cls0 = state.custom && state.custom.cls, hcls0 = hero.cls, seen = new Set(), names = new Set();
+      for (const c of Object.keys(CLASSES)) {
+        const list = skillsOf(c); if (list.length !== 15 || list.filter(x => x.kind === 'active').length !== 5) throw new Error('skills da classe ' + c + ': ' + list.length);
+        list.forEach(x => { if (seen.has(x.id)) throw new Error('id repetido ' + x.id); seen.add(x.id); names.add(c + x.name); });
+        state.custom = Object.assign({}, state.custom, { cls: c }); hero.cls = c;
+        state.skills = {}; list.forEach(x => { state.skills[x.id] = SKILL_MAX; }); renderSkillChips();
+        player.position.set(0, 0, 0); clearEnemies(); maxHp = calcMaxHp(); hp = maxHp * 0.5; nx.__t = 1;
+        for (let i = 0; i < 10; i++) spawnEnemy(false);
+        enemies.forEach((e, i) => e.mesh.position.set(Math.cos(i) * 4, 0, Math.sin(i) * 4));
+        for (let i = 0; i < 160; i++) { update(0.05); if (enemies.length < 4) for (let k = 0; k < 6; k++) { const e = spawnEnemy(false); e.mesh.position.set(Math.cos(k) * 4, 0, Math.sin(k) * 4); } }
+        list.filter(x => x.kind === 'active').forEach(x => { nx[x.id] = 0; skillTap(x.id); });
+        const ch = rollChoices({}, 3, c); if (ch.length !== 3 || ch.some(x => !list.includes(x))) throw new Error('rollChoices ' + c);
+      }
+      state.custom = Object.assign({}, state.custom, { cls: cls0 }); hero.cls = hcls0;
+      // migracao de save antigo (ids genericos -> skills da classe)
+      const mg = migrateSkills({ might: 2, aura: 3, lightning: 1, bulwark: 4 }, 'warrior');
+      if (mg.w_rage !== 2 || mg.w_iron !== 3 || mg.w_fort !== 4 || mg.lightning || Object.keys(mg).length !== 3) throw new Error('migrateSkills ' + JSON.stringify(mg));
+      out.push('skills por classe (' + Object.keys(CLASSES).length + ' classes x 15, todas Nv.5, ativas disparadas): ok  maxHp=' + maxHp);
+    }
     state.skills = {}; renderSkillChips();
     // cidade, equipamentos, drops e mapa
     state.items = []; state.equip = {}; state.mats = {}; state.gold = 1e6; state.maxAct = 5; state.act = 0; state.endless = false; state.stage = 1;
@@ -3231,7 +3286,7 @@ function runSelfTest() {
     out.push('missoes/conquistas/login/eventos/clima/baus/emotes: ok (conquistas=' + Object.keys(state.meta.ach).length + ')');
     // vocacoes: cada classe guarda o proprio nivel/habilidades
     { const c0 = mainCls(), other = Object.keys(CLASSES).find(c => c !== c0); state.level = 7; state.skills = { might: 2 }; state.profOwned = [c0, other]; state.profs = {};
-      profReady = 0; changeProf(other); if (state.level !== 1 || Object.keys(state.skills).length || mainCls() !== other || hero.cls !== other) throw new Error('vocacao nova nao comecou do zero');
+      profReady = 0; changeProf(other); if (state.level !== 1 || Object.keys(state.skills).length || mainCls() !== other || hero.cls !== other) throw new Error('vocacao nova nao comecou do zero ' + state.level + ' ' + JSON.stringify(state.skills) + ' ' + mainCls() + ' ' + hero.cls + ' ' + other);
       state.level = 3; profReady = 0; changeProf(c0); if (state.level !== 7 || state.skills.might !== 2) throw new Error('vocacao nao restaurou o progresso');
       profReady = 0; changeProf(other); if (state.level !== 3) throw new Error('segunda vocacao perdeu o progresso'); profReady = 0; changeProf(c0); openProfs(); closePanel(); }
     out.push('vocacoes: ok');
