@@ -16,6 +16,8 @@ const okItem = (it) => !!it && typeof it === 'object' && ITEM_SLOTS.includes(it.
 const cleanItem = (it) => { const o = { uid: it.uid.replace(/[^a-z0-9]/gi, ''), slot: it.slot, tier: it.tier, rar: it.rar, plus: it.plus | 0 }; if (it.kind && /^[a-z]{3,12}$/.test(it.kind)) o.kind = it.kind; if (Array.isArray(it.gems)) o.gems = it.gems.slice(0, 3).map(g => ({ t: String(g.t || '').replace(/[^a-z]/g, '').slice(0, 8), l: Math.max(1, Math.min(3, g.l | 0)) })); return o; };
 const WB_PERIOD = 3600e3, WB_LIFE = 30 * 60e3;
 const WB_BOSSES = [{ name: 'Kraken Espectral', icon: '🐙', color: 0x2c8fb5 }, { name: 'Dragão das Brasas', icon: '🐉', color: 0xe8572a }, { name: 'Titã de Cristal', icon: '💎', color: 0x6c63ff }, { name: 'Rainha Sombria', icon: '👑', color: 0x7a3a9a }, { name: 'Colosso Primevo', icon: '🌳', color: 0x3d9a4a }, { name: 'Devorador do Vazio', icon: '🕳️', color: 0x30303a }];
+const ORIGIN_OK = /^(https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?|capacitor:\/\/localhost|https:\/\/(www\.)?aldyveon\.com|https:\/\/ejsnasc-tech\.github\.io)$/;
+const MAX_PER_IP = 10;   // generoso: redes de celular compartilham o mesmo IP entre muita gente
 const num = (v, lim) => (Number.isFinite(v) ? Math.max(-lim, Math.min(lim, v)) : 0);
 
 export default {
@@ -23,13 +25,23 @@ export default {
     const url = new URL(req.url);
     if (url.pathname === '/ws') {
       if (req.headers.get('Upgrade') !== 'websocket') return new Response('Use WebSocket', { status: 426 });
+      // so paginas do proprio jogo (ou apps) podem abrir o WebSocket; clientes sem Origin (scripts) passam
+      const og = req.headers.get('Origin');
+      if (og && !ORIGIN_OK.test(og)) return new Response('origem nao permitida', { status: 403 });
       return env.ROOM.get(env.ROOM.idFromName('aurora-v4')).fetch(req);
     }
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
-    if (url.pathname.startsWith('/api/')) return env.ACCTS.get(env.ACCTS.idFromName('main')).fetch(req);
+    if (url.pathname.startsWith('/api/')) {
+      if (Number(req.headers.get('content-length') || 0) > 500000) return J({ err: 'grande demais' }, 413);
+      return env.ACCTS.get(env.ACCTS.idFromName('main')).fetch(req);
+    }
     if (url.pathname === '/online') {
+      // resposta guardada 5 s no cache da borda: milhares de pedidos viram um so no servidor
+      const ck = new Request('https://cache.local/online'), c = caches.default, hit = await c.match(ck);
+      if (hit) return hit;
       const r = await env.ROOM.get(env.ROOM.idFromName('aurora-v4')).fetch(new Request('https://room/count'));
-      return new Response(await r.text(), { headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } });
+      const out = new Response(await r.text(), { headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'cache-control': 'public, max-age=5' } });
+      await c.put(ck, out.clone()); return out;
     }
     return new Response('jogo-anime-online ok', { headers: { 'access-control-allow-origin': '*' } });
   },
@@ -37,7 +49,7 @@ export default {
 
 export class Arena3 {
   constructor(state) {
-    this.state = state; this.plots = {};
+    this.state = state; this.plots = {}; this.rate = new WeakMap();
     state.blockConcurrencyWhile(async () => { this.plots = (await state.storage.get('plots')) || {}; });
   }
   savePlots() { return this.state.storage.put('plots', this.plots); }
@@ -59,15 +71,25 @@ export class Arena3 {
   async fetch(req) {
     const url = new URL(req.url);
     if (url.pathname === '/count') { const ps = this.players(); return new Response(JSON.stringify({ online: ps.length, names: ps.map(p => p.name) })); }
-    if (this.state.getWebSockets().length >= MAX_PLAYERS) return new Response('Sala cheia', { status: 503 });
+    const ip = req.headers.get('cf-connecting-ip') || '', now = Date.now();
+    let socks = this.state.getWebSockets();
+    // conexoes que nunca entraram (sem join em 15 s) sao descartadas: ninguem segura vaga sem jogar
+    socks.forEach(s => { const a = s.deserializeAttachment(); if (a && !a.name && a.ts && now - a.ts > 15000) { try { s.close(4002, 'sem join'); } catch (e) {} } });
+    socks = this.state.getWebSockets().filter(s => { const a = s.deserializeAttachment(); return !(a && !a.name && a.ts && now - a.ts > 15000); });
+    // limite por endereco: um atacante nao consegue ocupar a sala inteira sozinho
+    if (ip && socks.filter(s => { const a = s.deserializeAttachment(); return a && a.ip === ip; }).length >= MAX_PER_IP) return new Response('Muitas conexoes', { status: 429 });
+    if (socks.length >= MAX_PLAYERS) return new Response('Sala cheia', { status: 503 });
     const pair = new WebSocketPair(); const [client, server] = Object.values(pair);
     this.state.acceptWebSocket(server);
-    server.serializeAttachment({ id: crypto.randomUUID().slice(0, 8), name: '', t: 0 });
+    server.serializeAttachment({ id: crypto.randomUUID().slice(0, 8), name: '', t: 0, ip, ts: now });
     return new Response(null, { status: 101, webSocket: client });
   }
 
   async webSocketMessage(ws, raw) {
     if (typeof raw !== 'string' || raw.length > 9000) return;
+    // limite de mensagens por conexao: ate 200 a cada 5 s; acima disso ignora, e se insistir (600) derruba
+    const nowT = Date.now(); let rt = this.rate.get(ws); if (!rt || nowT - rt.t > 5000) { rt = { t: nowT, n: 0 }; this.rate.set(ws, rt); }
+    if (++rt.n > 200) { if (rt.n > 600) { try { ws.close(4008, 'excesso de mensagens'); } catch (e) {} } return; }
     let m; try { m = JSON.parse(raw); } catch (e) { return; }
     const me = ws.deserializeAttachment() || {};
     if (m.t === 'join') {
@@ -171,12 +193,17 @@ export class Accounts2 {
     const url = new URL(req.url), path = url.pathname;
     if (req.method !== 'POST') return J({ err: 'use POST' }, 405);
     let b; try { b = await req.json(); } catch (e) { return J({ err: 'json inválido' }, 400); }
+    if (Math.random() < 0.02) this.sql.exec('DELETE FROM rl WHERE ts < ?', Date.now() - 3600e3);   // limpa registros de limite vencidos
     if (path === '/api/register') {
       const name = String(b.name || '').trim().replace(/\s+/g, ' '), pass = String(b.pass || '');
       if (!/^[\p{L}\p{N}_ -]{3,16}$/u.test(name)) return J({ err: 'Nome: 3 a 16 letras ou números.' }, 400);
       if (pass.length < 6 || pass.length > 64) return J({ err: 'Senha: mínimo 6 caracteres.' }, 400);
       const key = name.toLowerCase();
+      // anti-spam: no maximo 8 contas novas por hora por endereco (nao conta quem erra o nome)
+      const gk = 'g:' + (req.headers.get('cf-connecting-ip') || '');
+      if (this.rlBlocked(gk, 8, 3600e3)) return J({ err: 'Muitas contas criadas deste aparelho. Tente mais tarde.' }, 429);
       if (this.rows('SELECT 1 FROM acct WHERE key = ?', key).length) return J({ err: 'Esse nome já existe. Escolha outro ou entre.' }, 409);
+      this.rlFail(gk, 3600e3);
       let pid = /^[a-f0-9]{32}$/.test(String(b.legacyPid || '')) ? String(b.legacyPid) : '';
       if (pid && this.rows('SELECT 1 FROM acct WHERE pid = ?', pid).length) pid = '';
       if (!pid) pid = rndHex(16);
@@ -207,7 +234,9 @@ export class Accounts2 {
     }
     // ---- administrador (chave secreta ADMIN no cabeçalho x-admin): listar contas (sem senha/hash) e redefinir senha ----
     if (path === '/api/admin/list' || path === '/api/admin/reset-pass') {
-      if (!this.env.ADMIN || req.headers.get('x-admin') !== this.env.ADMIN) return J({ err: 'no' }, 403);
+      const ak = 'a:' + (req.headers.get('cf-connecting-ip') || '');
+      if (this.rlBlocked(ak, 5, 3600e3)) return J({ err: 'no' }, 429);
+      if (!this.env.ADMIN || req.headers.get('x-admin') !== this.env.ADMIN) { this.rlFail(ak, 3600e3); return J({ err: 'no' }, 403); }
       if (path === '/api/admin/list') {
         const q = String(b.q || '').trim().toLowerCase();
         const accts = this.rows('SELECT key, name, created FROM acct ORDER BY created').filter(a => !q || a.key.includes(q)).map(a => ({ name: a.name, created: a.created, chars: this.rows('SELECT name, cls, level, updated FROM chr WHERE key = ? ORDER BY updated DESC', a.key) }));
