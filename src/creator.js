@@ -33,6 +33,7 @@ export function openCreator(opts) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   prev.appendChild(renderer.domElement);
+  if (new URLSearchParams(location.search).has('dbg')) window.__cr = renderer;   // so para testes
   const scene = new THREE.Scene();
   scene.add(new THREE.HemisphereLight(0xffffff, 0x445577, 1.1));
   const key = new THREE.DirectionalLight(0xfff0d8, 1.4); key.position.set(3, 5, 4); scene.add(key);
@@ -42,7 +43,16 @@ export function openCreator(opts) {
   const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 50);
 
   let model = null, rot = 0, dragging = false, moved = 0, lastX = 0, raf = 0, t = 0, alive = true, last = performance.now();
-  function setModel(def) { if (model) scene.remove(model); model = makeHero(def); model.rotation.y = rot; scene.add(model); }
+  // libera da placa de video tudo do boneco que saiu da previa (senao cada heroi visto deixa ~44 texturas e ~86 geometrias presas e o celular estoura)
+  function disposeTree(o) {
+    o.traverse(n => {
+      if (n.geometry) n.geometry.dispose();
+      const ms = n.material ? (Array.isArray(n.material) ? n.material : [n.material]) : [];
+      ms.forEach(m => { for (const k in m) { const v = m[k]; if (v && v.isTexture) v.dispose(); } if (m.uniforms) for (const k in m.uniforms) { const v = m.uniforms[k] && m.uniforms[k].value; if (v && v.isTexture) v.dispose(); } m.dispose(); });
+      if (n.isSkinnedMesh && n.skeleton) n.skeleton.dispose();
+    });
+  }
+  function setModel(def) { if (model) { scene.remove(model); disposeTree(model); } model = makeHero(def); model.rotation.y = rot; scene.add(model); }
   // enquadra o boneco: no modo largo (PC) afasta um pouco mais
   function resize() {
     const w = prev.clientWidth || 300, h = prev.clientHeight || 300;
@@ -63,7 +73,11 @@ export function openCreator(opts) {
   }
   function close() {
     alive = false; cancelAnimationFrame(raf); window.removeEventListener('resize', resize);
-    renderer.dispose(); root.className = ''; root.innerHTML = '';
+    if (model) { scene.remove(model); disposeTree(model); model = null; }
+    plat.geometry.dispose(); plat.material.dispose(); ring.geometry.dispose(); ring.material.dispose();
+    renderer.dispose(); renderer.forceContextLoss();   // devolve o contexto WebGL (celular tem limite e o jogo principal perderia o dele)
+    renderer.domElement.remove(); if (window.__cr === renderer) window.__cr = null;
+    root.className = ''; root.innerHTML = '';
   }
 
   // ---- estado ----

@@ -664,9 +664,9 @@ function updateWorld(dt) {
       if (weather !== old && !inCity) toast(weather === 'fog' ? '🌫️ Neblina densa — visão reduzida' : weather === 'rain' ? '🌧️ Começou a chover' : '☀️ O tempo abriu');
     }
     const rainy = weather === 'rain' ? 1 : 0;
-    hemi.intensity = 0.85 - 0.45 * night - 0.1 * rainy; sun.intensity = 1.1 - 0.8 * night - 0.35 * rainy;
-    scene.environmentIntensity = (inCity ? 0.4 : 0.35) * (1 - 0.85 * night) * (1 - 0.4 * rainy);
-    ov.style.opacity = Math.min(0.62, night * 0.5 + rainy * 0.12).toFixed(3);
+    hemi.intensity = 0.85 - 0.22 * night - 0.08 * rainy; sun.intensity = 1.1 - 0.45 * night - 0.25 * rainy;   // noite so da um tom de sombra: da para ver o personagem e os monstros
+    scene.environmentIntensity = (inCity ? 0.4 : 0.35) * (1 - 0.5 * night) * (1 - 0.3 * rainy);
+    ov.style.opacity = Math.min(0.36, night * 0.3 + rainy * 0.07).toFixed(3);
     const fogFar = weather === 'fog' ? Math.min(62, biomeFar) : biomeFar; scene.fog.far += (fogFar - scene.fog.far) * Math.min(1, dt * 0.6);
     if (isNight !== night > 0.55) { isNight = night > 0.55; refreshHud(); if (!inCity) toast(isNight ? '🌙 A noite caiu: magos e elites aparecem mais!' : '🌅 Amanheceu'); }
     if (rainy) {
@@ -2643,7 +2643,7 @@ function netEvent(m) {
 function startNet() {
   const q = new URLSearchParams(location.search).get('net');
   if (testing || q === '0' || needAuth) { $('netbtn').style.display = $('chatbtn').style.display = 'none'; return; }
-  net = createNet({ url: q && q.startsWith('ws') ? q : NET_URL, getMe: () => ({ name: meName(), look: state.custom || null, pid: state.pid }), onEvent: netEvent, onStatus: (ok) => { if (!ok) { remotes.forEach((r, id) => dropRemote(id)); netId = null; } refreshNet(); } });
+  net = createNet({ url: q && q.startsWith('ws') ? q : NET_URL, getMe: () => ({ name: meName(), look: state.custom || null, pid: state.pid, w: curW(), x: +player.position.x.toFixed(2), z: +player.position.z.toFixed(2), rm: rmCur || '' }), onEvent: netEvent, onStatus: (ok) => { if (!ok) { remotes.forEach((r, id) => dropRemote(id)); netId = null; } else { netLast.w = ''; netAt = 9; } refreshNet(); } });   // ao (re)conectar, manda a posicao na hora
   refreshNet();
 }
 const curW = () => inHome ? 'home:' + inHome.id : inCity ? 'city' : cave ? 'field:cave' : dg ? 'field:dg' : wb ? 'field:wb' : 'field:' + (state.endless ? 'inf' : state.act);
@@ -2680,7 +2680,11 @@ function openOnline() {
   rows.push({ text: '🧍 ' + meName() + ' (você)\n' + (inHome ? 'Em casa' : inCity ? 'Na cidade' : 'Nas florestas') });
   remotes.forEach(r => {
     const inField = r.rm && r.w.startsWith('field:');
-    rows.push({ text: '🧍 ' + r.name + '\n' + (inField ? rmTxt(r.rm) + (r.rm === rmCur ? ' (com você! monstros ×' + rmN + ')' : '') : whereTxt(r.w)), btn: inField && r.rm !== rmCur ? '➡ AJUDAR' : undefined, fn: inField && r.rm !== rmCur ? () => joinRoom(r.rm) : undefined });
+    // mesma floresta: mostra a distancia e deixa ir ate o amigo (o campo e grande e a nevoa esconde quem esta longe)
+    const sameField = r.w === curW() && r.w.startsWith('field:') && !cave && !dg && !wb, dist = Math.round(Math.hypot(r.x - player.position.x, r.z - player.position.z)), goNear = sameField && dist > 6;
+    rows.push({ text: '🧍 ' + r.name + '\n' + (inField ? rmTxt(r.rm) + (r.rm === rmCur ? ' (com você! monstros ×' + rmN + ')' : '') : whereTxt(r.w)) + (sameField ? '\n📍 a ' + dist + ' m de você' : ''),
+      btn: inField && r.rm !== rmCur ? '➡ AJUDAR' : goNear ? '➡ IR ATÉ' : undefined,
+      fn: inField && r.rm !== rmCur ? () => joinRoom(r.rm) : goNear ? () => { closePanel(); const nx = r.x + 1.6, nz = r.z; player.position.set(nx, 0, nz); playerGy = walkY(nx, nz); toast('➡ Você foi até ' + r.name); } : undefined });
   });
   if (!remotes.size) rows.push({ text: 'Ninguém mais por aqui agora. Chame um amigo para abrir o link! Na cidade 🏰 vocês aparecem juntos.' });
   rows.push({ text: '👋 Fechar', btn: 'FECHAR', fn: closePanel });
@@ -2950,7 +2954,7 @@ if (qs.has('city')) setCityMode(true);
 if (qs.has('at')) { const [ax, az] = qs.get('at').split(',').map(Number); if (!qs.has('city')) setCityMode(true); player.position.set(ax, 0, az); syncCam(); }
 if (qs.has('night')) dayT = +qs.get('night') || 0;
 if (qs.has('quests')) setTimeout(() => openQuests(), 1500);
-if (qs.has('dbg')) window.__g = { setDay: (v, w) => { dayT = v; if (w) weather = w; weatherLeft = 1e6; }, craft, enterCave, caveTick, get cave() { return cave; }, state, useSkill, castSkill, get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
+if (qs.has('dbg')) window.__g = { editCharacter, get remotes() { return remotes; }, get net() { return net; }, curW, setDay: (v, w) => { dayT = v; if (w) weather = w; weatherLeft = 1e6; }, craft, enterCave, caveTick, get cave() { return cave; }, state, useSkill, castSkill, get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
 if (qs.get('pos')) { const iv = setInterval(() => { if (!gameStarted) return; clearInterval(iv); setTimeout(() => { const [px, pz] = qs.get('pos').split(',').map(Number); if (inCity) setCityMode(false); player.position.set(px || 0, 0, pz || 0); playerGy = walkY(px || 0, pz || 0); }, 600); }, 300); }
 if (qs.get('cam') === 'low') { camMode = 'low'; $('camb').querySelector('small').textContent = 'IMERSIVA'; }
 if (qs.has('yaw')) { camYaw = camYawT = +qs.get('yaw'); }

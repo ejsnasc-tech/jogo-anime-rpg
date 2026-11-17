@@ -19,11 +19,11 @@ export function groundTex(realm) {
   const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
   const P = {
     mares:    ['#e9d9a4', ['#f5e8b8', '#d9c68c', '#cdb97a'], 3, 3],
-    sombras:  ['#4a4258', ['#5a5068', '#3a3347', '#6a5a7a'], 2, 4],
+    sombras:  ['#645a7a', ['#74698a', '#4e4663', '#8a7a9c'], 2, 4],
     arcana:   ['#5b5fc4', ['#7478e0', '#4a4eb0', '#9a8cff'], 2, 3],
     planalto: ['#e2b866', ['#f0cb80', '#c99a4a', '#d9a95a'], 3, 3],
     primeva:  ['#3f9a3a', ['#4fb348', '#348030', '#5fc65a'], 2, 6],
-    vazio:    ['#2a2736', ['#3a3548', '#1c1a26', '#6a3fa0'], 2, 3],
+    vazio:    ['#403c54', ['#524c68', '#2c2a3c', '#8a55c4'], 2, 3],
   }[realm] || ['#4f9d3a', ['#5fb348', '#438a32'], 2, 5];
   g.fillStyle = P[0]; g.fillRect(0, 0, 128, 128);
   for (let i = 0; i < 300; i++) { g.fillStyle = P[1][i % P[1].length]; g.fillRect(Math.random() * 128, Math.random() * 128, P[2], P[3]); }

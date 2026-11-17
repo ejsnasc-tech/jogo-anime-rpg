@@ -18,7 +18,7 @@ export const REALMS = {
   arcana:   { name: 'Academia Arcana',   icon: '🔮', strong: 'planalto', sky: ['#2b3a8f', '#7f6bd6', '#e6d6ff'], ground: 0xa8b0ff, fog: 0xb6a8f0, enemy: 0x6c63ff },
   planalto: { name: 'Planalto Dourado',  icon: '☀️', strong: 'mares',   sky: ['#e8863a', '#ffc66b', '#fff0c9'], ground: 0xf0d890, fog: 0xffe2a8, enemy: 0xd98c1f },
   primeva:  { name: 'Floresta Primeva',  icon: '🌿', strong: null,      sky: ['#1f7a4a', '#7fd69a', '#eaffea'], ground: 0x9ee89e, fog: 0xbfe8c8, enemy: 0x3d9a4a },
-  vazio:    { name: 'O Vazio',           icon: '🕳️', strong: 'primeva', sky: ['#05050a', '#2a2140', '#6a5a8a'], ground: 0x666677, fog: 0x2a2140, enemy: 0x30303a },
+  vazio:    { name: 'O Vazio',           icon: '🕳️', strong: 'primeva', sky: ['#05050a', '#2a2140', '#6a5a8a'], ground: 0x666677, fog: 0x3c3160, enemy: 0x30303a },
 };
 
 // ---- Criador de personagem ----

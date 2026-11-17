@@ -35,7 +35,7 @@ export default {
   },
 };
 
-export class Arena2 {
+export class Arena3 {
   constructor(state) {
     this.state = state; this.plots = {};
     state.blockConcurrencyWhile(async () => { this.plots = (await state.storage.get('plots')) || {}; });
@@ -71,11 +71,13 @@ export class Arena2 {
     let m; try { m = JSON.parse(raw); } catch (e) { return; }
     const me = ws.deserializeAttachment() || {};
     if (m.t === 'join') {
-      me.name = clean(m.name, 16) || 'Viajante'; me.look = m.look && JSON.stringify(m.look).length < 2500 ? m.look : null; me.x = 0; me.z = 0; me.f = 0; me.w = 'field'; me.mv = 0;
+      me.name = clean(m.name, 16) || 'Viajante'; me.look = m.look && JSON.stringify(m.look).length < 2500 ? m.look : null; me.x = num(m.x, 400); me.z = num(m.z, 400); me.f = 0; me.mv = 0;
+      me.w = m.w === 'city' ? 'city' : /^(home:p\d{1,3}|field:(\d|inf|wb|dg))$/.test(String(m.w)) ? m.w : 'field';
+      me.rm = /^f(inf|\ds\d)$/.test(String(m.rm)) && me.w.startsWith('field:') ? String(m.rm) : ''; if (me.rm) me.rt = Date.now();
       me.pid = clean(m.pid, 40); me.oid = me.pid ? await oidOf(me.pid) : ''; ws.serializeAttachment(me);
       // a mesma conta so pode ficar conectada em um lugar: o mais antigo e desconectado
       if (me.pid) this.state.getWebSockets().forEach(o => { if (o === ws) return; const a = o.deserializeAttachment(); if (a && a.pid === me.pid) { this.send(o, { t: 'kicked' }); try { o.close(4001, 'conta em outro aparelho'); } catch (e) {} } });
-      const others = this.players().filter(p => p.id !== me.id && p.pid !== me.pid);
+      const others = this.players().filter(p => p.id !== me.id && (!me.pid || p.pid !== me.pid));
       this.send(ws, { t: 'hello', id: me.id, oid: me.oid, players: others.map(p => this.pubP(p)), plots: this.pub() });
       this.broadcast({ t: 'join', p: this.pubP(me) }, ws);
     } else if (!me.name) { return; }
