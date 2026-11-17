@@ -21,6 +21,7 @@ import { makeBiome, groundTex, BIOME_INFO } from './biomes.js';
 import { EXTRA_PETS } from './pets.js';
 import { createAmbient } from './ambient.js';
 import { buildCave } from './cave.js';
+import { buildArena, hpTag, pvpDamage, PVP } from './pvparena.js';
 import { makeCreature, CREATURE_TYPES, hordeWeights, hordeTitle } from './creatures.js';
 import { createVfx } from './vfx.js';
 import { createGrass } from './grass.js';
@@ -551,6 +552,7 @@ let ev = null, nextEvT = 150 + Math.random() * 100, dayT = 0.3, night = 0, weath
 let bossRef = null;
 let panelOpen = false, dialogOpen = false, creatorOpen = false;
 let cave = null;
+let pvp = null;   // arena PvP ativa: { k: abates, d: mortes, last: ultimo atacante, gap: {} }
 let inCity = false, city = null, nearNpc = null, walkGoal = null, invOpen = false, mmT = 0;
 let inHome = null, homeRoom = null, homeVisit = null, homeFloor = 0;
 const owners = {}; let myOid = ''; const recover = new Set();
@@ -649,7 +651,7 @@ function refreshHud() {
   { const n = questsClaimable(); setBtn('questbtn', '📜', 'MISSÕES', n); }
   $('hgems').innerHTML = CUR.gems + state.gems; $('hgold').innerHTML = CUR.gold + state.gold; $('hcash').innerHTML = CUR.cash + state.cash;
   const a = curAct();
-  $('stage').textContent = dg && dg.cave ? '🐉 CAVERNA — ' + REALMS[dg.realm].icon + ' ' + ACTS[dg.ai].boss.name + (bossRef ? ' — CHEFE' : ' (siga o caminho)') : dg ? '🏰 MASMORRA — andar ' + dg.floor + '/5' + (dg.floor < 5 ? '  (' + dg.kills + '/' + dg.need + ')' : ' — CHEFE') : wb ? '🐉 CHEFE MUNDIAL — derrotem juntos!' : inHome ? '\u{1F3E0} ' + (homeVisit ? 'Visitando a casa de ' + homeVisit.name : inHome.name + ' \u2014 ' + ROOMS[inHome.kind].label) : inCity ? '🏰 Cidade de Aurora — fale com os moradores' : state.endless ? '♾ Aventura Infinita • abates ' + state.stageKills + (rmN > 1 ? '  👥 ' + rmN + ' jogadores (monstros ×' + rmN + ')' : '')
+  $('stage').textContent = pvp ? '⚔ ARENA PVP — abates ' + pvp.k + ' • mortes ' + pvp.d + ' • 👥 ' + ([...remotes.values()].filter(r => r.w === 'arena').length + 1) + ' na arena' : dg && dg.cave ? '🐉 CAVERNA — ' + REALMS[dg.realm].icon + ' ' + ACTS[dg.ai].boss.name + (bossRef ? ' — CHEFE' : ' (siga o caminho)') : dg ? '🏰 MASMORRA — andar ' + dg.floor + '/5' + (dg.floor < 5 ? '  (' + dg.kills + '/' + dg.need + ')' : ' — CHEFE') : wb ? '🐉 CHEFE MUNDIAL — derrotem juntos!' : inHome ? '\u{1F3E0} ' + (homeVisit ? 'Visitando a casa de ' + homeVisit.name : inHome.name + ' \u2014 ' + ROOMS[inHome.kind].label) : inCity ? '🏰 Cidade de Aurora — fale com os moradores' : state.endless ? '♾ Aventura Infinita • abates ' + state.stageKills + (rmN > 1 ? '  👥 ' + rmN + ' jogadores (monstros ×' + rmN + ')' : '')
     : 'Mapa ' + (state.act + 1) + ' (Nv.' + zoneLv() + ') • ' + a.name + ' — ' + (state.stage === 5 ? 'CHEFE' : 'Estágio ' + state.stage + '/5  (' + Math.min(state.stageKills, quota()) + '/' + quota() + ')') + (rmN > 1 ? '  👥 ' + rmN + ' jogadores (monstros ×' + rmN + ')' : '');
 }
 
@@ -723,7 +725,7 @@ function updateWorld(dt) {
       pa.needsUpdate = true;
     } else if (rainPts) rainPts.visible = false;
   }
-  if (inCity || inHome || wb || dg) return;
+  if (inCity || inHome || wb || dg || pvp) return;
   // eventos
   if (ev && T > ev.until) { ev.left = 0; ev = null; nextEvT = T + 200; toast('⌛ O evento terminou'); }
   if (!ev && !wb && !dg && isHost() && T > nextEvT && !(state.stage === 5 && !state.endless) && enemies.length < 10 && !isPaused()) startEvent();
@@ -760,8 +762,8 @@ function doEmote(i) {
 function updateAllies(dt) {
   const p = player.position;
   allies.forEach((a, i) => {
-    const m = a.mesh, mp = m.position; m.visible = !inHome;
-    let foe = null, bd = 12; if (!inCity) enemies.forEach(e => { const d = dist2(e.mesh.position, mp); if (d < bd) { bd = d; foe = e; } });
+    const m = a.mesh, mp = m.position; m.visible = !inHome && !pvp;
+    let foe = null, bd = 12; if (!inCity && !pvp) enemies.forEach(e => { const d = dist2(e.mesh.position, mp); if (d < bd) { bd = d; foe = e; } });
     let gx = p.x + (i % 2 ? 2.2 : -2.2), gz = p.z + 1.8, hold = 0.9;
     if (foe && a.melee) { gx = foe.mesh.position.x; gz = foe.mesh.position.z; hold = 1.5; }
     else if (foe) hold = 5;
@@ -857,7 +859,7 @@ function openWanderShop() {
   openPanel('🧙 MERCADOR', rows);
 }
 function updateWander(dt) {
-  if (inCity || inHome || wb || dg) { if (wander) dropWander(); return; }
+  if (inCity || inHome || wb || dg || pvp) { if (wander) dropWander(); return; }
   if (!wander) { if (T > nextWander && !isPaused() && enemies.length < 6) spawnWander(); return; }
   wander.life -= dt; animateHero(wander.mesh, dt, {});
   const d = dist2(wander.mesh.position, player.position); wander.mesh.rotation.y = Math.atan2(player.position.x - wander.mesh.position.x, player.position.z - wander.mesh.position.z);
@@ -875,6 +877,7 @@ function openDungeon(back) {
     { head: true, text: '🏰 Masmorra Sombria\n5 andares com monstros nível ~' + lv + '+ (mais fortes que a floresta), elites frequentes e um chefe no último andar.\nSe você cair, perde a tentativa.' },
     { text: 'Entradas hoje: ' + left + '/3 (renovam à meia-noite)\nRecompensa: ouro, 💎, equipamento ÉPICO ou melhor, gemas e materiais.', btn: 'ENTRAR', enabled: left > 0, fn: enterDungeon },
     { text: '🐉 Cavernas dos Chefes\nSiga o caminho escuro até a câmara do chefe de cada reino.', btn: 'ABRIR', fn: () => openCaves(() => openDungeon(back)) },
+    { text: '⚔ Arena PvP\nLute contra outros jogadores. Morrer lá não custa nada.', btn: 'ABRIR', fn: () => openArena(() => openDungeon(back)) },
   ]);
 }
 function enterDungeon() {
@@ -882,6 +885,67 @@ function enterDungeon() {
   closePanel(); setCityMode(false); clearEnemies();
   dg = { lv: FOREST_LV[Math.min(ACTS.length - 1, state.maxAct)] + 6, floor: 1, kills: 0, need: 16 };
   save(state); toast('🏰 Andar 1: derrote ' + dg.need + ' monstros'); refreshHud();
+}
+// ---- Arena PvP: coliseu onde os jogadores lutam entre si. Morrer nao custa nada. O dano entre jogadores tem regra propria (pvparena.js) ----
+const pvpReady = () => !!(net && net.connected && netPvp);
+function openArena(back) {
+  const here = [...remotes.values()].filter(r => r.w === 'arena').length;
+  openPanel('⚔ ARENA PVP', [
+    { text: '◀ Voltar', btn: 'VOLTAR', fn: back },
+    { head: true, text: '⚔ Coliseu de Aurora\nLute contra outros jogadores. Morrer na arena NÃO custa nada: sem perda de ouro, itens ou progresso, e você volta na hora com a vida cheia.\nO dano contra jogadores é diferente do dano contra monstros: é uma porcentagem da vida de quem apanha, ajustada pela diferença de poder (nenhum golpe tira mais que ' + Math.round(PVP.CAP * 100) + '% da vida).\nAbates na arena não dão ouro, XP nem itens: é pela honra.' },
+    { text: '👥 Na arena agora: ' + here + (pvpReady() ? '' : '\n⚠ ' + (net && net.connected ? 'O servidor ainda está sendo atualizado para a arena. Tente de novo mais tarde.' : 'Você precisa estar ONLINE (🟢) para entrar.')), btn: 'ENTRAR', enabled: pvpReady(), fn: enterArena },
+  ]);
+}
+function enterArena() {
+  if (!pvpReady()) { toast('⚠ A arena precisa de conexão com o servidor'); return; }
+  if (inHome || dg || wb) { toast('Saia daqui primeiro'); return; }
+  closePanel(); setCityMode(false); clearEnemies();
+  const c = buildArena(); scene.add(c.group); cave = c; pvp = { k: 0, d: 0, last: null, gap: {} };
+  fieldGroup.visible = false; terrain.visible = false; ground.visible = false; farGroup.visible = false;
+  setSky(['#2a3550', '#6d7fa8', '#d9b68a']); scene.fog.color.set(0x6d7fa8); scene.fog.near = 60; scene.fog.far = 170; biomeFar = 170;
+  hemi.intensity = 0.8; sun.intensity = 0.85; hemi.groundColor.set(0x6a5a40); scene.environmentIntensity = 0.5;
+  $('minimap').style.display = 'none';
+  const sp = c.spawnPoint(); player.position.set(sp.x, 0, sp.z); facing = Math.atan2(-sp.x, -sp.z); setZoom(1.25); zoom = zoomT; syncCam();
+  hp = maxHp; shield = 0; invuln = T + PVP.INVULN; netAt = 9;
+  toast('⚔ Bem-vindo à Arena! Chegue perto de um rival para lutar. Morrer aqui não custa nada.'); refreshHud();
+}
+// cada rival que esta na arena vira um "alvo" na lista de inimigos: assim o ataque automatico, as skills, as orbes e a aura funcionam nele sem codigo novo
+function syncPvpProxies() {
+  if (!pvp) return;
+  const want = new Set();
+  remotes.forEach(r => { if (r.w === 'arena') want.add(r.id); });
+  if (pvp.n !== want.size) { pvp.n = want.size; refreshHud(); }
+  for (let i = enemies.length - 1; i >= 0; i--) { const e = enemies[i]; if (e.pvp && !want.has(e.rid)) enemies.splice(i, 1); }
+  want.forEach(id => {
+    if (enemies.some(e => e.pvp && e.rid === id)) return; const r = remotes.get(id); if (!r) return;
+    enemies.push({ pvp: true, rid: id, nid: 'pv' + id, mesh: r.mesh, hp: 1, maxHp: 1, radius: 0.7, speed: 0, boss: false, type: 'pvp', kind: 'pvp', t: 0, dmg: 0, stun: 0, slow: 0, flash: 0, dead: false });
+  });
+}
+// golpe que EU dou num rival: so manda o dano bruto; quem apanha calcula o dano real de PvP
+function pvpStrike(e, dmg, crit) {
+  const r = remotes.get(e.rid); if (!r || !net) return;
+  vfx.burst(e.mesh.position, { color: crit ? 0xffb020 : 0xff6a5f, n: crit ? 16 : 8, speed: crit ? 5.5 : 3.6, up: 0.6, size: crit ? 0.45 : 0.3, life: 0.35, y: 1.0 }); vfx.flash(e.mesh.position, crit ? 0xffc040 : 0xff6a5f, 2.4, 0.2, 1.2);
+  ftAt(e.mesh.position, crit ? '💥' : '⚔', crit ? '#ff9f1c' : '#ff8a7a', 1.6);
+  const now = T; if (now - (pvp.gap[e.rid] || 0) < PVP.MIN_GAP * 0.5) return; pvp.gap[e.rid] = now;
+  net.send({ t: 'pv', k: 'hit', to: e.rid, d: Math.min(1e7, Math.round(dmg * (crit ? 1.5 : 1))) });
+}
+// golpe que EU recebo de um rival
+function pvpReceive(m) {
+  if (!pvp || T < invuln) return;
+  const from = m.from, last = pvp.gap['in' + from] || 0; if (T - last < PVP.MIN_GAP) return; pvp.gap['in' + from] = T;
+  const mit = (1 - sk('armor') * 0.07) * (1 - Math.min(0.6, statSum('def'))) * CLASSES[hero.cls].taken;
+  let dmg = pvpDamage(m.d, atkPower(), maxHp, mit);
+  pvp.last = from; shake = Math.max(shake, 0.18); playOnce(player, 'hit');
+  if (shield > 0) { const ab = Math.min(shield, dmg); shield -= ab; dmg -= ab; }
+  hp -= dmg; ftAt(player.position, '-' + Math.round(dmg), '#ff5a4f', 2.2);
+  if (hp <= 0) pvpDie();
+}
+function pvpDie() {
+  const by = pvp.last; pvp.d++; hp = maxHp; shield = 0; pvp.last = null; invuln = T + PVP.INVULN;
+  const sp = cave.spawnPoint(); ringFx(player.position, 0xff5a4f, 3, 0.5); player.position.set(sp.x, 0, sp.z); playerGy = 0; syncCam();
+  ftAt(player.position, 'DERROTADO!', '#ff6b6b', 2.5); toast('☠ Derrotado! Nada foi perdido — você voltou com a vida cheia.');
+  if (net && by) net.send({ t: 'pv', k: 'dead', by }); else if (net) net.send({ t: 'pv', k: 'dead', by: '' });
+  refreshHud();
 }
 // ---- Cavernas dos chefes: corredor fechado ate a camara do chefe de cada reino ----
 function cvLeft() { dgLeft(); return 3 - (ensureMeta(state).cvUsed || 0); }
@@ -909,7 +973,8 @@ function enterCave(ai) {
   save(state); toast('🐉 ' + a.boss.name + ': siga o caminho até o fim'); refreshHud();
 }
 function leaveCave() {
-  if (!cave) return; scene.remove(cave.group); cave.dispose(); cave = null;
+  if (!cave) return; if (pvp) { pvp = null; clearEnemies(); remotes.forEach(r => { if (r.hpt) r.hpt.visible = false; }); }
+  scene.remove(cave.group); cave.dispose(); cave = null;
   farGroup.visible = true; $('minimap').style.display = ''; hemi.intensity = 0.85; sun.intensity = 1.1;
 }
 function caveWave(st) {
@@ -963,7 +1028,7 @@ function catchFish() {
 }
 function updateFishing(dt) {
   const b = $('fish'), p = player.position;
-  const near = !inCity && !inHome && !wb && !dg && riverDepth(p.x, p.z) > 0.12 && !isPaused() && !enemies.some(e => dist2(e.mesh.position, p) < 11);
+  const near = !inCity && !inHome && !wb && !dg && !pvp && riverDepth(p.x, p.z) > 0.12 && !isPaused() && !enemies.some(e => dist2(e.mesh.position, p) < 11);
   if (!near && !fishing) { b.style.display = 'none'; return; }
   b.style.display = 'block';
   if (fishing && (!near || Math.hypot(joy.dx, joy.dy) > 0.3)) { fishing = null; toast('🎣 Pesca cancelada'); }
@@ -1572,7 +1637,7 @@ function spawnBoss() {
   if (!isHost()) return; const b = curAct().boss; spawnEnemy(true, { name: state.endless ? 'Eco: ' + b.name : b.name, color: b.color }); }
 
 function autoSpawn() {
-  if (inCity || wb) return;
+  if (inCity || wb || pvp) return;
   if (!isHost()) return;
   for (let i = 0; i < rmN; i++) autoSpawn1();
 }
@@ -1589,6 +1654,7 @@ function damageEnemy(e, dmg, crit, fromNet) {
   if (e.res && !fromNet) { const k = ['mage', 'sorcerer', 'druid'].includes(hero.cls) ? e.res.m : e.res.p; if (k !== 1) { dmg = Math.max(1, Math.round(dmg * k)); if (Math.random() < 0.25) ftAt(e.mesh.position, k > 1 ? 'FRACO!' : 'RESISTE', k > 1 ? '#7CFC00' : '#9aa5b1', 2.3); } }
   const cc = Math.min(0.8, sk('crit') * 0.08 + statSum('crit') + petPerk('crit'));
   if (!fromNet && !crit && cc > 0 && Math.random() < cc) { dmg = Math.round(dmg * (1.8 + sk('deadly') * 0.2)); crit = true; }
+  if (e.pvp) { pvpStrike(e, dmg, crit); return; }   // rival na arena: dano de PvP e calculado por quem apanha
   vfx.burst(e.mesh.position, { color: crit ? 0xffb020 : 0xfff4d0, n: crit ? 16 : 7, speed: crit ? 5.5 : 3.6, up: 0.6, size: crit ? 0.45 : 0.3, life: 0.35, y: 1.0 }); if (crit) vfx.flash(e.mesh.position, 0xffc040, 3, 0.2, 1.2);
   e.hp -= dmg; ftAt(e.mesh.position, (crit ? '💥' : '') + dmg, crit ? '#ff9f1c' : '#ffd166', 1.6 * (e.boss ? 2 : 1));
   e.flash = 0.08;
@@ -2729,14 +2795,15 @@ cv.addEventListener('touchend', (e) => { if (e.touches.length < 2) pinch = null;
 // ===================== Online: outros jogadores =====================
 const remoteGroup = new THREE.Group(); scene.add(remoteGroup);
 const remotes = new Map();
-let net = null, netLast = { x: 1e9, z: 1e9, f: 0, mv: 0, w: '' }, netAt = 0, netId = null;
+let net = null, netLast = { x: 1e9, z: 1e9, f: 0, mv: 0, w: '', hp: 100 }, netAt = 0, netId = null, netPvp = false;
 const meName = () => ((state.custom && state.custom.name) || state.account || 'Viajante').toString().slice(0, 16);
 function addRemote(p) {
   if (!p || p.id === netId || remotes.has(p.id)) return;
   let mesh; try { mesh = makeHero(buildPlayerHero(Object.assign({}, PREMADE[0], p.look || {}, { name: p.name }))); } catch (e) { mesh = makeHero(buildPlayerHero(PREMADE[0])); }
   const tag = nameTag(p.name || '?'); tag.position.set(0, 3.1, 0); mesh.add(tag);
+  const hpt = hpTag(); hpt.position.set(0, 3.55, 0); mesh.add(hpt);
   mesh.position.set(p.x || 0, 0, p.z || 0); remoteGroup.add(mesh);
-  remotes.set(p.id, { id: p.id, name: p.name, mesh, x: p.x || 0, z: p.z || 0, f: p.f || 0, mv: 0, w: p.w || 'other', rm: p.rm || '' });
+  remotes.set(p.id, { id: p.id, name: p.name, mesh, hpt, hp: p.hp == null ? 100 : p.hp, x: p.x || 0, z: p.z || 0, f: p.f || 0, mv: 0, w: p.w || 'other', rm: p.rm || '' });
   refreshNet();
 }
 function dropRemote(id) { const r = remotes.get(id); if (!r) return; remoteGroup.remove(r.mesh); remotes.delete(id); refreshNet(); }
@@ -2772,7 +2839,7 @@ function netEvent(m) {
   else if (m.t === 'home' && recover.has(m.plot)) { recover.delete(m.plot); if (state.homes[m.plot]) { state.homes[m.plot].furn = m.furn || []; state.homes[m.plot].sz = m.sz | 0; state.homes[m.plot].fls = m.fls || 1; if (m.acc) { state.homes[m.plot].acc = m.acc; state.homes[m.plot].guests = m.guests || []; } save(state); } toast('🏠 Casa recuperada: ' + m.plot); }
   else if (m.t === 'home') { const p = PLOTS.find(x => x.id === m.plot); if (p && inCity && !inHome) enterHome(p, { name: m.name, furn: m.furn, sz: m.sz | 0, fls: m.fls || 1 }); }
   else if (m.t === 'hello') {
-    myOid = m.oid || ''; Object.keys(owners).forEach(k => delete owners[k]); Object.assign(owners, m.plots || {}); syncHomes(); netId = m.id; remotes.forEach((r, id) => { if (id === netId) dropRemote(id); }); (m.players || []).forEach(addRemote); refreshNet(); }
+    netPvp = !!m.pvp; myOid = m.oid || ''; Object.keys(owners).forEach(k => delete owners[k]); Object.assign(owners, m.plots || {}); syncHomes(); netId = m.id; remotes.forEach((r, id) => { if (id === netId) dropRemote(id); }); (m.players || []).forEach(addRemote); refreshNet(); }
   else if (m.t === 'kicked') {
     kickedOut = true;
     const d = document.createElement('div'); d.id = 'kicked';
@@ -2785,7 +2852,9 @@ function netEvent(m) {
   else if (m.t === 'join') addRemote(m.p);
   else if (m.t === 'leave') dropRemote(m.id);
   else if (m.t === 'furn') { if (homeVisit && homeRoom && inHome.id === m.plot) { const pl0 = inHome; enterHome(pl0, { name: homeVisit.name, furn: m.furn || [], sz: m.sz | 0, fls: m.fls || 1 }); } }
-  else if (m.t === 'move') { const r = remotes.get(m.id); if (r) { r.x = m.x; r.z = m.z; r.f = m.f; r.mv = m.mv; r.w = m.w; r.rm = m.rm || ''; } }
+  else if (m.t === 'move') { const r = remotes.get(m.id); if (r) { r.x = m.x; r.z = m.z; r.f = m.f; r.mv = m.mv; r.w = m.w; r.rm = m.rm || ''; r.hp = m.hp == null ? 100 : m.hp; } }
+  else if (m.t === 'pv') { if (m.k === 'hit') pvpReceive(m); }
+  else if (m.t === 'pvk') { if (!pvp) return; chatLine('⚔ Arena', (m.a ? m.a + ' derrotou ' : '') + m.v + (m.a ? '' : ' caiu'), false); if (m.aid && m.aid === netId) { pvp.k++; toast('⚔ Você derrotou ' + m.v + '!  Abates: ' + pvp.k); refreshHud(); } }
   else if (m.t === 'host') { if (m.rm === rmCur) { const was = isHost(); rmHost = m.host; rmN = m.n || 1; if (was !== isHost()) { clearEnemies(); if (isHost() && !state.endless && state.stage === 5) spawnBoss(); } refreshHud(); } }
   else if (m.t === 'rl') onRelay(m);
   else if (m.t === 'chat') { if (String(m.text).startsWith('§e')) { const r = remotes.get(m.id), em = EMOTES[+String(m.text).slice(2)]; if (r && em && r.mesh.visible) ftAt(r.mesh.position, em, '#fff', 3.2); } else chatLine(m.name, m.text, false); }
@@ -2793,14 +2862,14 @@ function netEvent(m) {
 function startNet() {
   const q = new URLSearchParams(location.search).get('net');
   if (testing || q === '0' || needAuth) { $('netbtn').style.display = $('chatbtn').style.display = 'none'; return; }
-  net = createNet({ url: q && q.startsWith('ws') ? q : NET_URL, getMe: () => ({ name: meName(), look: state.custom || null, pid: state.pid, w: curW(), x: +player.position.x.toFixed(2), z: +player.position.z.toFixed(2), rm: rmCur || '' }), onEvent: netEvent, onStatus: (ok) => { if (!ok) { remotes.forEach((r, id) => dropRemote(id)); netId = null; } else { netLast.w = ''; netAt = 9; } refreshNet(); } });   // ao (re)conectar, manda a posicao na hora
+  net = createNet({ url: q && q.startsWith('ws') ? q : NET_URL, getMe: () => ({ name: meName(), look: state.custom || null, pid: state.pid, w: curW(), x: +player.position.x.toFixed(2), z: +player.position.z.toFixed(2), rm: rmCur || '' }), onEvent: netEvent, onStatus: (ok) => { if (!ok) { netPvp = false; remotes.forEach((r, id) => dropRemote(id)); netId = null; if (pvp) { setCityMode(true); toast('⚠ Conexão perdida: você saiu da arena'); } } else { netLast.w = ''; netAt = 9; } refreshNet(); } });   // ao (re)conectar, manda a posicao na hora
   refreshNet();
 }
-const curW = () => inHome ? 'home:' + inHome.id : inCity ? 'city' : cave ? 'field:cave' : dg ? 'field:dg' : wb ? 'field:wb' : 'field:' + (state.endless ? 'inf' : state.act);
-const whereTxt = (w) => w === 'city' ? 'Na cidade de Aurora' : w === 'field:wb' ? 'Lutando contra o Chefe Mundial' : w === 'field:dg' ? 'Em uma masmorra' : w.startsWith('home:') ? 'Dentro de uma casa' : w === 'field:inf' ? 'Na Aventura Infinita' : w.startsWith('field:') ? 'Na floresta do Ato ' + (+w.slice(6) + 1) + (w === curW() ? ' (com você!)' : '') : 'Em outra área';
+const curW = () => pvp ? 'arena' : inHome ? 'home:' + inHome.id : inCity ? 'city' : cave ? 'field:cave' : dg ? 'field:dg' : wb ? 'field:wb' : 'field:' + (state.endless ? 'inf' : state.act);
+const whereTxt = (w) => w === 'arena' ? '⚔ Na Arena PvP' : w === 'city' ? 'Na cidade de Aurora' : w === 'field:wb' ? 'Lutando contra o Chefe Mundial' : w === 'field:dg' ? 'Em uma masmorra' : w.startsWith('home:') ? 'Dentro de uma casa' : w === 'field:inf' ? 'Na Aventura Infinita' : w.startsWith('field:') ? 'Na floresta do Ato ' + (+w.slice(6) + 1) + (w === curW() ? ' (com você!)' : '') : 'Em outra área';
 function updateNet(dt) {
   const w = curW();
-  const rkey = (!net || !net.connected || inCity || inHome || dg || wb) ? null : 'f' + (state.endless ? 'inf' : state.act + 's' + state.stage);
+  const rkey = (!net || !net.connected || inCity || inHome || dg || wb || pvp) ? null : 'f' + (state.endless ? 'inf' : state.act + 's' + state.stage);
   if (rkey !== rmCur) { rmCur = rkey; rmHost = null; rmN = 1; if (enemies.some(e => e.remote)) clearEnemies(); refreshHud(); }
   remoteGroup.visible = true;
   remotes.forEach(r => {
@@ -2810,6 +2879,7 @@ function updateNet(dt) {
     m.rotation.y = angleLerp(m.rotation.y, r.f, k);
     m.position.y = r.w.startsWith('field') ? walkY(m.position.x, m.position.z) : 0;
     m.visible = r.w === w;
+    if (r.hpt) { r.hpt.visible = m.visible && r.w === 'arena'; if (r.hpt.visible) r.hpt.userData.set(r.hp); }
     if (m.visible) animateHero(m, dt, { moving: !!r.mv });
   });
   if (!net || !net.connected) return;
@@ -2818,10 +2888,10 @@ function updateNet(dt) {
     if (snapAt > 0.15) { snapAt = 0; rl('es', { sk: state.stageKills, e: enemies.filter(x => !x.remote).slice(0, 70).map(x => [x.nid, x.type, +x.mesh.position.x.toFixed(1), +x.mesh.position.z.toFixed(1), Math.max(1, Math.round(x.hp)), Math.round(x.maxHp), (x.elite ? 1 : 0) | (x.boss ? 2 : 0)]) }); }
   }
   netAt += dt;
-  const p = player.position, moved = Math.hypot(p.x - netLast.x, p.z - netLast.z) > 0.05 || Math.abs(facing - netLast.f) > 0.1 || w !== netLast.w || (rmCur || '') !== (netLast.rm || '');
+  const p = player.position, hpPct = pvp ? Math.max(1, Math.round(hp / maxHp * 100)) : 100, moved = Math.hypot(p.x - netLast.x, p.z - netLast.z) > 0.05 || Math.abs(facing - netLast.f) > 0.1 || w !== netLast.w || (rmCur || '') !== (netLast.rm || '') || hpPct !== netLast.hp;
   if ((moved && netAt > 0.1) || netAt > 3) {
     netAt = 0; const mv = Math.hypot(p.x - netLast.x, p.z - netLast.z) > 0.05 ? 1 : 0;
-    netLast = { x: p.x, z: p.z, f: facing, mv, w, rm: rmCur || '' }; net.send({ t: 'move', x: +p.x.toFixed(2), z: +p.z.toFixed(2), f: +facing.toFixed(2), mv, w, rm: rmCur || '' });
+    netLast = { x: p.x, z: p.z, f: facing, mv, w, rm: rmCur || '', hp: hpPct }; net.send({ t: 'move', x: +p.x.toFixed(2), z: +p.z.toFixed(2), f: +facing.toFixed(2), mv, w, rm: rmCur || '', hp: hpPct });
   }
 }
 function openOnline() {
@@ -2936,7 +3006,9 @@ function update(dt) {
   if (state.skillPts > 0 && !testing && !isPaused()) openSkillPicker();
 
   // inimigos
+  syncPvpProxies();
   enemies.forEach(e => {
+    if (e.pvp) return;   // rival da arena: quem move e o proprio jogador (updateNet)
     if (e.remote) {   // monstro compartilhado: so acompanha o anfitriao
       const ep = e.mesh.position, ddx = e.tx - ep.x, ddz = e.tz - ep.z, k = Math.min(1, dt * 10), mvd = Math.hypot(ddx, ddz);
       if (mvd > 12) { ep.x = e.tx; ep.z = e.tz; } else { ep.x += ddx * k; ep.z += ddz * k; }
@@ -3005,7 +3077,7 @@ function update(dt) {
   }
   if (pu.tail) pu.tail.rotation.y = Math.sin(petT * 0.6) * 0.35;
   if (pu.wings) { const s = Math.sin(petT * 0.9) * 0.45; pu.wings[0].rotation.z = s; pu.wings[1].rotation.z = -s; }
-  if (!mounted && T - petLast > petDef.rate) {
+  if (!mounted && !pvp && T - petLast > petDef.rate) {
     const pt = nearestEnemy(pp, 8);
     if (pt) { petLast = T; fire(pp, pt.mesh.position, petDef.color, petDmg()); }
   }
@@ -3104,7 +3176,7 @@ if (qs.has('city')) setCityMode(true);
 if (qs.has('at')) { const [ax, az] = qs.get('at').split(',').map(Number); if (!qs.has('city')) setCityMode(true); player.position.set(ax, 0, az); syncCam(); }
 if (qs.has('night')) dayT = +qs.get('night') || 0;
 if (qs.has('quests')) setTimeout(() => openQuests(), 1500);
-if (qs.has('dbg')) window.__g = { get waterMat() { return waterMat; }, update, clearEnemies, applyAct, setCityMode, atkPower, zoneLv, xpNeed, calcMaxHp, recalcHp, scaleAct, nearestEnemy, get hp() { return hp; }, set hp(v) { hp = v; }, get maxHp() { return maxHp; }, get inCity() { return inCity; }, get bossRef() { return bossRef; }, get hero() { return hero; }, damageEnemy, enemies, editCharacter, get remotes() { return remotes; }, get net() { return net; }, curW, setDay: (v, w) => { dayT = v; if (w) weather = w; weatherLeft = 1e6; }, craft, enterCave, caveTick, get cave() { return cave; }, state, useSkill, castSkill, get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
+if (qs.has('dbg')) window.__g = { get waterMat() { return waterMat; }, enterArena, openArena, get pvp() { return pvp; }, get netPvp() { return netPvp; }, get net() { return net; }, get remotes() { return remotes; }, get enemies() { return enemies; }, get invuln() { return invuln; }, update, clearEnemies, applyAct, setCityMode, atkPower, zoneLv, xpNeed, calcMaxHp, recalcHp, scaleAct, nearestEnemy, get hp() { return hp; }, set hp(v) { hp = v; }, get maxHp() { return maxHp; }, get inCity() { return inCity; }, get bossRef() { return bossRef; }, get hero() { return hero; }, damageEnemy, enemies, editCharacter, get remotes() { return remotes; }, get net() { return net; }, curW, setDay: (v, w) => { dayT = v; if (w) weather = w; weatherLeft = 1e6; }, craft, enterCave, caveTick, get cave() { return cave; }, state, useSkill, castSkill, get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, get player() { return player; }, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
 if (qs.get('pos')) { const iv = setInterval(() => { if (!gameStarted) return; clearInterval(iv); setTimeout(() => { const [px, pz] = qs.get('pos').split(',').map(Number); if (inCity) setCityMode(false); player.position.set(px || 0, 0, pz || 0); playerGy = walkY(px || 0, pz || 0); }, 600); }, 300); }
 if (qs.get('cam') === 'low') { camMode = 'low'; $('camb').querySelector('small').textContent = 'IMERSIVA'; }
 if (qs.has('yaw')) { camYaw = camYawT = +qs.get('yaw'); }
@@ -3259,6 +3331,32 @@ function runSelfTest() {
       if (state.cash !== c0 - 20 || bagCap() !== cap0 + 10) throw new Error('upgrade de mochila falhou ' + state.cash + ' ' + bagCap());
       closeInv(); state.bagCap = 0; state.cash = 500;
       out.push('mochila (auto-equipar, vender varios, ampliar com Veon): ok');
+    }
+    // arena PvP: dano proprio, teto por golpe, morrer nao custa nada, sair limpa tudo
+    {
+      const mh = 500, vp = 100;
+      const d1 = pvpDamage(vp, vp, mh, 1), dHuge = pvpDamage(1e9, vp, mh, 1), dTiny = pvpDamage(1, vp, mh, 1), dHalf = pvpDamage(vp, vp, mh, 0.5);
+      if (Math.abs(d1 - mh * PVP.BASE) > 0.01) throw new Error('pvp: dano base ' + d1);
+      if (dHuge > mh * PVP.CAP + 0.01 || dHuge < d1) throw new Error('pvp: teto por golpe ' + dHuge);
+      if (dTiny < 1 || dTiny > d1) throw new Error('pvp: dano minimo ' + dTiny);
+      if (Math.abs(dHalf - d1 / 2) > 0.01) throw new Error('pvp: mitigacao ' + dHalf);
+      if (pvpDamage(vp, vp, mh, 1) === vp) throw new Error('pvp: dano igual ao de monstro');
+      const net0 = net, np0 = netPvp, gold0 = state.gold, lvl0 = state.level, items0 = state.items.length, hp0 = hp;
+      net = { connected: true, send() {} }; netPvp = true;
+      enterArena();
+      if (!pvp || !cave || !cave.pvp || !(curW() === 'arena')) throw new Error('pvp: nao entrou na arena');
+      const fake = { id: 'zz', name: 'Rival', mesh: new THREE.Group(), x: 3, z: 3, f: 0, mv: 0, w: 'arena', rm: '', hp: 100 }; remotes.set('zz', fake);
+      syncPvpProxies(); const px = enemies.find(e => e.pvp);
+      if (!px || px.rid !== 'zz') throw new Error('pvp: rival nao virou alvo');
+      T += 4; invuln = 0; hp = maxHp; pvpReceive({ from: 'zz', d: 1e9 });
+      const lost = (maxHp - hp) / maxHp; if (lost <= 0 || lost > PVP.CAP + 0.001) throw new Error('pvp: golpe gigante tirou ' + lost);
+      T += 1; hp = 0.2; pvpReceive({ from: 'zz', d: 1e9 });
+      if (pvp.d !== 1 || hp < maxHp * 0.99) throw new Error('pvp: morte nao reiniciou a vida');
+      if (state.gold !== gold0 || state.level !== lvl0 || state.items.length !== items0) throw new Error('pvp: morrer custou algo');
+      remotes.delete('zz'); syncPvpProxies(); if (enemies.some(e => e.pvp)) throw new Error('pvp: alvo ficou depois de sair');
+      setCityMode(true); if (pvp || cave) throw new Error('pvp: nao saiu da arena'); setCityMode(false); clearEnemies();
+      net = net0; netPvp = np0; hp = Math.min(hp0, maxHp); invuln = 0;
+      out.push('arena PvP (dano proprio com teto, morte sem perda, alvo/saida): ok');
     }
     // cidade, equipamentos, drops e mapa
     state.items = []; state.equip = {}; state.mats = {}; state.gold = 1e6; state.maxAct = 5; state.act = 0; state.endless = false; state.stage = 1;

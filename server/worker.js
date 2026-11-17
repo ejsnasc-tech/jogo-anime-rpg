@@ -56,7 +56,9 @@ export class Arena3 {
   pub() { const o = {}; for (const id in this.plots) o[id] = { oid: this.plots[id].oid, name: this.plots[id].name, acc: this.plots[id].acc || 'private' }; return o; }
 
   players() { return this.state.getWebSockets().map(ws => ws.deserializeAttachment()).filter(p => p && p.name); }
-  pubP(p) { return { id: p.id, name: p.name, look: p.look, x: p.x, z: p.z, f: p.f, w: p.w, mv: p.mv, rm: p.rm || '' }; }
+  pubP(p) { return { id: p.id, name: p.name, look: p.look, x: p.x, z: p.z, f: p.f, w: p.w, mv: p.mv, rm: p.rm || '', hp: p.hp == null ? 100 : p.hp }; }
+  // jogadores que estao na arena PvP agora
+  inArena(except) { return this.state.getWebSockets().filter(ws => ws !== except).map(ws => ({ ws, a: ws.deserializeAttachment() })).filter(x => x.a && x.a.name && x.a.w === 'arena'); }
   // sala de monstros compartilhados: mesma floresta + mesmo estagio. O anfitriao (quem entrou primeiro) simula os monstros.
   members(rm, except) { return this.state.getWebSockets().filter(ws => ws !== except).map(ws => ({ ws, a: ws.deserializeAttachment() })).filter(x => x.a && x.a.name && x.a.rm === rm); }
   announce(rm, except) {
@@ -94,26 +96,40 @@ export class Arena3 {
     const me = ws.deserializeAttachment() || {};
     if (m.t === 'join') {
       me.name = clean(m.name, 16) || 'Viajante'; me.look = m.look && JSON.stringify(m.look).length < 2500 ? m.look : null; me.x = num(m.x, 400); me.z = num(m.z, 400); me.f = 0; me.mv = 0;
-      me.w = m.w === 'city' ? 'city' : /^(home:p\d{1,3}|field:(\d{1,2}|inf|wb|dg))$/.test(String(m.w)) ? m.w : 'field';
+      me.w = m.w === 'city' ? 'city' : m.w === 'arena' ? 'arena' : /^(home:p\d{1,3}|field:(\d{1,2}|inf|wb|dg))$/.test(String(m.w)) ? m.w : 'field'; me.hp = 100;
       me.rm = /^f(inf|\d{1,2}s\d)$/.test(String(m.rm)) && me.w.startsWith('field:') ? String(m.rm) : ''; if (me.rm) me.rt = Date.now();
       me.pid = clean(m.pid, 40); me.oid = me.pid ? await oidOf(me.pid) : ''; ws.serializeAttachment(me);
       // a mesma conta so pode ficar conectada em um lugar: o mais antigo e desconectado
       if (me.pid) this.state.getWebSockets().forEach(o => { if (o === ws) return; const a = o.deserializeAttachment(); if (a && a.pid === me.pid) { this.send(o, { t: 'kicked' }); try { o.close(4001, 'conta em outro aparelho'); } catch (e) {} } });
       const others = this.players().filter(p => p.id !== me.id && (!me.pid || p.pid !== me.pid));
-      this.send(ws, { t: 'hello', id: me.id, oid: me.oid, players: others.map(p => this.pubP(p)), plots: this.pub() });
+      this.send(ws, { t: 'hello', pvp: 1, id: me.id, oid: me.oid, players: others.map(p => this.pubP(p)), plots: this.pub() });
       this.broadcast({ t: 'join', p: this.pubP(me) }, ws);
     } else if (!me.name) { return; }
     else if (m.t === 'move') {
-      me.x = num(m.x, 400); me.z = num(m.z, 400); me.f = num(m.f, 7); me.mv = m.mv ? 1 : 0; me.w = m.w === 'city' ? 'city' : /^(home:p\d{1,3}|field:(\d{1,2}|inf|wb|dg))$/.test(String(m.w)) ? m.w : 'other';
+      me.x = num(m.x, 400); me.z = num(m.z, 400); me.f = num(m.f, 7); me.mv = m.mv ? 1 : 0; me.w = m.w === 'city' ? 'city' : m.w === 'arena' ? 'arena' : /^(home:p\d{1,3}|field:(\d{1,2}|inf|wb|dg))$/.test(String(m.w)) ? m.w : 'other'; me.hp = m.hp == null ? 100 : Math.max(1, Math.min(100, Math.round(num(m.hp, 100))));
       const rm = me.w.startsWith('field:') && /^f(inf|\d{1,2}s\d)$/.test(String(m.rm)) ? String(m.rm) : '', old = me.rm || '';
       if (rm !== old) { me.rm = rm; me.rt = Date.now(); }
       ws.serializeAttachment(me);
-      this.broadcast({ t: 'move', id: me.id, x: me.x, z: me.z, f: me.f, mv: me.mv, w: me.w, rm }, ws);
+      this.broadcast({ t: 'move', id: me.id, x: me.x, z: me.z, f: me.f, mv: me.mv, w: me.w, rm, hp: me.hp }, ws);
       if (rm !== old) { this.announce(old); this.announce(rm); }
     } else if (m.t === 'rl') {
       if (!me.rm || !['es', 'ehit', 'ek', 'hurt', 'esh'].includes(m.k)) return;
       const out = JSON.stringify({ t: 'rl', k: m.k, from: me.id, d: m.d });
       this.members(me.rm, ws).forEach(x => { if (!m.to || x.a.id === m.to) { try { x.ws.send(out); } catch (e) {} } });
+    } else if (m.t === 'pv') {
+      // Arena PvP: o servidor so repassa. Valida que os dois estao na arena e perto um do outro; o dano real e calculado por quem apanha.
+      if (me.w !== 'arena') return;
+      const nowP = Date.now();
+      if (m.k === 'hit') {
+        const to = this.inArena(ws).find(x => x.a.id === String(m.to || '')); if (!to) return;
+        if (Math.hypot(to.a.x - me.x, to.a.z - me.z) > 45) return;
+        this.send(to.ws, { t: 'pv', k: 'hit', from: me.id, d: Math.max(0, num(m.d, 1e7)) });
+      } else if (m.k === 'dead') {
+        if (nowP - (me.pvd || 0) < 1500) return; me.pvd = nowP; ws.serializeAttachment(me);
+        const by = this.inArena(ws).find(x => x.a.id === String(m.by || ''));
+        const out = JSON.stringify({ t: 'pvk', a: by ? by.a.name : '', aid: by ? by.a.id : '', v: me.name, vid: me.id });
+        this.inArena().forEach(x => { try { x.ws.send(out); } catch (e) {} });
+      }
     } else if (m.t === 'buy') {
       const id = String(m.plot || '');
       if (!PLOT_RE.test(id) || !me.oid) return;
