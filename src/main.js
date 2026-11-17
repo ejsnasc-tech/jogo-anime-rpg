@@ -233,7 +233,7 @@ function applyAct() {
   setSky(r.sky); scene.fog.color.set(r.fog);
   ambient.setRealm(bk);
   skyGlow.material.color.setHex(SUN[key] || SUN[bk] || 0xfff1c0);
-  if (trailMat) trailMat.color.setHex(TRAIL[key] || TRAIL[bk] || 0xd9b77a);
+  if (trailMat) { if (TRAIL[key] || !variant) trailMat.color.setHex(TRAIL[key] || TRAIL[bk] || 0xd9b77a); else trailMat.color.set(r.gtint).multiplyScalar(0.62); }   // trilha dos reinos novos: tom do chao do reino, mais escuro
   const gk = groundRealm(key);
   ground.material.map = groundTex(key); ground.material.color.set(variant ? r.gtint : gk === 'arcana' ? 0xaeb4d8 : gk === 'vazio' ? 0xc8c0d8 : 0xe8e8e8); ground.material.needsUpdate = true;
   hemi.groundColor.set(bi.hemi); scene.fog.near = bi.fog[0]; biomeFar = bi.fog[1];
@@ -246,7 +246,9 @@ function applyAct() {
   biomes[bk].visible = true;
   if (curBiome && curBiome !== key && biomeNotify) toast(r.icon + ' Novo setor: ' + bi.title + ' — ' + bi.sub + '\n⚔ Horda: ' + (HORDES[key] || HORDES[bk]).name + ' (' + (HORDES[key] || HORDES[bk]).sub + ')');
   curBiome = key; grass.setRealm(key);
+  paintWater(key);
 }
+function paintWater(key) { if (!waterMat) return; const w = WATER[key] || WATER[baseRealm(key)] || WATER.mares; waterMat.color.setHex(w[0]); waterMat.emissive.setHex(w[1] || 0); waterMat.emissiveIntensity = w[1] ? 0.9 : 0; waterMat.envMapIntensity = w[1] ? 0.3 : 1.8; waterMat.opacity = w[1] ? 0.95 : 0.8; }
 // guarda a cor original de cada material do cenário e multiplica pela cor do reino
 function tintBiome(g, tint) {
   const c = tint == null ? null : new THREE.Color(tint);
@@ -317,7 +319,11 @@ const skyGlow = (() => {
   sp.scale.setScalar(70); sp.position.set(-110, 62, -170); sp.renderOrder = -1; farGroup.add(sp); return sp;
 })();
 const SUN = { mares: 0xfff1c0, sombras: 0xb9a6ff, arcana: 0xd8c6ff, planalto: 0xffc46a, primeva: 0xeaffb0, vazio: 0x9a5cff };
-let waterTex = null, waterNorm = null;
+let waterTex = null, waterNorm = null, waterMat = null;
+// cor da agua de cada reino ([cor, brilho proprio opcional])
+const WATER = { mares: [0x3fb4e8], sombras: [0x5a4a8a], arcana: [0x6a7aff], planalto: [0x5ab0d0], primeva: [0x3fb49a], vazio: [0x8a3ad0, 0x3a0a5a],
+  gelo: [0x9fe0ff], carmesim: [0xc0405a, 0x3a0510], pantano: [0x5f7a2e], coral: [0x2fd6c4], vulcao: [0xff6a1f, 0xff4a0a], catacumba: [0x4a5f86], outono: [0xb9823a],
+  esmeralda: [0x2fcf7a], solar: [0xffc94a, 0x6a4a00], tempestade: [0x3a5a8a], abismo: [0x14265a, 0x04102a], fantasma: [0x9fd8c8, 0x2a5a4a], obsidiana: [0x7a2aa0, 0x2a0a4a], trono: [0x8a7aff, 0x2a1a6a] };
 const RUINS = [], chestMeshes = [];
 (function scenery() {
   const mat = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 1 }, o));
@@ -365,7 +371,7 @@ const RUINS = [], chestMeshes = [];
     for (let y = 0; y < 128; y++) for (let x = 0; x < 128; x++) { const dx = (H(x + 1, y) - H(x - 1, y)) * 2.2, dy = (H(x, y + 1) - H(x, y - 1)) * 2.2, l = Math.hypot(dx, dy, 1), i = (y * 128 + x) * 4; im.data[i] = (-dx / l * 0.5 + 0.5) * 255; im.data[i + 1] = (-dy / l * 0.5 + 0.5) * 255; im.data[i + 2] = (1 / l * 0.5 + 0.5) * 255; im.data[i + 3] = 255; }
     ng.putImageData(im, 0, 0); }
   waterNorm = new THREE.CanvasTexture(nc); waterNorm.wrapS = waterNorm.wrapT = THREE.RepeatWrapping; waterNorm.repeat.set(3, 3);
-  const wmat = new THREE.MeshStandardMaterial({ color: 0x3fb4e8, map: waterTex, normalMap: waterNorm, normalScale: new THREE.Vector2(0.55, 0.55), transparent: true, opacity: 0.8, roughness: 0.06, metalness: 0.15, envMapIntensity: 1.8, depthWrite: false });
+  const wmat = waterMat = new THREE.MeshStandardMaterial({ color: 0x3fb4e8, map: waterTex, normalMap: waterNorm, normalScale: new THREE.Vector2(0.55, 0.55), transparent: true, opacity: 0.8, roughness: 0.06, metalness: 0.15, envMapIntensity: 1.8, depthWrite: false });
   {
     const N = 116, pos = [], uvs = [], idx = [];
     for (let i = 0; i <= N; i++) {
@@ -374,6 +380,7 @@ const RUINS = [], chestMeshes = [];
       if (i < N) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
     }
     const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); rg.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); rg.setIndex(idx); rg.computeVertexNormals();
+    if (curBiome) paintWater(curBiome);
     const river = new THREE.Mesh(rg, wmat); river.renderOrder = 1; river.frustumCulled = false; fieldGroup.add(river);
     const lg = new THREE.CircleGeometry(LAKE.r + 1.5, 40); lg.rotateX(-Math.PI / 2);
     const lu = lg.attributes.uv; for (let i = 0; i < lu.count; i++) lu.setXY(i, lu.getX(i) * 5, lu.getY(i) * 5);
@@ -1783,12 +1790,13 @@ function fire(from, to, color, dmg, opt) {
   const dir = to.clone().sub(from).setY(0).normalize();
   if (opt.arrow) { b.scale.set(0.35, 0.35, 2.4); b.rotation.y = Math.atan2(dir.x, dir.z); }
   scene.add(b);
-  const gl = vfx.glowSprite(color, (opt.arrow ? 1.8 : 3.0) * (opt.size || 1)); gl.position.copy(b.position); scene.add(gl); vfx.flash(from, color, 2.6, 0.18, 1.2);
+  const gl = vfx.glowSprite(color, (opt.arrow ? 2.3 : 3.8) * (opt.size || 1)); gl.position.copy(b.position); scene.add(gl); vfx.flash(from, color, 2.6, 0.18, 1.2);
   bullets.push({ glow: gl, mesh: b, dir, life: opt.life || 1.1, dmg, speed: opt.speed || 16, kind: opt.kind, pierce: !!opt.pierce, splash: opt.splash || 0, color, hit: new Set() });
 }
 
 function onBulletHit(b, e) {
   damageEnemy(e, b.dmg);
+  vfx.burst(e.mesh.position, { color: b.color, n: 9, speed: 4, up: 0.5, size: 0.42, life: 0.4 }); vfx.flash(e.mesh.position, b.color, 1.8, 0.18, 1);
   if (b.kind === 'ice') e.slow = 1.8;
   if (b.kind === 'fire') explode(e.mesh.position, 1.8, Math.round(b.dmg * 0.5), 0xff6a2f, e);
   if (b.kind === 'bolt') {
@@ -1964,6 +1972,7 @@ let skBarCls = '';
 function buildSkillBar() {
   const box = $('skillbar'); box.innerHTML = ''; skBarCls = mainCls();
   Object.keys(skBtn).forEach(k => delete skBtn[k]);
+  const bk = document.createElement('button'); bk.className = 'sk book'; bk.title = 'Suas skills'; bk.innerHTML = '<span class="ic">📖</span>'; bk.addEventListener('pointerdown', (e) => { e.stopPropagation(); openSkillBook(); }); box.appendChild(bk);
   skillsOf(skBarCls).forEach(sd => {
     const b = document.createElement('button'); b.className = 'sk ' + sd.kind; b.title = sd.name;
     b.innerHTML = '<i class="cd"></i><span class="ic">' + sd.icon + '</span><b class="lv"></b>';
@@ -1973,7 +1982,16 @@ function buildSkillBar() {
 }
 function renderSkillChips() {
   if (skBarCls !== mainCls()) buildSkillBar();
-  skillsOf(skBarCls).forEach(sd => { const b = skBtn[sd.id], l = sk(sd.id); b.classList.toggle('on', l > 0); b.querySelector('.lv').textContent = l || ''; });
+  skillsOf(skBarCls).forEach(sd => { const b = skBtn[sd.id], l = sk(sd.id); b.classList.toggle('on', l > 0); b.style.display = l > 0 ? '' : 'none'; b.querySelector('.lv').textContent = l || ''; });
+}
+function openSkillBook() {
+  if (isPaused()) return;
+  const list = skillsOf(mainCls()), rows = [{ head: true, text: '📖 Skills de ' + CLASSES[mainCls()].name + '\nVocê escolhe uma nova a cada nível. Toque numa skill ativa na barra para usar na hora.' }];
+  [['active', '⚡ ATIVAS (disparam sozinhas)'], ['passive', '🛡️ PASSIVAS (sempre ligadas)']].forEach(([k, label]) => {
+    rows.push({ head: true, text: label });
+    list.filter(s => s.kind === k).forEach(s => { const l = sk(s.id); rows.push({ text: s.icon + ' ' + s.name + '  ' + (l ? 'Nv.' + l + '/' + SKILL_MAX : '— não aprendida') + '\n' + s.desc(Math.max(1, l)) }); });
+  });
+  openPanel('📖 Skills', rows);
 }
 function updateSkillCd() {
   for (const sd of skillsOf(mainCls())) {
@@ -3086,7 +3104,7 @@ if (qs.has('city')) setCityMode(true);
 if (qs.has('at')) { const [ax, az] = qs.get('at').split(',').map(Number); if (!qs.has('city')) setCityMode(true); player.position.set(ax, 0, az); syncCam(); }
 if (qs.has('night')) dayT = +qs.get('night') || 0;
 if (qs.has('quests')) setTimeout(() => openQuests(), 1500);
-if (qs.has('dbg')) window.__g = { update, clearEnemies, applyAct, setCityMode, atkPower, zoneLv, xpNeed, calcMaxHp, recalcHp, scaleAct, nearestEnemy, get hp() { return hp; }, set hp(v) { hp = v; }, get maxHp() { return maxHp; }, get inCity() { return inCity; }, get bossRef() { return bossRef; }, get hero() { return hero; }, damageEnemy, enemies, editCharacter, get remotes() { return remotes; }, get net() { return net; }, curW, setDay: (v, w) => { dayT = v; if (w) weather = w; weatherLeft = 1e6; }, craft, enterCave, caveTick, get cave() { return cave; }, state, useSkill, castSkill, get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
+if (qs.has('dbg')) window.__g = { get waterMat() { return waterMat; }, update, clearEnemies, applyAct, setCityMode, atkPower, zoneLv, xpNeed, calcMaxHp, recalcHp, scaleAct, nearestEnemy, get hp() { return hp; }, set hp(v) { hp = v; }, get maxHp() { return maxHp; }, get inCity() { return inCity; }, get bossRef() { return bossRef; }, get hero() { return hero; }, damageEnemy, enemies, editCharacter, get remotes() { return remotes; }, get net() { return net; }, curW, setDay: (v, w) => { dayT = v; if (w) weather = w; weatherLeft = 1e6; }, craft, enterCave, caveTick, get cave() { return cave; }, state, useSkill, castSkill, get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, player, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
 if (qs.get('pos')) { const iv = setInterval(() => { if (!gameStarted) return; clearInterval(iv); setTimeout(() => { const [px, pz] = qs.get('pos').split(',').map(Number); if (inCity) setCityMode(false); player.position.set(px || 0, 0, pz || 0); playerGy = walkY(px || 0, pz || 0); }, 600); }, 300); }
 if (qs.get('cam') === 'low') { camMode = 'low'; $('camb').querySelector('small').textContent = 'IMERSIVA'; }
 if (qs.has('yaw')) { camYaw = camYawT = +qs.get('yaw'); }
