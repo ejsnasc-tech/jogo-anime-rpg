@@ -78,8 +78,9 @@ const save = (s) => { if (testing) return; s.lastSeen = Date.now(); try { localS
 const state = load();
 ensureMeta(state);
 // save na nuvem (por personagem): a cada 12 s se houve mudança, e ao sair da página
+let kickedOut = false;   // a conta entrou em outro aparelho: este para de gravar o save na nuvem (para nao sobrescrever o do outro)
 async function cloudPush(force) {
-  if (!sess || !sess.cid || !state.custom || cloudBusy || !(cloudDirty || force)) return;
+  if (kickedOut || !sess || !sess.cid || !state.custom || cloudBusy || !(cloudDirty || force)) return;
   cloudBusy = true; cloudDirty = false;
   try { await api('char/put', { token: sess.token, id: sess.cid, name: state.custom.name, cls: state.custom.cls, level: state.level, kills: state.kills, bosses: (state.meta && state.meta.cnt.boss) || 0, save: JSON.stringify(state) }); }
   catch (e) { cloudDirty = true; if (e.status === 401) { setSess(null); location.reload(); } }
@@ -2622,6 +2623,15 @@ function netEvent(m) {
   else if (m.t === 'home') { const p = PLOTS.find(x => x.id === m.plot); if (p && inCity && !inHome) enterHome(p, { name: m.name, furn: m.furn, sz: m.sz | 0, fls: m.fls || 1 }); }
   else if (m.t === 'hello') {
     myOid = m.oid || ''; Object.keys(owners).forEach(k => delete owners[k]); Object.assign(owners, m.plots || {}); syncHomes(); netId = m.id; remotes.forEach((r, id) => { if (id === netId) dropRemote(id); }); (m.players || []).forEach(addRemote); refreshNet(); }
+  else if (m.t === 'kicked') {
+    kickedOut = true;
+    const d = document.createElement('div'); d.id = 'kicked';
+    d.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(5,8,16,.92);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center;font:inherit';
+    const h = document.createElement('div'); h.style.cssText = 'font-size:22px;color:#f5c542'; h.textContent = '📱 Sua conta entrou em outro aparelho';
+    const p = document.createElement('div'); p.style.cssText = 'max-width:360px;font-size:15px;line-height:1.4'; p.textContent = 'A mesma conta só pode ficar aberta em um lugar por vez, senão o progresso se mistura. Esta tela foi desconectada.';
+    const b = document.createElement('button'); b.textContent = 'JOGAR NESTE APARELHO'; b.style.cssText = 'height:48px;padding:0 22px;border-radius:12px;border:2px solid #fff;background:#2e7d32;color:#fff;font:inherit;font-size:16px;cursor:pointer'; b.onclick = () => location.reload();
+    d.append(h, p, b); document.body.appendChild(d);
+  }
   else if (m.t === 'join') addRemote(m.p);
   else if (m.t === 'leave') dropRemote(m.id);
   else if (m.t === 'furn') { if (homeVisit && homeRoom && inHome.id === m.plot) { const pl0 = inHome; enterHome(pl0, { name: homeVisit.name, furn: m.furn || [], sz: m.sz | 0, fls: m.fls || 1 }); } }

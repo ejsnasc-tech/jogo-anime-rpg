@@ -29,6 +29,11 @@ const CSS = `
 #auth .chr .ic{font-size:30px;width:42px;text-align:center}
 #auth .chr .tx{flex:1;line-height:1.25}.chr .tx small{opacity:.7}
 #auth .chr button{height:38px;padding:0 14px;font-size:14px}
+#auth .pw{display:flex;gap:6px}#auth .pw input{flex:1;min-width:0}#auth .pw button{width:52px;height:46px;font-size:18px;background:#26334f;border-color:#6d7fa8}
+#auth .code{font-family:ui-monospace,Consolas,monospace;font-size:22px;letter-spacing:1px;text-align:center;color:#f5c542;background:#0b1224;border:2px dashed #f5c542;border-radius:12px;padding:16px 6px;user-select:all;word-break:break-all}
+#auth .warn{font-size:13px;line-height:1.35;background:#3a2a10;border:1px solid #f5c542;border-radius:10px;padding:8px 10px}
+#auth label.chk{display:flex;gap:10px;align-items:flex-start;font-size:14px;line-height:1.3;cursor:pointer}#auth label.chk input{height:auto;width:22px;flex:none;margin-top:1px}
+#auth .ok{color:#8aff9b;font-size:13px;min-height:16px;text-align:center}
 `;
 
 export function openAuth(opts) {
@@ -36,7 +41,7 @@ export function openAuth(opts) {
   const root = document.createElement('div'); root.id = 'auth'; document.body.appendChild(root);
   const box = document.createElement('div'); box.className = 'box'; root.appendChild(box);
   const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
-  const lastName = (() => { try { return localStorage.getItem('acrpg_lastname') || ''; } catch (e) { return ''; } })();
+  let lastName = (() => { try { return localStorage.getItem('acrpg_lastname') || ''; } catch (e) { return ''; } })();
   let sess = getSess(), busy = false;
 
   async function enter(id, saveStr) {
@@ -50,26 +55,96 @@ export function openAuth(opts) {
     if (e.status === 401 && sess && sess.token) { sess = null; setSess(null); viewLogin('Sessão expirada. Entre de novo.'); return; }
     errEl.textContent = e.message || 'Erro.';
   }
+  // campo de senha com botao de mostrar/ocultar (no celular e facil errar a digitacao)
+  function pwField(ph, ac) {
+    const wrap = el('div', 'pw'), inp = el('input'); inp.type = 'password'; inp.placeholder = ph; inp.maxLength = 64; inp.autocomplete = ac;
+    const eye = el('button', null, '👁'); eye.type = 'button'; eye.setAttribute('aria-label', 'Mostrar ou ocultar a senha');
+    eye.onclick = () => { const show = inp.type === 'password'; inp.type = show ? 'text' : 'password'; eye.textContent = show ? '🙈' : '👁'; };
+    wrap.append(inp, eye); return { wrap, inp };
+  }
+  // depois de entrar: quem ainda nao salvou o codigo de recuperacao vai para a tela dele (conta nova sempre passa por ela)
+  function afterLogin(r) { if (r.rec) viewChars(r.chars); else viewRecovery(r.chars); }
   function viewLogin(msg) {
     box.innerHTML = '';
     const name = el('input'); name.placeholder = 'Nome da conta'; name.maxLength = 16; name.value = lastName; name.autocomplete = 'username';
-    const pass = el('input'); pass.type = 'password'; pass.placeholder = 'Senha'; pass.maxLength = 64; pass.autocomplete = 'current-password';
+    const pf = pwField('Senha', 'current-password'), pass = pf.inp;
     const err = el('div', 'err', msg || '');
-    const go = el('button', null, 'ENTRAR'), reg = el('button', 'sec', 'CRIAR CONTA NOVA');
+    const go = el('button', null, 'ENTRAR'), reg = el('button', 'sec', 'CRIAR CONTA NOVA'), forgot = el('button', 'sec', '🔑 Esqueci minha senha');
     const submit = async (path) => {
       if (busy) return; busy = true; go.disabled = reg.disabled = true; err.textContent = '';
       try {
         const body = { name: name.value, pass: pass.value };
         if (path === 'register' && opts.legacy) { const lg = opts.legacy(); if (lg && lg.pid) body.legacyPid = lg.pid; }
         const r = await api(path, body); sess = { token: r.token, name: r.name, pid: r.pid };
-        try { localStorage.setItem('acrpg_lastname', r.name); } catch (e) {}
-        setSess(sess); viewChars(r.chars);
+        lastName = r.name; try { localStorage.setItem('acrpg_lastname', r.name); } catch (e) {}
+        setSess(sess); afterLogin(r);
       } catch (e) { fail(e, err); } finally { busy = false; go.disabled = reg.disabled = false; }
     };
-    go.onclick = () => submit('login'); reg.onclick = () => submit('register');
+    go.onclick = () => submit('login'); reg.onclick = () => submit('register'); forgot.onclick = () => viewRecover(name.value);
     pass.onkeydown = (e) => { if (e.key === 'Enter') submit('login'); };
-    box.append(el('h1', null, 'Aldyveon'), el('p', 'sub', 'Entre com a sua conta ou crie uma. Só nome e senha, sem e-mail.'), name, pass, err, go, reg);
+    box.append(el('h1', null, 'Aldyveon'), el('p', 'sub', 'Entre com a sua conta ou crie uma. Só nome e senha (mínimo 6 caracteres), sem e-mail.'), name, pf.wrap, err, go, reg, forgot);
     if (opts.offline) { const off = el('button', 'sec', 'Jogar sem conta (só neste aparelho)'); off.onclick = opts.offline; box.append(off); }
+  }
+  // esqueci a senha: nome + codigo de recuperacao + senha nova
+  function viewRecover(prefill) {
+    box.innerHTML = '';
+    const name = el('input'); name.placeholder = 'Nome da conta'; name.maxLength = 16; name.value = prefill || lastName; name.autocomplete = 'username';
+    const code = el('input'); code.placeholder = 'Código de recuperação (XXXX-XXXX-XXXX-XXXX)'; code.maxLength = 24; code.autocapitalize = 'characters'; code.autocomplete = 'off'; code.spellcheck = false;
+    const pf = pwField('Senha nova (mínimo 6)', 'new-password'), err = el('div', 'err', '');
+    const go = el('button', null, 'REDEFINIR SENHA'), back = el('button', 'sec', 'Voltar');
+    go.onclick = async () => {
+      if (busy) return; busy = true; go.disabled = true; err.textContent = '';
+      try {
+        const r = await api('recover', { name: name.value, code: code.value, pass: pf.inp.value }); sess = { token: r.token, name: r.name, pid: r.pid };
+        lastName = r.name; try { localStorage.setItem('acrpg_lastname', r.name); } catch (e) {}
+        setSess(sess); afterLogin(r);
+      } catch (e) { err.textContent = e.message || 'Erro.'; } finally { busy = false; go.disabled = false; }
+    };
+    back.onclick = () => viewLogin();
+    box.append(el('h2', null, '🔑 Recuperar conta'), el('p', 'sub', 'Digite o nome da conta, o código de recuperação que você salvou ao criar a conta e escolha uma senha nova.'), name, code, pf.wrap, err, go, back,
+      el('p', 'sub', 'Sem o código não dá para recuperar por aqui. Fale com o suporte do jogo.'));
+  }
+  // codigo de recuperacao: aparece uma vez, o jogador compartilha/copia/baixa e confirma que salvou
+  async function viewRecovery(chars, backFn) {
+    box.innerHTML = ''; box.append(el('p', 'sub', 'Gerando o seu código de recuperação...'));
+    let r;
+    try { r = await api('recovery/new', { token: sess.token }); }
+    catch (e) { box.innerHTML = ''; const er = el('div', 'err', e.message || 'Erro.'), rt = el('button', null, 'TENTAR DE NOVO'); rt.onclick = () => viewRecovery(chars, backFn); box.append(er, rt); return; }
+    box.innerHTML = '';
+    const err = el('div', 'err', ''), ok = el('div', 'ok', '');
+    const text = 'Código de recuperação da conta Aldyveon "' + sess.name + '":\n' + r.code + '\n\nGuarde em um lugar seguro e não mostre a ninguém. Ele serve para recuperar a conta se você esquecer a senha.';
+    const share = navigator.share ? el('button', null, '📤 COMPARTILHAR (WhatsApp, Notas, e-mail...)') : null, copy = el('button', 'sec', '📋 Copiar'), dl = el('button', 'sec', '💾 Baixar arquivo');
+    if (share) share.onclick = async () => { try { await navigator.share({ title: 'Código de recuperação Aldyveon', text }); ok.textContent = 'Compartilhado. Confira se foi salvo.'; } catch (e) { /* cancelado */ } };
+    copy.onclick = async () => {
+      try { await navigator.clipboard.writeText(r.code); ok.textContent = 'Código copiado. Cole em um lugar seguro.'; }
+      catch (e) { const ta = document.createElement('textarea'); ta.value = r.code; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); ok.textContent = 'Código copiado. Cole em um lugar seguro.'; } catch (x) { err.textContent = 'Não consegui copiar. Anote o código à mão.'; } ta.remove(); }
+    };
+    dl.onclick = () => { try { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = 'aldyveon-codigo-recuperacao.txt'; document.body.appendChild(a); a.click(); a.remove(); ok.textContent = 'Arquivo baixado.'; } catch (e) { err.textContent = 'Não consegui baixar. Use Copiar.'; } };
+    const lab = el('label', 'chk'), chk = document.createElement('input'); chk.type = 'checkbox'; lab.append(chk, el('span', null, 'Já salvei o código em um lugar seguro (e que não seja só este aparelho).'));
+    const go = el('button', null, 'CONTINUAR'); go.disabled = true; chk.onchange = () => { go.disabled = !chk.checked; };
+    go.onclick = async () => { go.disabled = true; try { await api('recovery/confirm', { token: sess.token }); (backFn || (() => viewChars(chars)))(); } catch (e) { go.disabled = false; fail(e, err); } };
+    box.append(el('h2', null, '🔑 Código de recuperação'),
+      el('p', 'sub', 'Se esquecer a senha, é este código que devolve a sua conta. Ele aparece só agora.'),
+      el('div', 'code', r.code),
+      el('div', 'warn', '⚠ Salve agora, de preferência no WhatsApp (mande para você mesmo), em Notas, e-mail ou Drive. Se perder o código e a senha, a conta não pode ser recuperada. Um novo código invalida o anterior.'));
+    if (share) box.append(share);
+    box.append(el('div', 'row'));
+    box.lastChild.append(copy, dl);
+    box.append(ok, err, lab, go);
+  }
+  // conta: trocar senha e gerar novo codigo
+  function viewAccount(chars) {
+    box.innerHTML = '';
+    const o = pwField('Senha atual', 'current-password'), n = pwField('Senha nova (mínimo 6)', 'new-password'), err = el('div', 'err', ''), ok = el('div', 'ok', '');
+    const ch = el('button', null, 'TROCAR SENHA'), nc = el('button', 'sec', '🔑 Gerar novo código de recuperação'), back = el('button', 'sec', 'Voltar');
+    ch.onclick = async () => {
+      err.textContent = ok.textContent = ''; ch.disabled = true;
+      try { await api('pass/change', { token: sess.token, old: o.inp.value, pass: n.inp.value }); o.inp.value = n.inp.value = ''; ok.textContent = '✔ Senha trocada. Os outros aparelhos precisarão entrar de novo.'; }
+      catch (e) { fail(e, err); } finally { ch.disabled = false; }
+    };
+    nc.onclick = () => { if (confirm('Gerar um código novo? O código antigo deixa de valer.')) viewRecovery(chars, () => viewAccount(chars)); };
+    back.onclick = () => viewChars(chars);
+    box.append(el('h2', null, '⚙ Conta: ' + sess.name), el('p', 'sub', 'Trocar a senha'), o.wrap, n.wrap, ok, err, ch, nc, back);
   }
   function viewChars(chars) {
     box.innerHTML = '';
@@ -114,15 +189,16 @@ export function openAuth(opts) {
       };
       box.append(nw);
     }
+    const acc = el('button', 'sec', '⚙ Conta: trocar senha e código de recuperação'); acc.onclick = () => viewAccount(chars);
     const out = el('button', 'sec', 'Sair da conta');
     out.onclick = async () => { try { await api('logout', { token: sess.token }); } catch (e) {} sess = null; setSess(null); viewLogin(); };
-    box.append(err, out);
+    box.append(err, acc, out);
   }
 
   // sessão já salva: pula o login
   if (sess && sess.token) {
     box.append(el('p', 'sub', 'Entrando...'));
-    api('me', { token: sess.token }).then(r => { sess.name = r.name; sess.pid = r.pid; delete sess.cid; setSess(sess); viewChars(r.chars); })
+    api('me', { token: sess.token }).then(r => { sess.name = r.name; sess.pid = r.pid; delete sess.cid; setSess(sess); afterLogin(r); })
       .catch(e => { if (e.offline) { box.innerHTML = ''; viewLogin('Sem conexão com o servidor.'); } else { sess = null; setSess(null); viewLogin(); } });
   } else viewLogin();
   return { close() { root.remove(); } };

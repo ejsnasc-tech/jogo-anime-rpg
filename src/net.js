@@ -9,7 +9,8 @@ export function createNet({ url, getMe, onEvent, onStatus }) {
     if (!alive) return;
     try { ws = new WebSocket(url); } catch (e) { later(); return; }
     ws.onopen = () => { retry = 0; connected = true; ws.send(JSON.stringify(Object.assign({ t: 'join' }, getMe()))); onStatus && onStatus(true); };
-    ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } onEvent(m); };
+    // 'kicked': a mesma conta entrou em outro aparelho. Para de reconectar (senao os dois ficariam se derrubando).
+    ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } if (m && m.t === 'kicked') alive = false; onEvent(m); };
     ws.onclose = () => { const was = connected; connected = false; ws = null; if (was || true) onStatus && onStatus(false); later(); };
     ws.onerror = () => { try { ws && ws.close(); } catch (x) {} };
   }

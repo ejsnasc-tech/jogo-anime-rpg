@@ -7,6 +7,9 @@ const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers
 const J = (o, st) => new Response(JSON.stringify(o), { status: st || 200, headers: Object.assign({ 'content-type': 'application/json' }, CORS) });
 const hex = (buf) => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
 const sha = async (s) => hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)));
+const CODE_ABC = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // sem 0/O/1/I/L para nao confundir ao digitar
+const newCode = () => { const b = crypto.getRandomValues(new Uint8Array(16)); const c = [...b].map(x => CODE_ABC[x % CODE_ABC.length]).join(''); return c.match(/.{4}/g).join('-'); };
+const normCode = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 const rndHex = (n) => hex(crypto.getRandomValues(new Uint8Array(n)));
 const ITEM_SLOTS = ['helm', 'chest', 'legs', 'boots', 'weapon', 'offhand', 'amulet', 'ring'];
 const okItem = (it) => !!it && typeof it === 'object' && ITEM_SLOTS.includes(it.slot) && Number.isInteger(it.tier) && it.tier >= 0 && it.tier <= 5 && Number.isInteger(it.rar) && it.rar >= 0 && it.rar <= 3 && Number.isInteger(it.plus || 0) && (it.plus || 0) >= 0 && (it.plus || 0) <= 10 && typeof it.uid === 'string' && it.uid.length <= 24;
@@ -32,7 +35,7 @@ export default {
   },
 };
 
-export class Arena {
+export class Arena2 {
   constructor(state) {
     this.state = state; this.plots = {};
     state.blockConcurrencyWhile(async () => { this.plots = (await state.storage.get('plots')) || {}; });
@@ -69,9 +72,10 @@ export class Arena {
     const me = ws.deserializeAttachment() || {};
     if (m.t === 'join') {
       me.name = clean(m.name, 16) || 'Viajante'; me.look = m.look && JSON.stringify(m.look).length < 2500 ? m.look : null; me.x = 0; me.z = 0; me.f = 0; me.w = 'field'; me.mv = 0;
-      ws.serializeAttachment(me);
-      const others = this.players().filter(p => p.id !== me.id);
       me.pid = clean(m.pid, 40); me.oid = me.pid ? await oidOf(me.pid) : ''; ws.serializeAttachment(me);
+      // a mesma conta so pode ficar conectada em um lugar: o mais antigo e desconectado
+      if (me.pid) this.state.getWebSockets().forEach(o => { if (o === ws) return; const a = o.deserializeAttachment(); if (a && a.pid === me.pid) { this.send(o, { t: 'kicked' }); try { o.close(4001, 'conta em outro aparelho'); } catch (e) {} } });
+      const others = this.players().filter(p => p.id !== me.id && p.pid !== me.pid);
       this.send(ws, { t: 'hello', id: me.id, oid: me.oid, players: others.map(p => this.pubP(p)), plots: this.pub() });
       this.broadcast({ t: 'join', p: this.pubP(me) }, ws);
     } else if (!me.name) { return; }
@@ -124,7 +128,7 @@ export class Arena {
 }
 
 // ---- Contas: nome + senha, vários personagens por conta, save na nuvem (SQLite do Durable Object) ----
-export class Accounts {
+export class Accounts2 {
   constructor(state, env) {
     this.env = env; this.sql = state.storage.sql;
     this.sql.exec('CREATE TABLE IF NOT EXISTS acct (key TEXT PRIMARY KEY, name TEXT, salt TEXT, hash TEXT, pid TEXT UNIQUE, created INTEGER)');
@@ -142,15 +146,24 @@ export class Accounts {
     this.sql.exec('CREATE TABLE IF NOT EXISTS gmsg (id INTEGER PRIMARY KEY AUTOINCREMENT, gid INTEGER, name TEXT, text TEXT, ts INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS trade (id INTEGER PRIMARY KEY AUTOINCREMENT, a TEXT, an TEXT, b TEXT, bn TEXT, ao TEXT, bo TEXT, aok INTEGER, bok INTEGER, st TEXT, ts INTEGER)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS mail (id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT, kind TEXT, body TEXT, ts INTEGER)');
+    try { this.sql.exec('ALTER TABLE acct ADD COLUMN rhash TEXT'); } catch (e) {}
+    try { this.sql.exec('ALTER TABLE acct ADD COLUMN rsalt TEXT'); } catch (e) {}
+    try { this.sql.exec('ALTER TABLE acct ADD COLUMN rconf INTEGER DEFAULT 0'); } catch (e) {}
+    this.sql.exec('CREATE TABLE IF NOT EXISTS rl (k TEXT PRIMARY KEY, n INTEGER, ts INTEGER)');
     this.lastSay = {};
   }
+  // limite de tentativas erradas (por conta + IP): evita adivinhar senha/codigo sem trancar a conta para todo mundo
+  rlBlocked(k, max, win) { const r = this.rows('SELECT n, ts FROM rl WHERE k = ?', k)[0]; return !!r && Date.now() - r.ts <= win && r.n >= max; }
+  rlFail(k, win) { const now = Date.now(), r = this.rows('SELECT n, ts FROM rl WHERE k = ?', k)[0]; if (!r || now - r.ts > win) this.sql.exec('INSERT OR REPLACE INTO rl (k, n, ts) VALUES (?, 1, ?)', k, now); else this.sql.exec('UPDATE rl SET n = n + 1 WHERE k = ?', k); }
+  rlClear(k) { this.sql.exec('DELETE FROM rl WHERE k = ?', k); }
   rows(q, ...a) { return this.sql.exec(q, ...a).toArray(); }
   chars(key) { return this.rows('SELECT id, name, cls, level, updated FROM chr WHERE key = ? ORDER BY updated DESC', key); }
   auth(token) { const r = this.rows('SELECT a.key, a.name, a.pid FROM tok t JOIN acct a ON a.key = t.key WHERE t.token = ?', String(token || '')); return r[0] || null; }
+  hasRec(key) { const r = this.rows('SELECT rhash, rconf FROM acct WHERE key = ?', key)[0]; return !!(r && r.rhash && r.rconf); }
   async session(key, name, pid) {
     const token = rndHex(24); this.sql.exec('INSERT INTO tok (token, key, ts) VALUES (?, ?, ?)', token, key, Date.now());
     this.sql.exec('DELETE FROM tok WHERE key = ? AND token NOT IN (SELECT token FROM tok WHERE key = ? ORDER BY ts DESC LIMIT 8)', key, key);
-    return { token, name, pid, chars: this.chars(key) };
+    return { token, name, pid, chars: this.chars(key), rec: this.hasRec(key) };
   }
   async fetch(req) {
     const url = new URL(req.url), path = url.pathname;
@@ -159,7 +172,7 @@ export class Accounts {
     if (path === '/api/register') {
       const name = String(b.name || '').trim().replace(/\s+/g, ' '), pass = String(b.pass || '');
       if (!/^[\p{L}\p{N}_ -]{3,16}$/u.test(name)) return J({ err: 'Nome: 3 a 16 letras ou números.' }, 400);
-      if (pass.length < 4 || pass.length > 64) return J({ err: 'Senha: mínimo 4 caracteres.' }, 400);
+      if (pass.length < 6 || pass.length > 64) return J({ err: 'Senha: mínimo 6 caracteres.' }, 400);
       const key = name.toLowerCase();
       if (this.rows('SELECT 1 FROM acct WHERE key = ?', key).length) return J({ err: 'Esse nome já existe. Escolha outro ou entre.' }, 409);
       let pid = /^[a-f0-9]{32}$/.test(String(b.legacyPid || '')) ? String(b.legacyPid) : '';
@@ -171,8 +184,40 @@ export class Accounts {
     }
     if (path === '/api/login') {
       const key = String(b.name || '').trim().replace(/\s+/g, ' ').toLowerCase(), a = this.rows('SELECT * FROM acct WHERE key = ?', key)[0];
-      if (!a || a.hash !== await sha(a.salt + String(b.pass || ''))) return J({ err: 'Nome ou senha incorretos.' }, 401);
+      const rk = 'l:' + key + ':' + (req.headers.get('cf-connecting-ip') || '');
+      if (this.rlBlocked(rk, 8, 10 * 60e3)) return J({ err: 'Muitas tentativas. Espere 10 minutos ou use o código de recuperação.' }, 429);
+      if (!a || a.hash !== await sha(a.salt + String(b.pass || ''))) { this.rlFail(rk, 10 * 60e3); return J({ err: 'Nome ou senha incorretos.' }, 401); }
+      this.rlClear(rk);
       return J(await this.session(a.key, a.name, a.pid));
+    }
+    if (path === '/api/recover') {   // esqueci a senha: nome + codigo de recuperacao + senha nova
+      const key = String(b.name || '').trim().replace(/\s+/g, ' ').toLowerCase(), np = String(b.pass || ''), a = this.rows('SELECT * FROM acct WHERE key = ?', key)[0];
+      const rk = 'r:' + key + ':' + (req.headers.get('cf-connecting-ip') || '');
+      if (this.rlBlocked(rk, 5, 15 * 60e3)) return J({ err: 'Muitas tentativas. Espere 15 minutos.' }, 429);
+      if (np.length < 6 || np.length > 64) return J({ err: 'Senha nova: 6 a 64 caracteres.' }, 400);
+      if (!a || !a.rhash || a.rhash !== await sha((a.rsalt || '') + normCode(b.code))) { this.rlFail(rk, 15 * 60e3); return J({ err: 'Nome ou código de recuperação incorretos.' }, 401); }
+      this.rlClear(rk);
+      const salt = rndHex(8);
+      // o codigo so vale uma vez: depois de usado, a conta recebe um novo na proxima tela
+      this.sql.exec('UPDATE acct SET salt = ?, hash = ?, rhash = NULL, rsalt = NULL, rconf = 0 WHERE key = ?', salt, await sha(salt + np), key);
+      this.sql.exec('DELETE FROM tok WHERE key = ?', key);
+      return J(await this.session(a.key, a.name, a.pid));
+    }
+    // ---- administrador (chave secreta ADMIN no cabeçalho x-admin): listar contas (sem senha/hash) e redefinir senha ----
+    if (path === '/api/admin/list' || path === '/api/admin/reset-pass') {
+      if (!this.env.ADMIN || req.headers.get('x-admin') !== this.env.ADMIN) return J({ err: 'no' }, 403);
+      if (path === '/api/admin/list') {
+        const q = String(b.q || '').trim().toLowerCase();
+        const accts = this.rows('SELECT key, name, created FROM acct ORDER BY created').filter(a => !q || a.key.includes(q)).map(a => ({ name: a.name, created: a.created, chars: this.rows('SELECT name, cls, level, updated FROM chr WHERE key = ? ORDER BY updated DESC', a.key) }));
+        return J({ total: accts.length, accts });
+      }
+      const key = String(b.name || '').trim().replace(/\s+/g, ' ').toLowerCase(), np = String(b.pass || '');
+      if (np.length < 6 || np.length > 64) return J({ err: 'Senha nova: 6 a 64 caracteres.' }, 400);
+      if (!this.rows('SELECT 1 FROM acct WHERE key = ?', key).length) return J({ err: 'Conta não encontrada.' }, 404);
+      const salt = rndHex(8);
+      this.sql.exec('UPDATE acct SET salt = ?, hash = ? WHERE key = ?', salt, await sha(salt + np), key);
+      this.sql.exec('DELETE FROM tok WHERE key = ?', key);   // derruba as sessões abertas dessa conta
+      return J({ ok: 1 });
     }
     if (path === '/api/admin/purge-tests') {
       if (!this.env.ADMIN || req.headers.get('x-admin') !== this.env.ADMIN) return J({ err: 'no' }, 403);
@@ -194,7 +239,24 @@ export class Accounts {
     }
     const me = this.auth(b.token);
     if (!me) return J({ err: 'sessão expirada' }, 401);
-    if (path === '/api/me') return J({ name: me.name, pid: me.pid, chars: this.chars(me.key) });
+    if (path === '/api/me') return J({ name: me.name, pid: me.pid, chars: this.chars(me.key), rec: this.hasRec(me.key) });
+    if (path === '/api/recovery/new') {   // gera um codigo novo (o anterior deixa de valer); so fica ativo depois de confirmado
+      const code = newCode(), salt = rndHex(8);
+      this.sql.exec('UPDATE acct SET rhash = ?, rsalt = ?, rconf = 0 WHERE key = ?', await sha(salt + normCode(code)), salt, me.key);
+      return J({ code, name: me.name });
+    }
+    if (path === '/api/recovery/confirm') { this.sql.exec('UPDATE acct SET rconf = 1 WHERE key = ? AND rhash IS NOT NULL', me.key); return J({ ok: 1, rec: this.hasRec(me.key) }); }
+    if (path === '/api/pass/change') {
+      const a = this.rows('SELECT * FROM acct WHERE key = ?', me.key)[0], np = String(b.pass || ''), rk = 'c:' + me.key + ':' + (req.headers.get('cf-connecting-ip') || '');
+      if (this.rlBlocked(rk, 5, 10 * 60e3)) return J({ err: 'Muitas tentativas. Espere 10 minutos.' }, 429);
+      if (np.length < 6 || np.length > 64) return J({ err: 'Senha nova: 6 a 64 caracteres.' }, 400);
+      if (a.hash !== await sha(a.salt + String(b.old || ''))) { this.rlFail(rk, 10 * 60e3); return J({ err: 'Senha atual incorreta.' }, 401); }
+      this.rlClear(rk);
+      const salt = rndHex(8);
+      this.sql.exec('UPDATE acct SET salt = ?, hash = ? WHERE key = ?', salt, await sha(salt + np), me.key);
+      this.sql.exec('DELETE FROM tok WHERE key = ? AND token != ?', me.key, String(b.token));   // derruba os outros aparelhos
+      return J({ ok: 1 });
+    }
     if (path === '/api/logout') { this.sql.exec('DELETE FROM tok WHERE token = ?', String(b.token)); return J({ ok: 1 }); }
     if (path === '/api/char/get') {
       const r = this.rows('SELECT save FROM chr WHERE id = ? AND key = ?', String(b.id || ''), me.key)[0];
