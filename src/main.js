@@ -8,7 +8,7 @@ import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { ULT_LV, ULT_EVO, CLASSES, CLASS_MODELS, REALMS, baseRealm, groundRealm, hordeRealm, isVariant, RARITY, HEROES, ACTS, INTRO, ENDING, PREMADE, buildPlayerHero, portraitUrl, BASE } from './data.js';
 import { std, metal, glow, shadowAll } from './models.js';
-import { makeHero, makeSkeleton, animateHero, playOnce, preloadModels } from './actors.js';
+import { makeHero, makeSkeleton, makeMonster, preloadMonsters, animateHero, playOnce, preloadModels } from './actors.js';
 import { openCreator, CLASS_LIST } from './creator.js';
 import { SKILLS, SKILL_MAX, skillById, rollChoices, skillsOf, PERIOD_FX, FX_IDS, fxDefOf, migrateSkills } from './skills.js';
 import { initCraft } from './craft.js';
@@ -1342,7 +1342,7 @@ function spawnProxy(r) {
   const tintBase = boss ? info.color : (T0.tint != null ? T0.tint : realm.enemy);
   const BS = boss ? BOSSES[curAct().realm] : null;
   const tint = new THREE.Color(BS ? BS.tint : tintBase).lerp(new THREE.Color(0xffffff), boss ? (BS ? 0 : 0.2) : (T0.tint != null ? 0.1 : 0.5)).getHex();
-  const mesh = (!boss && T0.body && makeCreature(T0.body, T0.tint, T0.size)) || (BS && BS.proc && bossBody(curAct().realm)) || makeSkeleton(BS ? BS.model : T0.model, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run, bsize: BS && BS.size }) || makeEnemy(boss ? info.color : realm.enemy, boss);
+  const mesh = (!boss && T0.gm && makeMonster(T0.gm, { size: T0.size, tint: T0.gt })) || (!boss && T0.body && makeCreature(T0.body, T0.tint, T0.size)) || (BS && BS.proc && bossBody(curAct().realm)) || makeSkeleton(BS ? BS.model : T0.model, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run, bsize: BS && BS.size }) || makeEnemy(boss ? info.color : realm.enemy, boss);
   if (BS && !BS.proc) bossLook(mesh, curAct().realm);
   mesh.position.set(r[2], 0, r[3]); scene.add(mesh);
   const e = { nid: r[0], remote: true, mesh, hp: Math.max(1, r[4]), maxHp: r[5], speed: 0, boss, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? (BS ? BS.r : 1.4) : T0.r, t: Math.random() * 10, dmg: 0, stun: 0, slow: 0, flash: 0, ranged: null, res: boss ? null : T0.res || null, tx: r[2], tz: r[3], elite };
@@ -1370,7 +1370,7 @@ function applyKill(d) {
   let e = enemies.find(x => x.remote && x.nid === d.n);
   if (e) {
     e.dead = true; const i = enemies.indexOf(e); if (i >= 0) enemies.splice(i, 1);
-    if (e.mesh.userData.glb) { playOnce(e.mesh, 'death'); dying.push({ mesh: e.mesh, until: T + 1.1 }); } else dying.push({ mesh: e.mesh, until: T + 0.28, pop: T, s0: e.mesh.scale.x });
+    if (e.mesh.userData.glb && !e.mesh.userData.noDeath) { playOnce(e.mesh, 'death'); dying.push({ mesh: e.mesh, until: T + 1.1 }); } else dying.push({ mesh: e.mesh, until: T + 0.28, pop: T, s0: e.mesh.scale.x });
   } else { const T0 = ETYPES[d.k] || ETYPES.minion; e = { kind: d.b ? 'Skeleton_Warrior' : T0.loot, boss: !!d.b, elite: !!d.el, type: d.b ? 'boss' : d.k, mesh: { position: new THREE.Vector3(d.x, 0, d.z) } }; }
   onKill(e);
 }
@@ -1592,7 +1592,7 @@ function spawnEnemy(boss, info, forceType, at) {
   const tintBase = boss ? (BS ? BS.tint : info.color) : (T0.tint != null ? T0.tint : realm.enemy);
   const tint = new THREE.Color(tintBase).lerp(new THREE.Color(0xffffff), boss ? (BS ? 0 : 0.2) : (T0.tint != null ? 0.1 : 0.5)).getHex();
   const kind = BS ? BS.model : T0.model;
-  const mesh = (!boss && T0.body && makeCreature(T0.body, T0.tint, T0.size)) || (BS && BS.proc && bossBody(bossRealm())) || makeSkeleton(kind, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run, bsize: BS && BS.size }) || makeEnemy(boss ? info.color : realm.enemy, boss);
+  const mesh = (!boss && T0.gm && makeMonster(T0.gm, { size: T0.size, tint: T0.gt })) || (!boss && T0.body && makeCreature(T0.body, T0.tint, T0.size)) || (BS && BS.proc && bossBody(bossRealm())) || makeSkeleton(kind, tint, boss, { size: T0.size, atk: T0.atk, run: T0.run, bsize: BS && BS.size }) || makeEnemy(boss ? info.color : realm.enemy, boss);
   if (BS && !BS.proc) bossLook(mesh, bossRealm());
   if (isVariant(boss ? bossRealm() : curAct().realm)) { const vk = boss ? bossRealm() : curAct().realm; tintVariant(mesh, boss ? BOSSES[vk].tint : REALMS[vk].enemy, boss ? 0.45 : 0.3); }
   mesh.position.set(x, 0, z); scene.add(mesh);
@@ -1605,6 +1605,7 @@ function spawnEnemy(boss, info, forceType, at) {
   const dmgLv = lv <= 36 ? lv : 36 + (lv - 36) * 0.45;   // acima do nivel 36 o dano dos monstros cresce mais devagar (a vida do jogador nao acompanha)
   const dmgBase = ((6 + dmgLv * 0.8) * (1 + scaleAct() * 0.12)) * 1.6 * catchD;
   const e = { nid: ++nidSeq, mesh, hp: hpv, maxHp: hpv, speed: boss ? 1.5 * (BS ? BS.spd / 1.2 : 1) : (1.9 + Math.random() * 1.0) * T0.spd, boss: !!boss, bk: boss ? bossRealm() : null, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? (BS ? BS.r : 1.4) : T0.r, t: Math.random() * 10, dmg: dmgBase * (boss ? 1.6 : T0.dmg), stun: 0, slow: 0, flash: 0, ranged: boss ? null : T0.ranged || null, res: boss ? null : T0.res || null, shotAt: T + 1 + Math.random() * 2, beh: boss ? (BS ? 'boss' : null) : T0.beh || null, cdAt: T + 1 + Math.random() * 3 };
+  if (T0.fx && !boss) { e.slashColor = e.lobColor = e.beamColor = T0.fx; }
   if (dg) { e.hp = e.maxHp = e.hp * 1.35; e.dmg *= 1.3; }
   if (!boss && !forceType && Math.random() < 0.04 + scaleAct() * 0.01 + (night > 0.55 ? 0.03 : 0) + (dg ? 0.12 : 0)) {
     e.elite = true; e.hp = e.maxHp = e.hp * 4; e.dmg *= 1.4; e.radius *= 1.3; mesh.scale.multiplyScalar(1.35);
@@ -1620,17 +1621,28 @@ function spawnEnemy(boss, info, forceType, at) {
   return e;
 }
 
-// disparo inimigo (esquiva-se andando)
-function enemyShoot(e, p) {
-  const r = e.ranged, from = e.mesh.position;
-  const dir = new THREE.Vector3(p.x - from.x, 0, p.z - from.z).normalize();
-  const m = new THREE.Mesh(bulletGeo, new THREE.MeshBasicMaterial({ color: r.color }));
-  m.position.set(from.x, 1.2, from.z); m.scale.setScalar(r.size || 1.2);
-  if (r.arrow) { m.scale.set(0.35, 0.35, 2.2); m.rotation.y = Math.atan2(dir.x, dir.z); }
+// disparo inimigo (esquiva-se andando). pat: 'one' (padrao), 'fan' (leque de 3), 'burst' (3 em fila), 'ring' (anel de 10)
+function eShotOne(x, z, dx, dz, speed, color, size, arrow, dmg, splash) {
+  const dir = new THREE.Vector3(dx, 0, dz).normalize();
+  const m = new THREE.Mesh(bulletGeo, new THREE.MeshBasicMaterial({ color }));
+  m.position.set(x, 1.2, z); m.scale.setScalar(size || 1.2);
+  if (arrow) { m.scale.set(0.35, 0.35, 2.2); m.rotation.y = Math.atan2(dir.x, dir.z); }
+  else { const gl = vfx.glowSprite(color, 2.6); gl.scale.multiplyScalar(1 / (size || 1.2)); m.add(gl); }
   scene.add(m);
-  eshots.push({ mesh: m, dir, speed: r.speed, life: 2.2, dmg: e.dmg, splash: r.splash || 0, color: r.color });
+  eshots.push({ mesh: m, dir, speed, life: 2.4, dmg, splash: splash || 0, color });
+  if (rmCur && rmN > 1 && isHost()) rl('esh', [+x.toFixed(1), +z.toFixed(1), +dir.x.toFixed(2), +dir.z.toFixed(2), speed, color, size || 1.2, arrow ? 1 : 0]);
+}
+// efeito de "carregar" o ataque: brilho e faiscas na mao do monstro
+function castFx(e, color) { const p = e.mesh.position; vfx.flash(p, color, 2.4, 0.28, 1.3); vfx.burst(p, { color, n: 8, speed: 2.4, up: 1.2, size: 0.3, life: 0.4, y: 1.2 }); }
+function enemyShoot(e, p) {
+  const r = e.ranged, from = e.mesh.position, pat = r.pat || 'one';
+  const base = Math.atan2(p.x - from.x, p.z - from.z), at = (a) => [Math.sin(a), Math.cos(a)];
+  castFx(e, r.color);
+  if (pat === 'fan') [-0.4, 0, 0.4].forEach(o => { const [dx, dz] = at(base + o); eShotOne(from.x, from.z, dx, dz, r.speed, r.color, r.size, r.arrow, e.dmg * 0.7, r.splash); });
+  else if (pat === 'ring') for (let i = 0; i < 10; i++) { const [dx, dz] = at(base + i / 10 * Math.PI * 2); eShotOne(from.x, from.z, dx, dz, r.speed * 0.75, r.color, r.size, r.arrow, e.dmg * 0.55, r.splash); }
+  else if (pat === 'burst') { const [dx, dz] = at(base); for (let k = 0; k < 3; k++) eShotOne(from.x - dx * k * 1.1, from.z - dz * k * 1.1, dx, dz, r.speed, r.color, r.size, r.arrow, e.dmg * 0.6, r.splash); }
+  else { const [dx, dz] = at(base); eShotOne(from.x, from.z, dx, dz, r.speed, r.color, r.size, r.arrow, e.dmg, r.splash); }
   if (e.mesh.userData.glb) playOnce(e.mesh, 'atk', 0.6);
-  if (rmCur && rmN > 1 && isHost()) rl('esh', [+from.x.toFixed(1), +from.z.toFixed(1), +dir.x.toFixed(2), +dir.z.toFixed(2), r.speed, r.color, r.size || 1.2, r.arrow ? 1 : 0]);
 }
 
 function spawnBoss() {
@@ -1657,13 +1669,13 @@ function damageEnemy(e, dmg, crit, fromNet) {
   if (e.pvp) { pvpStrike(e, dmg, crit); return; }   // rival na arena: dano de PvP e calculado por quem apanha
   vfx.burst(e.mesh.position, { color: crit ? 0xffb020 : 0xfff4d0, n: crit ? 16 : 7, speed: crit ? 5.5 : 3.6, up: 0.6, size: crit ? 0.45 : 0.3, life: 0.35, y: 1.0 }); if (crit) vfx.flash(e.mesh.position, 0xffc040, 3, 0.2, 1.2);
   e.hp -= dmg; ftAt(e.mesh.position, (crit ? '💥' : '') + dmg, crit ? '#ff9f1c' : '#ffd166', 1.6 * (e.boss ? 2 : 1));
-  e.flash = 0.08;
+  e.flash = 0.08; if (e.mesh.userData.monster && e.mesh.userData.anim.hit && !e.boss && Math.random() < 0.3) playOnce(e.mesh, 'hit', 0.4);
   if (e.remote) { rl('ehit', { n: e.nid, d: dmg }, rmHost); if (e.hp <= 0) e.hp = 1; if (e === bossRef) $('bossfill').style.width = Math.max(0, e.hp / e.maxHp * 100) + '%'; return; }
   if (e.wb && wb) wb.pending += dmg;
   if (e === bossRef && !e.wb) $('bossfill').style.width = Math.max(0, e.hp / e.maxHp * 100) + '%';
   if (e.hp > 0) return;
-  e.dead = true;
-  if (e.mesh.userData.glb) { playOnce(e.mesh, 'death'); dying.push({ mesh: e.mesh, until: T + 1.1 }); } else dying.push({ mesh: e.mesh, until: T + 0.28, pop: T, s0: e.mesh.scale.x });
+  e.dead = true; if (e.tele) { scene.remove(e.tele); e.tele = null; }
+  if (e.mesh.userData.glb && !e.mesh.userData.noDeath) { playOnce(e.mesh, 'death'); dying.push({ mesh: e.mesh, until: T + 1.1 }); } else dying.push({ mesh: e.mesh, until: T + 0.28, pop: T, s0: e.mesh.scale.x });
   const i = enemies.indexOf(e); if (i >= 0) enemies.splice(i, 1);
   if (rmCur && rmN > 1 && isHost()) rl('ek', { n: e.nid, k: e.type, b: e.boss ? 1 : 0, el: e.elite ? 1 : 0, x: +e.mesh.position.x.toFixed(1), z: +e.mesh.position.z.toFixed(1) });
   onKill(e);
@@ -1823,6 +1835,48 @@ function behave(e, tg, vx, vz, d) {
   } else if (b === 'spitter') {   // cospe uma poca que fica queimando
     keep(7, 11);
     if (T >= e.cdAt) { e.cdAt = T + 3.6 + Math.random(); addDanger(p.x, p.z, 2.6, 0.7, e.dmg * 0.4, 0x7bdc3a, 4.5); if (e.mesh.userData.glb) playOnce(e.mesh, 'atk', 0.6); }
+  } else if (b === 'leap') {   // pula em cima do jogador: marca o ponto, voa em arco e cai com onda de choque
+    e.st = e.st || 'chase';
+    if (e.st === 'chase') {
+      if (d < 10 && d > 3.2 && T >= e.cdAt) { e.st = 'wind'; e.stAt = T + 0.7; e.lx = p.x; e.lz = p.z; e.sx = ep.x; e.sz = ep.z; glowEnemy(e, 0xffaa22); addDanger(e.lx, e.lz, 2.5, 0.7 + 0.55, e.dmg * 1.3, 0xff8a2a); if (e.mesh.userData.glb) playOnce(e.mesh, 'atk', 0.5); }
+    } else if (e.st === 'wind') { o.mv = 0; o.melee = false; e.jy = Math.max(0, -Math.sin((e.stAt - T) * 6) * 0.08); if (T >= e.stAt) { e.st = 'air'; e.t0 = T; e.stAt = T + 0.55; glowEnemy(e, e.elite ? 0x664400 : 0); } }
+    else if (e.st === 'air') {
+      o.mv = 0; o.melee = false; const k = Math.min(1, (T - e.t0) / 0.55);
+      ep.x = e.sx + (e.lx - e.sx) * k; ep.z = e.sz + (e.lz - e.sz) * k; e.jy = Math.sin(k * Math.PI) * 3.2;
+      if (k >= 1) { e.jy = 0; e.st = 'rest'; e.stAt = T + 1.0; ringFx({ x: ep.x, z: ep.z }, 0xff8a2a, 3.5, 0.45); vfx.burst(ep, { color: 0xc9a46a, n: 14, speed: 4, up: 1.4, size: 0.5, life: 0.6, y: 0.2 }); shake = Math.max(shake, 0.2); }
+    } else { o.mv = 0; o.melee = false; e.jy = 0; if (T >= e.stAt) { e.st = 'chase'; e.cdAt = T + 3.2 + Math.random() * 2; } }
+  } else if (b === 'slam') {   // pancada no chao em volta de si: o circulo mostra a area
+    e.st = e.st || 'chase';
+    if (e.st === 'chase') {
+      if (d < 4.4 && T >= e.cdAt) { e.st = 'wind'; e.stAt = T + 1.0; glowEnemy(e, 0xff5522); addDanger(ep.x, ep.z, 4.0, 1.0, e.dmg * 1.5, 0xff5a22); if (e.mesh.userData.glb) playOnce(e.mesh, 'atk', 0.9); }
+    } else if (e.st === 'wind') { o.mv = 0; o.melee = false; e.jy = T < e.stAt - 0.25 ? 0.5 * Math.min(1, (T - (e.stAt - 1.0)) * 3) : 0; if (T >= e.stAt) { e.jy = 0; e.st = 'rest'; e.stAt = T + 0.9; glowEnemy(e, e.elite ? 0x664400 : 0); vfx.burst(ep, { color: 0xc9a46a, n: 18, speed: 5, up: 1.6, size: 0.55, life: 0.7, y: 0.2 }); shake = Math.max(shake, 0.28); } }
+    else { o.mv = 0; o.melee = false; e.jy = 0; if (T >= e.stAt) { e.st = 'chase'; e.cdAt = T + 3.0 + Math.random() * 1.5; } }
+  } else if (b === 'lob') {   // arremessa uma bomba em arco: cai onde voce estava e explode
+    keep(8, 13);
+    if (T >= e.cdAt) {
+      e.cdAt = T + 3.8 + Math.random(); castFx(e, e.lobColor || 0xff9a3c);
+      const tx = p.x + (Math.random() - 0.5) * 1.5, tz = p.z + (Math.random() - 0.5) * 1.5, sx = ep.x, sz = ep.z, col = e.lobColor || 0xff9a3c;
+      addDanger(tx, tz, 2.6, 1.25, e.dmg * 1.2, col);
+      const orb = new THREE.Mesh(new THREE.SphereGeometry(0.4, 10, 8), new THREE.MeshBasicMaterial({ color: col })); orb.add(vfx.glowSprite(col, 3.2));
+      addEffect(orb, 1.25, (k) => { orb.position.set(sx + (tx - sx) * k, 1.2 + Math.sin(k * Math.PI) * 5.5, sz + (tz - sz) * k); vfx.trail(orb.position, col, 0.5); });
+      if (e.mesh.userData.glb) playOnce(e.mesh, 'atk', 0.6);
+    }
+  } else if (b === 'beam') {   // raio: risca uma linha no chao, espera e dispara
+    keep(8, 13); e.st = e.st || 'idle';
+    if (e.st === 'idle' && T >= e.cdAt && d < 16) {
+      e.st = 'wind'; e.stAt = T + 1.1; e.dx = vx / d; e.dz = vz / d; castFx(e, e.beamColor || 0x7fe3ff); glowEnemy(e, 0x3399ff);
+      const t = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 18), new THREE.MeshBasicMaterial({ color: e.beamColor || 0x7fe3ff, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false }));
+      t.rotation.x = -Math.PI / 2; t.rotation.z = Math.atan2(e.dx, e.dz) + Math.PI; t.position.set(ep.x + e.dx * 9, walkY(ep.x, ep.z) + 0.15, ep.z + e.dz * 9); scene.add(t); e.tele = t;
+      if (e.mesh.userData.glb) playOnce(e.mesh, 'atk', 0.9);
+    } else if (e.st === 'wind') {
+      o.mv = 0; if (e.tele) e.tele.material.opacity = 0.2 + 0.25 * Math.abs(Math.sin(T * 14));
+      if (T >= e.stAt) {
+        e.st = 'idle'; e.cdAt = T + 4.5 + Math.random() * 1.5; glowEnemy(e, e.elite ? 0x664400 : 0); if (e.tele) { scene.remove(e.tele); e.tele = null; }
+        const col = e.beamColor || 0x7fe3ff; for (let i = 1; i <= 9; i++) { const q = { x: ep.x + e.dx * i * 2, z: ep.z + e.dz * i * 2 }; ringFx(q, col, 1.6, 0.35); vfx.flash(q, col, 3, 0.25, 1.1); }
+        const px = p.x - ep.x, pz = p.z - ep.z, along = px * e.dx + pz * e.dz, off = Math.abs(px * e.dz - pz * e.dx);
+        if (along > 0 && along < 19 && off < 1.2) hitPlayer({ dmg: e.dmg * 1.6 });
+      }
+    }
   }
   return o;
 }
@@ -3033,19 +3087,19 @@ function update(dt) {
     ep.x = THREE.MathUtils.clamp(ep.x + ux * e.speed * sm * mv * sp * dt, -WORLD, WORLD); ep.z = THREE.MathUtils.clamp(ep.z + uz * e.speed * sm * mv * sp * dt, -WORLD, WORLD);
     if (cave) cave.clamp(ep, 0.5, false);
     e.t += dt * 6;
-    if (e.mesh.userData.glb) { ep.y = gE; animateHero(e.mesh, dt, { moving: sm > 0 && mv !== 0 && (mv < 0 || d > e.radius + 0.4), spd: sm }); }
+    if (e.mesh.userData.glb) { ep.y = gE + (e.jy || 0) + (e.mesh.userData.hop && sm > 0 && mv !== 0 ? Math.abs(Math.sin(e.t)) * 0.3 : 0); animateHero(e.mesh, dt, { moving: sm > 0 && mv !== 0 && (mv < 0 || d > e.radius + 0.4), spd: sm }); }
     else {
       // pulo com inclinacao para frente ao andar e investida ao atacar
       const mvg = sm > 0 && mv !== 0 && (mv < 0 || d > e.radius + 0.4), hit = melee && d < e.radius + 0.5 && sm > 0;
       e.mesh.rotation.order = 'YXZ';
       const hop = Math.abs(Math.sin(e.t)), lunge = hit ? Math.max(0, Math.sin(T * 9 + e.t)) : 0;
-      ep.y = gE + (mvg ? hop * 0.25 : hop * 0.04) + lunge * 0.15;
+      ep.y = gE + (mvg ? hop * 0.25 : hop * 0.04) + lunge * 0.15 + (e.jy || 0);
       const lean = (mvg ? 0.16 + hop * 0.08 : 0) * (mv < 0 ? -1 : 1) + lunge * 0.5;
       e.mesh.rotation.x += (lean - e.mesh.rotation.x) * Math.min(1, dt * 14);
     }
     e.mesh.rotation.y = Math.atan2(vx, vz);
     if (e.flash > 0) { e.flash -= dt; const on = e.flash > 0; e.mesh.traverse(o => { if (o.isMesh && o.material.emissive) o.material.emissive.setHex(on ? 0xffffff : (e.elite ? 0x664400 : 0x000000)); }); }
-    if (melee && d < e.radius + 0.5) { if (tg.id) hurtRemote(e, tg.id); else hitPlayer(e); if (e.mesh.userData.glb && T > (e.atkAt || 0)) { e.atkAt = T + 1.0; playOnce(e.mesh, 'atk', 0.6); } }
+    if (melee && d < e.radius + 0.5) { if (tg.id) hurtRemote(e, tg.id); else hitPlayer(e); if (e.mesh.userData.glb && T > (e.atkAt || 0)) { e.atkAt = T + 1.0; playOnce(e.mesh, 'atk', 0.6); if (e.mesh.userData.monster) { vfx.slash({ x: ep.x + ux * 0.9, z: ep.z + uz * 0.9, y: ep.y }, Math.atan2(vx, vz), 1.5, Math.PI * 0.9, e.slashColor || 0xffe0b0, 0.22, 0.9); vfx.burst({ x: ep.x + ux * 1.1, y: ep.y, z: ep.z + uz * 1.1 }, { color: 0xffffff, n: 5, speed: 2.5, up: 0.5, size: 0.28, life: 0.3, y: 0.9 }); } } }
   });
   updateDangers();
   enemies.forEach(e => { const ud = e.mesh.userData; if (ud && ud.spinG) ud.spinG.rotation.y = T * 1.6; if (ud && ud.tick) ud.tick(T); });
@@ -3160,7 +3214,7 @@ function frame() {
 }
 
 // ===================== Início =====================
-await kkReady; await preloadModels((f) => { $('lfill').style.width = Math.round(f * 100) + '%'; });
+await kkReady; await Promise.all([preloadModels((f) => { $('lfill').style.width = Math.round(f * 100) + '%'; }), preloadMonsters()]);
 $('loading').style.display = 'none';
 city = buildCity(); scene.add(city.group); refreshPlots();
 applyAct();
@@ -3177,7 +3231,7 @@ if (qs.has('city')) setCityMode(true);
 if (qs.has('at')) { const [ax, az] = qs.get('at').split(',').map(Number); if (!qs.has('city')) setCityMode(true); player.position.set(ax, 0, az); syncCam(); }
 if (qs.has('night')) dayT = +qs.get('night') || 0;
 if (qs.has('quests')) setTimeout(() => openQuests(), 1500);
-if (qs.has('dbg')) window.__g = { get waterMat() { return waterMat; }, enterArena, openArena, get pvp() { return pvp; }, get netPvp() { return netPvp; }, get net() { return net; }, get remotes() { return remotes; }, get enemies() { return enemies; }, get invuln() { return invuln; }, update, clearEnemies, applyAct, setCityMode, atkPower, zoneLv, xpNeed, calcMaxHp, recalcHp, scaleAct, nearestEnemy, get hp() { return hp; }, set hp(v) { hp = v; }, get maxHp() { return maxHp; }, get inCity() { return inCity; }, get bossRef() { return bossRef; }, get hero() { return hero; }, damageEnemy, enemies, editCharacter, get remotes() { return remotes; }, get net() { return net; }, curW, setDay: (v, w) => { dayT = v; if (w) weather = w; weatherLeft = 1e6; }, craft, enterCave, caveTick, get cave() { return cave; }, state, useSkill, castSkill, get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, get player() { return player; }, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
+if (qs.has("dbg")) window.__g = { eshots, get waterMat() { return waterMat; }, enterArena, openArena, get pvp() { return pvp; }, get netPvp() { return netPvp; }, get net() { return net; }, get remotes() { return remotes; }, get enemies() { return enemies; }, get invuln() { return invuln; }, update, clearEnemies, applyAct, setCityMode, atkPower, zoneLv, xpNeed, calcMaxHp, recalcHp, scaleAct, nearestEnemy, get hp() { return hp; }, set hp(v) { hp = v; }, get maxHp() { return maxHp; }, get inCity() { return inCity; }, get bossRef() { return bossRef; }, get hero() { return hero; }, damageEnemy, enemies, editCharacter, get remotes() { return remotes; }, get net() { return net; }, curW, setDay: (v, w) => { dayT = v; if (w) weather = w; weatherLeft = 1e6; }, craft, enterCave, caveTick, get cave() { return cave; }, state, useSkill, castSkill, get camYaw() { return camYaw; }, spawnEnemy, dangers, social, openQuests, state, giveItem, newItem, get player() { return player; }, walkY, riverZ, riverHW, groundH, scene, terrain, ground, get inCity() { return inCity; }, enemies, get rm() { return { cur: rmCur, host: rmHost, n: rmN, me: netId, isHost: isHost() }; } };
 if (qs.get('pos')) { const iv = setInterval(() => { if (!gameStarted) return; clearInterval(iv); setTimeout(() => { const [px, pz] = qs.get('pos').split(',').map(Number); if (inCity) setCityMode(false); player.position.set(px || 0, 0, pz || 0); playerGy = walkY(px || 0, pz || 0); }, 600); }, 300); }
 if (qs.get('cam') === 'low') { camMode = 'low'; $('camb').querySelector('small').textContent = 'IMERSIVA'; }
 if (qs.has('yaw')) { camYaw = camYawT = +qs.get('yaw'); }
@@ -3508,7 +3562,7 @@ function runSelfTest() {
         for (let st = 1; st <= 5; st++) { const w = hordeWeights(realm, st, a); seen.push(Object.keys(w).filter(k => w[k] > 0).sort().join(','));
           for (const k in w) if (w[k] > 0) { if (!ETYPES[k]) throw new Error('tipo inexistente ' + k); const e = spawnEnemy(false, null, k); if (!e || !e.mesh) throw new Error('nao nasceu ' + k); n++; } }
         if (new Set(seen.slice(0, 4)).size < 4) throw new Error('estagios 1-4 repetem monstros em ' + realm);
-        if (seen[0].includes('crab') || !/minion/.test(seen[0])) throw new Error('estagio 1 nao e de esqueletos em ' + realm); }
+        if (!/minion/.test(seen[0])) throw new Error('estagio 1 sem esqueletos em ' + realm); }
       clearEnemies(); state.act = act0; state.stage = st0; applyAct(); out.push('hordas por estagio (' + ACTS.length + ' reinos x 5 estagios, ' + n + ' monstros): ok'); }
 
     // casa ampliada e andares

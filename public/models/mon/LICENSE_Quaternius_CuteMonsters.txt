@@ -1,0 +1,4 @@
+Cute Animated Monsters by Quaternius - CC0 1.0 Universal (public domain)
+https://opengameart.org/content/textured-cute-monster-pack
+https://www.patreon.com/quaternius
+Convertidos de FBX para GLB (FBX2glTF) e texturas em WebP.

@@ -98,59 +98,63 @@ export function makeCreature(body, color, size) {
 // ---- tipos de monstro (usam os mesmos comportamentos dos esqueletos: beh / ranged) ----
 const T = (name, body, tint, hp, dmg, spd, size, r, o) => Object.assign({ name, body, tint, hp, dmg, spd, size, r, loot: size > 2.2 ? 'brute' : size < 1.5 ? 'runner' : 'Skeleton_Warrior' }, o || {});
 const SHOOT = (color, o) => Object.assign({ range: 11, keep: 7, cd: 2.6, speed: 9, color, size: 1.5, splash: 1.4 }, o || {});
+// gm = modelo 3D animado (Quaternius, CC0) e gt = cor que tinge a textura; fx = cor dos golpes/ataques; body = corpo procedural de reserva.
+// Ataques: beh 'leap' (pula em cima), 'slam' (pancada em area), 'lob' (bomba em arco), 'beam' (raio), 'charger', 'bomber', 'stalker', 'swarm'...
+// e ranged.pat 'fan' (leque), 'burst' (rajada), 'ring' (anel de tiros).
 export const CREATURE_TYPES = {
   // Mar das Marés
-  crab: T('Caranguejo', 'crab', 0xe8643c, 1.6, 1.1, 0.9, 1.5, 0.8, { res: { p: 0.8, m: 1.2 } }),
-  limo: T('Limo Marinho', 'slime', 0x3ccfd8, 0.9, 0.8, 1.0, 1.3, 0.65),
-  jellyS: T('Água-viva Chocante', 'jelly', 0xff8ad8, 0.8, 1.0, 0.8, 1.6, 0.7, { ranged: SHOOT(0xff8ad8), atk: 'Spellcast_Shoot' }),
-  jellyN: T('Água-viva Tempestade', 'jelly', 0x7fd8ff, 0.9, 1.4, 0.75, 1.7, 0.7, { beh: 'nova' }),
-  coral: T('Golem de Coral', 'golem', 0xff7aa0, 3.0, 1.5, 0.65, 2.6, 1.1, { res: { p: 0.7, m: 1.3 } }),
-  crabK: T('Caranguejo Gigante', 'crab', 0xff4a2a, 2.0, 1.8, 0.85, 2.2, 1.0, { beh: 'charger', res: { p: 0.75, m: 1.25 } }),
+  crab: T('Caranguejo', 'crab', 0xe8643c, 1.6, 1.1, 0.9, 1.6, 0.8, { gm: 'Crab', fx: 0xff8a5a, beh: 'leap', res: { p: 0.8, m: 1.2 } }),
+  limo: T('Limo Marinho', 'slime', 0x3ccfd8, 0.9, 0.8, 1.0, 1.4, 0.65, { gm: 'Q_Slime', gt: 0x9fe8ff, fx: 0x7fe3ff, beh: 'leap' }),
+  jellyS: T('Polvo Elétrico', 'jelly', 0xff8ad8, 0.8, 1.0, 0.8, 1.7, 0.7, { gm: 'Cthulhu', gt: 0xffb0ec, fx: 0xff8ad8, ranged: SHOOT(0xff8ad8, { pat: 'fan' }), atk: 'Spellcast_Shoot' }),
+  jellyN: T("Olho-d'água Tempestade", 'jelly', 0x7fd8ff, 0.9, 1.4, 0.75, 1.9, 0.7, { gm: 'Alien_Tall', fx: 0x7fd8ff, beh: 'lob' }),
+  coral: T('Golem de Coral', 'golem', 0xff7aa0, 3.0, 1.5, 0.65, 2.8, 1.1, { gm: 'Cyclops', gt: 0xff9ab8, fx: 0xff7aa0, beh: 'slam', res: { p: 0.7, m: 1.3 } }),
+  crabK: T('Caranguejo Gigante', 'crab', 0xff4a2a, 2.0, 1.8, 0.85, 2.5, 1.0, { gm: 'Crab', gt: 0xff8a7a, fx: 0xff4a2a, beh: 'charger', res: { p: 0.75, m: 1.25 } }),
   // Clã das Sombras
-  bat: T('Morcego Sombrio', 'bat', 0x5a3a7a, 0.35, 0.6, 1.6, 1.1, 0.5, { beh: 'swarm' }),
-  batV: T('Morcego Vampiro', 'bat', 0x8a2a4a, 0.7, 1.4, 1.3, 1.4, 0.6, { beh: 'stalker' }),
-  spiderD: T('Aranha das Trevas', 'spider', 0x2a1a3a, 0.9, 1.0, 0.85, 1.7, 0.75, { beh: 'spitter' }),
-  spiderG: T('Aranha Gigante', 'spider', 0x4a2a6a, 2.2, 1.5, 1.0, 2.4, 1.0),
-  wraith: T('Espectro', 'wisp', 0x9b7bff, 0.8, 1.5, 1.1, 1.7, 0.7, { beh: 'stalker' }),
-  imp: T('Diabrete Explosivo', 'imp', 0xb02a5a, 0.5, 2.0, 1.4, 1.5, 0.6, { beh: 'bomber' }),
+  bat: T('Morcego Sombrio', 'bat', 0x5a3a7a, 0.35, 0.6, 1.6, 1.3, 0.5, { gm: 'Bat', fx: 0xb08aff, beh: 'swarm' }),
+  batV: T('Morcego Vampiro', 'bat', 0x8a2a4a, 0.7, 1.4, 1.3, 1.6, 0.6, { gm: 'Q_Bat', gt: 0xff8aa8, fx: 0xff3a6a, beh: 'stalker' }),
+  spiderD: T('Rastejante das Trevas', 'spider', 0x2a1a3a, 0.9, 1.0, 0.85, 1.8, 0.75, { gm: 'Alien', fx: 0xb04aff, beh: 'spitter' }),
+  spiderG: T('Rastejante Gigante', 'spider', 0x4a2a6a, 2.2, 1.5, 1.0, 2.6, 1.0, { gm: 'Alien', gt: 0xb98aff, fx: 0xff5af0, beh: 'leap' }),
+  wraith: T('Espectro', 'wisp', 0x9b7bff, 0.8, 1.5, 1.1, 1.9, 0.7, { gm: 'Ghost', gt: 0xc9b8ff, fx: 0x9b7bff, beh: 'stalker' }),
+  imp: T('Diabrete Explosivo', 'imp', 0xb02a5a, 0.5, 2.0, 1.4, 1.6, 0.6, { gm: 'Demon', fx: 0xff7a2a, beh: 'bomber' }),
   // Academia Arcana
-  slimeA: T('Slime Arcano', 'slime', 0x8a7bff, 1.0, 0.9, 0.9, 1.4, 0.7),
-  slimeB: T('Slime Explosivo', 'slime', 0xff7bd8, 0.6, 2.0, 1.4, 1.3, 0.6, { beh: 'bomber' }),
-  impA: T('Duende Arcano', 'imp', 0x6c9bff, 0.9, 1.5, 0.8, 1.5, 0.65, { beh: 'nova' }),
-  impS: T('Duende Invocador', 'imp', 0xc77dff, 1.1, 0.8, 0.7, 1.7, 0.7, { beh: 'summoner' }),
-  golemC: T('Golem de Cristal', 'golem', 0x9fd8ff, 3.0, 1.6, 0.65, 2.6, 1.1, { res: { p: 0.6, m: 1.4 } }),
-  wispA: T('Fogo-fátuo Arcano', 'wisp', 0xb6a8ff, 0.8, 1.2, 0.8, 1.6, 0.65, { ranged: SHOOT(0xb6a8ff, { range: 12, keep: 8, speed: 8, cd: 2.8, splash: 1.6 }), atk: 'Spellcast_Shoot' }),
+  slimeA: T('Slime Arcano', 'slime', 0x8a7bff, 1.0, 0.9, 0.9, 1.5, 0.7, { gm: 'Q_Slime', gt: 0xb8a8ff, fx: 0x8a7bff, beh: 'leap' }),
+  slimeB: T('Slime Explosivo', 'slime', 0xff7bd8, 0.6, 2.0, 1.4, 1.4, 0.6, { gm: 'Q_Slime', gt: 0xff9ae6, fx: 0xff7bd8, beh: 'bomber' }),
+  impA: T('Duende Arcano', 'imp', 0x6c9bff, 0.9, 1.5, 0.8, 1.7, 0.65, { gm: 'GreenDemon', gt: 0x9ab8ff, fx: 0x6c9bff, ranged: SHOOT(0x6c9bff, { pat: 'burst', range: 12, keep: 8, speed: 9.5, cd: 3.0, size: 1.2 }), atk: 'Spellcast_Shoot' }),
+  impS: T('Duende Invocador', 'imp', 0xc77dff, 1.1, 0.8, 0.7, 1.9, 0.7, { gm: 'Demon', gt: 0xd9a8ff, fx: 0xc77dff, beh: 'summoner' }),
+  golemC: T('Golem de Cristal', 'golem', 0x9fd8ff, 3.0, 1.6, 0.65, 2.8, 1.1, { gm: 'Yeti', fx: 0x9fd8ff, beh: 'slam', res: { p: 0.6, m: 1.4 } }),
+  wispA: T('Fogo-fátuo Arcano', 'wisp', 0xb6a8ff, 0.8, 1.2, 0.8, 1.8, 0.65, { gm: 'Ghost', gt: 0xb89aff, fx: 0xb6a8ff, ranged: SHOOT(0xb6a8ff, { pat: 'ring', range: 12, keep: 8, speed: 8, cd: 3.4, splash: 1.6 }), atk: 'Spellcast_Shoot' }),
   // Planalto Dourado
-  wolf: T('Lobo do Planalto', 'wolf', 0xd9a84a, 0.8, 1.1, 1.5, 1.6, 0.7),
-  wolfA: T('Lobo Alfa', 'wolf', 0xa0701f, 2.0, 1.6, 1.1, 2.2, 0.95, { beh: 'charger' }),
-  golemP: T('Golem de Pedra', 'golem', 0xb59a6a, 3.2, 1.6, 0.65, 2.7, 1.1, { res: { p: 0.7, m: 1.3 } }),
-  scorp: T('Escorpião Dourado', 'spider', 0xe0b23a, 1.0, 1.2, 0.85, 1.8, 0.75, { beh: 'spitter' }),
-  besouro: T('Besouro Blindado', 'crab', 0x8a6a2a, 1.8, 1.7, 0.85, 1.8, 0.85, { beh: 'charger', res: { p: 0.65, m: 1.3 } }),
+  wolf: T('Cervo do Planalto', 'wolf', 0xd9a84a, 0.8, 1.1, 1.5, 1.8, 0.7, { gm: 'Deer', fx: 0xffd36b, beh: 'leap' }),
+  wolfA: T('Cervo Alfa', 'wolf', 0xa0701f, 2.0, 1.6, 1.1, 2.5, 0.95, { gm: 'Deer', gt: 0xffc070, fx: 0xff9a3c, beh: 'charger' }),
+  golemP: T('Golem de Pedra', 'golem', 0xb59a6a, 3.2, 1.6, 0.65, 2.9, 1.1, { gm: 'Cyclops', gt: 0xd8c8a0, fx: 0xc9a46a, beh: 'slam', res: { p: 0.7, m: 1.3 } }),
+  scorp: T('Cacto Atirador', 'spider', 0xe0b23a, 1.0, 1.2, 0.85, 1.9, 0.75, { gm: 'Cactus', fx: 0xd8f06a, ranged: SHOOT(0xd8f06a, { pat: 'fan', arrow: true, speed: 12, cd: 2.4, splash: 0 }), atk: 'Spellcast_Shoot' }),
+  besouro: T('Vespa Blindada', 'crab', 0x8a6a2a, 1.8, 1.7, 0.85, 2.0, 0.85, { gm: 'Bee', gt: 0xffd070, fx: 0xffc030, beh: 'charger', res: { p: 0.65, m: 1.3 } }),
+  drake: T('Dragãozinho Dourado', 'bat', 0xe0b23a, 1.4, 1.5, 0.9, 2.3, 0.85, { gm: 'YellowDragon', fx: 0xffa030, ranged: SHOOT(0xffa030, { pat: 'burst', range: 13, keep: 9, speed: 9, cd: 3.0, size: 1.7, splash: 1.8 }), atk: 'Spellcast_Shoot' }),
   // Floresta Primeva
-  shroom: T('Cogumelo Saltitante', 'shroom', 0xd0503a, 0.6, 2.0, 1.4, 1.4, 0.6, { beh: 'bomber' }),
-  shroomV: T('Cogumelo Venenoso', 'shroom', 0x7a4aff, 0.9, 1.0, 0.8, 1.6, 0.7, { beh: 'spitter' }),
-  wolfF: T('Lobo da Floresta', 'wolf', 0x4d7a3d, 0.8, 1.3, 1.4, 1.7, 0.7, { beh: 'stalker' }),
-  spiderF: T('Aranha da Mata', 'spider', 0x3a8a2a, 0.35, 0.6, 1.5, 1.1, 0.5, { beh: 'swarm' }),
-  ent: T('Ent Ancião', 'golem', 0x6a4a2a, 3.4, 1.6, 0.6, 2.9, 1.2, { res: { p: 0.7, m: 1.3 } }),
-  gosma: T('Gosma Verde', 'slime', 0x7ddf5a, 1.0, 0.9, 0.9, 1.4, 0.7),
+  shroom: T('Cogumelo Saltitante', 'shroom', 0xd0503a, 0.6, 2.0, 1.4, 1.5, 0.6, { gm: 'Mushroom', fx: 0xff6a3a, beh: 'bomber' }),
+  shroomV: T('Cogumelo Venenoso', 'shroom', 0x7a4aff, 0.9, 1.0, 0.8, 1.7, 0.7, { gm: 'Mushroom', gt: 0xa88aff, fx: 0x9a6aff, beh: 'spitter' }),
+  wolfF: T('Panda Furioso', 'wolf', 0x4d7a3d, 0.8, 1.3, 1.4, 1.9, 0.7, { gm: 'Panda', gt: 0xb8e8a8, fx: 0x8adf6a, beh: 'leap' }),
+  spiderF: T('Abelha da Mata', 'spider', 0x3a8a2a, 0.35, 0.6, 1.5, 1.2, 0.5, { gm: 'Bee', gt: 0xc8ffa0, fx: 0xc8ff6a, beh: 'swarm' }),
+  ent: T('Ent Ancião', 'golem', 0x6a4a2a, 3.4, 1.6, 0.6, 3.1, 1.2, { gm: 'Tree', fx: 0x8adf6a, beh: 'slam', res: { p: 0.7, m: 1.3 } }),
+  gosma: T('Gosma Verde', 'slime', 0x7ddf5a, 1.0, 0.9, 0.9, 1.5, 0.7, { gm: 'Q_Slime', fx: 0x7ddf5a, beh: 'leap' }),
   // O Vazio
-  voidW: T('Sombra do Vazio', 'wisp', 0x30303a, 0.8, 1.5, 1.3, 1.7, 0.7, { beh: 'stalker' }),
-  voidS: T('Gosma do Vazio', 'slime', 0x1a1a2a, 1.0, 1.4, 0.9, 1.5, 0.7, { beh: 'nova' }),
-  voidE: T('Olho do Vazio', 'jelly', 0xdddde8, 0.9, 1.2, 0.75, 1.7, 0.7, { ranged: SHOOT(0xe8e8ff, { speed: 10 }), atk: 'Spellcast_Shoot' }),
-  voidG: T('Titã do Vazio', 'golem', 0x222233, 3.4, 1.8, 0.65, 2.8, 1.15, { beh: 'charger', res: { p: 0.7, m: 1.3 } }),
-  voidI: T('Diabrete do Vazio', 'imp', 0x444466, 1.1, 0.8, 0.7, 1.7, 0.7, { beh: 'summoner' }),
+  voidW: T('Sombra do Vazio', 'wisp', 0x30303a, 0.8, 1.5, 1.3, 1.9, 0.7, { gm: 'Ghost', gt: 0x6a6a88, fx: 0x8a8aff, beh: 'stalker' }),
+  voidS: T('Gosma do Vazio', 'slime', 0x1a1a2a, 1.0, 1.4, 0.9, 1.6, 0.7, { gm: 'Q_Slime', gt: 0x6a5a9a, fx: 0x8a6aff, beh: 'lob' }),
+  voidE: T('Olho do Vazio', 'jelly', 0xdddde8, 0.9, 1.2, 0.75, 2.0, 0.7, { gm: 'Cyclops', gt: 0x8a7ab8, fx: 0xc8c8ff, beh: 'beam' }),
+  voidG: T('Titã do Vazio', 'golem', 0x222233, 3.4, 1.8, 0.65, 3.0, 1.15, { gm: 'Skull', gt: 0x7a6a9a, fx: 0xa88aff, beh: 'charger', res: { p: 0.7, m: 1.3 } }),
+  voidI: T('Diabrete do Vazio', 'imp', 0x444466, 1.1, 0.8, 0.7, 1.9, 0.7, { gm: 'Demon', gt: 0x8a7aa8, fx: 0xa88aff, beh: 'summoner' }),
 };
 
 // Estagio 1 de todo reino = esqueletos. Estagios 2, 3 e 4 = uma familia de monstros nova cada um. Estagio 5 (chefe) e Infinito = mistura.
 export const STAGE_HORDES = {
   mares: [
     { name: 'Caranguejos e Limos', w: { crab: 40, limo: 36, jellyS: 10 } },
-    { name: 'Águas-vivas', w: { jellyS: 32, jellyN: 24, crab: 18, limo: 10 } },
+    { name: 'Polvos e Olhos-d\'água', w: { jellyS: 32, jellyN: 24, crab: 18, limo: 10 } },
     { name: 'Gigantes do Abismo', w: { coral: 24, crabK: 24, jellyN: 20, jellyS: 14 } },
   ],
   sombras: [
     { name: 'Morcegos Sombrios', w: { bat: 56, batV: 30 } },
-    { name: 'Aranhas das Trevas', w: { spiderD: 36, spiderG: 16, bat: 20 } },
+    { name: 'Rastejantes das Trevas', w: { spiderD: 36, spiderG: 16, bat: 20 } },
     { name: 'Espectros e Diabretes', w: { wraith: 30, imp: 22, spiderG: 18, batV: 14 } },
   ],
   arcana: [
@@ -159,13 +163,13 @@ export const STAGE_HORDES = {
     { name: 'Golems de Cristal', w: { golemC: 26, wispA: 24, impA: 18, slimeB: 14 } },
   ],
   planalto: [
-    { name: 'Lobos do Planalto', w: { wolf: 58, wolfA: 14 } },
-    { name: 'Escorpiões e Golems', w: { golemP: 26, scorp: 30, wolf: 18 } },
-    { name: 'Alfas e Besouros', w: { wolfA: 24, besouro: 26, golemP: 20, scorp: 14 } },
+    { name: 'Cervos do Planalto', w: { wolf: 58, wolfA: 14 } },
+    { name: 'Cactos e Golems', w: { golemP: 26, scorp: 30, wolf: 18 } },
+    { name: 'Alfas, Vespas e Dragõezinhos', w: { wolfA: 20, besouro: 22, drake: 22, golemP: 18, scorp: 12 } },
   ],
   primeva: [
     { name: 'Cogumelos e Gosmas', w: { shroom: 40, gosma: 36, shroomV: 16 } },
-    { name: 'Lobos e Aranhas da Mata', w: { wolfF: 36, spiderF: 30, shroomV: 18 } },
+    { name: 'Pandas e Abelhas da Mata', w: { wolfF: 36, spiderF: 30, shroomV: 18 } },
     { name: 'Ents da Floresta', w: { ent: 24, wolfF: 22, shroomV: 20, shroom: 14 } },
   ],
   vazio: [
@@ -174,12 +178,14 @@ export const STAGE_HORDES = {
     { name: 'Titãs do Vazio', w: { voidG: 26, voidE: 22, voidW: 20, voidI: 16 } },
   ],
 };
+const STAGE1_EXTRA = { mares: { limo: 30 }, sombras: { bat: 30 }, arcana: { slimeA: 30 }, planalto: { wolf: 30 }, primeva: { gosma: 30 }, vazio: { voidW: 30 } };
 export const SKEL_HORDE = (act) => ({ minion: 50, warrior: 22, runner: 14, archer: 14, mage: act >= 2 ? 8 : 0 });
 
 // pesos de monstros do estagio (st 1..5; 5 e infinito = mistura de tudo do reino)
 export function hordeWeights(realm, st, act) {
   const fam = STAGE_HORDES[hordeRealm(realm)];
-  if (!fam || st <= 1) return SKEL_HORDE(act);
+  if (!fam) return SKEL_HORDE(act);
+  if (st <= 1) return Object.assign(SKEL_HORDE(act), STAGE1_EXTRA[hordeRealm(realm)] || {});   // esqueletos + um monstrinho do reino, para nao ficar tudo igual
   if (st <= 4) return Object.assign({}, fam[st - 2].w);
   const w = { warrior: 8, archer: 6 };
   fam.forEach(f => { for (const k in f.w) w[k] = (w[k] || 0) + f.w[k] * 0.5; });

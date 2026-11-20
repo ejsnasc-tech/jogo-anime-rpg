@@ -237,7 +237,7 @@ export function playOnce(g, which, dur) {
   if (u.pending) return;
   if (!u.glb) { if (which === 'atk') g.scale.set(1.12, 0.92, 1.12); return; }
   if (u.dead || (which === 'hit' && u.shot)) return;
-  const name = which === 'atk' ? u.anim.atk : which === 'ult' ? u.anim.ult : which === 'hit' ? 'Hit_A' : which === 'death' ? 'Death_A' : which;
+  const name = which === 'atk' ? u.anim.atk : which === 'ult' ? u.anim.ult : which === 'hit' ? (u.monster ? u.anim.hit : 'Hit_A') : which === 'death' ? (u.monster ? u.anim.death : 'Death_A') : which;
   const a = clipAction(u, name); if (!a) return;
   const cd = a.getClip().duration, ts = dur ? Math.max(0.6, Math.min(3, cd / dur)) : 1;
   if (u.shot && u.shot !== a) u.shot.fadeOut(0.05);
@@ -258,4 +258,63 @@ function animateProcedural(g, dt, o) {
   if (u.orbs) u.orbs.rotation.y += dt * 2.5;
   if (u.halo) u.halo.rotation.z += dt * 2;
   g.userData.bob = o.moving ? Math.abs(Math.sin(u.wt)) * 0.08 : 0;
+}
+
+// ---- monstrinhos animados (pacotes "Cute Animated Monsters" e "Animated Monster Pack" do Quaternius, licenca CC0) ----
+// Carregam em segundo plano: enquanto um modelo nao chegou, o jogo usa o corpo procedural antigo (creatures.js).
+const MON_FILES = ['Alien', 'Alien_Tall', 'Bat', 'Bee', 'Cactus', 'Crab', 'Cthulhu', 'Cyclops', 'Deer', 'Demon', 'Ghost', 'GreenDemon', 'Mushroom', 'Panda', 'Skull', 'Tree', 'YellowDragon', 'Yeti', 'Q_Slime', 'Q_Bat', 'Q_Dragon'];
+const monLoaded = {};
+const A0 = { idle: 'Idle', run: 'Walk', atk: 'Bite_Front', hit: 'HitRecieve', death: 'Death' };
+const FLY = { idle: 'Flying', run: 'Flying', atk: 'Bite_Front', hit: null, death: 'Death' };
+const MON_ANIM = {
+  Bat: FLY, Bee: FLY, YellowDragon: Object.assign({}, FLY, { hit: 'HitRecieve' }),
+  Cthulhu: { idle: 'Flying', run: 'Flying', atk: 'HitRecieve', hit: 'HitRecieve', death: null },
+  Mushroom: { idle: 'Idle', run: 'Idle', atk: 'Idle', hit: null, death: null, hop: 1 },
+  Q_Slime: { idle: 'Slime_Idle', run: 'Slime_Walk', atk: 'Slime_Attack', hit: null, death: 'Slime_Death' },
+  Q_Bat: { idle: 'Bat_Flying', run: 'Bat_Flying', atk: 'Bat_Attack', hit: 'Bat_Hit', death: 'Bat_Death' },
+  Q_Dragon: { idle: 'Dragon_Flying', run: 'Dragon_Flying', atk: 'Dragon_Attack', hit: 'Dragon_Hit', death: 'Dragon_Death' },
+};
+const MON_ROT = { Q_Slime: Math.PI };   // alguns modelos olham para outro lado
+const MON_FLY = { Bat: 1.0, Bee: 0.9, YellowDragon: 0.8, Cthulhu: 0.9, Q_Bat: 1.0, Q_Dragon: 1.0, Ghost: 0.3 };
+export const hasMonster = (k) => !!monLoaded[k];
+
+export function preloadMonsters() {
+  const loader = new GLTFLoader(), tl = new THREE.TextureLoader();
+  return Promise.all(MON_FILES.map(n => new Promise((res) => {
+    loader.load(BASE + 'models/mon/' + n + '.glb', (gltf) => {
+      gltf.animations.forEach(c => { c.name = c.name.split('|').pop(); });
+      gltf.scene.updateMatrixWorld(true);
+      const box = new THREE.Box3();
+      gltf.scene.traverse(o => { if (o.isSkinnedMesh) { o.geometry.computeBoundingBox(); box.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld)); } });
+      const h = box.isEmpty() ? 1.2 : Math.max(0.3, box.max.y - box.min.y);
+      const L = { scene: gltf.scene, clips: gltf.animations, height: h, tex: null };
+      monLoaded[n] = L;
+      if (!n.startsWith('Q_')) tl.load(BASE + 'models/mon/' + n + '.webp', (t) => { t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; L.tex = t; res(); }, undefined, () => res());
+      else res();
+    }, undefined, (err) => { console.warn('monstro nao carregou:', n, err); res(); });
+  })));
+}
+
+// size = altura alvo (m); o.tint = cor que multiplica a textura (variantes de cor); o.hover = altura de voo
+export function makeMonster(name, o) {
+  o = o || {};
+  const L = monLoaded[name]; if (!L) return null;
+  const root = skClone(L.scene), g = new THREE.Group(); g.add(root);
+  root.scale.setScalar((o.size || 1.6) * 1.25 / L.height);
+  root.rotation.y = MON_ROT[name] || 0;
+  root.position.y = o.hover != null ? o.hover : (MON_FLY[name] || 0);
+  const tint = o.tint != null ? new THREE.Color(o.tint) : null;
+  root.traverse(m => {
+    if (!m.isMesh) return;
+    m.material = m.material.clone(); m.castShadow = true; m.frustumCulled = false;
+    if (L.tex) { m.material.map = L.tex; m.material.metalness = 0; m.material.roughness = 0.85; m.material.color.setRGB(1.6, 1.6, 1.6); m.material.needsUpdate = true; }   // as texturas sao escuras: clareia
+    if (tint) { if (name.startsWith('Q_')) { if (/^(Body|Main)$/.test(m.material.name)) m.material.color.copy(tint); } else m.material.color.multiply(tint); }   // Q_: pinta o corpo direto (a cor de fabrica e verde/marrom)
+  });
+  const an = Object.assign({}, A0, MON_ANIM[name] || {});
+  const has = (n) => n && L.clips.some(c => c.name === n);
+  g.userData = newUserData(L.clips, { idle: an.idle, run: an.run, atk: an.atk, ult: an.idle, hit: has(an.hit) ? an.hit : null, death: has(an.death) ? an.death : null }, { enemy: true, monster: name, hop: !!an.hop, noDeath: !has(an.death) });
+  g.userData.mixer = new THREE.AnimationMixer(root);
+  setLoco(g.userData, 'run', 1);
+  if (g.userData.curAction) g.userData.curAction.time = Math.random() * 1.0;
+  return g;
 }
