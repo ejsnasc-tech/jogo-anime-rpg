@@ -580,7 +580,9 @@ const scaleAct = () => { const a = state.endless ? ACTS.length - 1 : state.act; 
 const bossMul = () => { const a = state.endless ? ACTS.length - 1 : state.act; return a <= 5 ? 1.8 : 2.5 + (a - 5) * 0.3; };
 const endlessAct = () => (6 + Math.floor(state.stageKills / 150)) % ACTS.length;
 const tierNow = () => tierOf(state.endless ? ACTS.length - 1 : state.act);
-const quota = () => (8 + state.stage * 3 + Math.round(scaleAct() * 2)) * rmN;
+const quota = () => (10 + state.stage * 6 + Math.round(scaleAct() * 3)) * rmN;   // cada estagio pede mais abates (16, 22, 28, 34...)
+// quantos monstros ao mesmo tempo: sobe a cada estagio (e, no infinito, a cada 40 abates)
+const waveCap = () => Math.min(60, Math.round((state.endless ? 16 + Math.min(24, state.stageKills / 40) * 1.2 : 10 + state.stage * 4 + scaleAct() * 1.5) * rmN));
 
 function realmMult() {
   const er = baseRealm(curAct().realm), hr = hero.realm;
@@ -979,7 +981,7 @@ function leaveCave() {
 }
 function caveWave(st) {
   const w = hordeWeights(cave.realm, [1, 2, 3, 4, 4][st.i], cave.ai), keys = Object.keys(w).filter(k => w[k] > 0), tot = keys.reduce((a, k) => a + w[k], 0), j0 = cave.nearest(st.x, st.z).i;
-  for (let i = 0; i < 4 + st.i; i++) {
+  for (let i = 0; i < 5 + st.i * 2; i++) {
     let r = Math.random() * tot, k = keys[0]; for (const kk of keys) { r -= w[kk]; if (r <= 0) { k = kk; break; } }
     const pp = cave.pts[Math.min(cave.pts.length - 1, j0 + 7 + i * 2)], q = { x: pp.x + (Math.random() - 0.5) * 5, z: pp.z + (Math.random() - 0.5) * 5 };
     cave.clamp(q, 1.2, false); spawnEnemy(false, null, k, q);
@@ -1651,13 +1653,14 @@ function spawnBoss() {
 function autoSpawn() {
   if (inCity || wb || pvp) return;
   if (!isHost()) return;
-  for (let i = 0; i < rmN; i++) autoSpawn1();
+  const per = state.endless ? 2 + Math.min(2, Math.floor(state.stageKills / 120)) : 1 + Math.floor(state.stage / 2);   // nascem mais por vez a cada estagio
+  for (let i = 0; i < rmN * per; i++) autoSpawn1();
 }
 function autoSpawn1() {
   if (dg) { if (dg.cave) return; if (dg.floor === 5) { if (enemies.length < 7) spawnEnemy(false); } else if (enemies.length < Math.min(14, dg.need - dg.kills + 2)) spawnEnemy(false); return; }
   const bossStage = state.stage === 5 && !state.endless;
   if (bossStage) { if (enemies.length < 8 * rmN) spawnEnemy(false); return; }
-  const cap = Math.min(60, state.endless ? 25 * rmN : Math.min(25 * rmN, quota() - state.stageKills + 2));
+  const cap = state.endless ? waveCap() : Math.min(waveCap(), quota() - state.stageKills + 2);
   if (enemies.length < cap) spawnEnemy(false);
 }
 
