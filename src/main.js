@@ -1566,7 +1566,7 @@ function bossBrain(e, o, vx, vz, d) {
   if (e.bst === 'wind') { o.mv = 0; o.melee = false; if (T >= e.bAt) { e.bst = 'dash'; e.bAt = T + 0.7; if (e.tele) { scene.remove(e.tele); e.tele = null; } } return; }
   if (e.bst === 'dash') { o.dir = { x: e.dx, z: e.dz }; o.spd = 5.5; o.melee = false; if (d < e.radius + 1) hitPlayer(e); if (T >= e.bAt) { e.bst = null; glowEnemy(e, 0); } return; }
   if (T >= e.cdAt && d < 32) {
-    e.cdAt = T + (mad ? 2.2 : 3.4) + Math.random();
+    e.cdAt = T + (mad ? 1.7 : 2.7) + Math.random();
     const mv = B.moves[Math.floor(Math.random() * B.moves.length)];
     if (mv.startsWith('sum:')) { if (enemies.length < 30) { ringFx(ep, B.fx, 4, 0.6); for (let i = 0; i < 3; i++) { const a = i / 3 * 6.28; spawnEnemy(false, null, mv.slice(4), { x: ep.x + Math.cos(a) * 3.5, z: ep.z + Math.sin(a) * 3.5 }); } ftAt(ep, '👥 Reforços!', '#ffd166', 3); } }
     else { BMOVES[mv](e, p, ep, { vx, vz, d }); ftAt(ep, BNAME[mv] || '', '#ff9f1c', 3); }
@@ -1603,10 +1603,10 @@ function spawnEnemy(boss, info, forceType, at) {
   // o mundo acompanha o jogador: passar do nível da zona deixa os bichos mais fortes
   const over = Math.max(0, state.level - lv), catchup = 1 + over * 0.1, catchD = 1 + over * 0.05;
   const base = (18 + lv * 7) * (1 + scaleAct() * 0.3) * 2.4 * catchup;
-  const hpv = boss ? base * 14 * (state.endless ? 1.5 : 1) * 1.3 * rmN * bossMul() : base * T0.hp;
+  const hpv = boss ? base * 14 * (state.endless ? 1.5 : 1) * 1.3 * 2.4 * rmN * bossMul() : base * T0.hp;
   const dmgLv = lv <= 36 ? lv : 36 + (lv - 36) * 0.45;   // acima do nivel 36 o dano dos monstros cresce mais devagar (a vida do jogador nao acompanha)
   const dmgBase = ((6 + dmgLv * 0.8) * (1 + scaleAct() * 0.12)) * 1.6 * catchD;
-  const e = { nid: ++nidSeq, mesh, hp: hpv, maxHp: hpv, speed: boss ? 1.5 * (BS ? BS.spd / 1.2 : 1) : (1.9 + Math.random() * 1.0) * T0.spd, boss: !!boss, bk: boss ? bossRealm() : null, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? (BS ? BS.r : 1.4) : T0.r, t: Math.random() * 10, dmg: dmgBase * (boss ? 1.6 : T0.dmg), stun: 0, slow: 0, flash: 0, ranged: boss ? null : T0.ranged || null, res: boss ? null : T0.res || null, shotAt: T + 1 + Math.random() * 2, beh: boss ? (BS ? 'boss' : null) : T0.beh || null, cdAt: T + 1 + Math.random() * 3 };
+  const e = { nid: ++nidSeq, mesh, hp: hpv, maxHp: hpv, speed: boss ? 1.5 * (BS ? BS.spd / 1.2 : 1) : (1.9 + Math.random() * 1.0) * T0.spd, boss: !!boss, bk: boss ? bossRealm() : null, kind: boss ? 'Skeleton_Warrior' : T0.loot, type: boss ? 'boss' : tk, radius: boss ? (BS ? BS.r : 1.4) : T0.r, t: Math.random() * 10, dmg: dmgBase * (boss ? 2.4 : T0.dmg), stun: 0, slow: 0, flash: 0, ranged: boss ? null : T0.ranged || null, res: boss ? null : T0.res || null, shotAt: T + 1 + Math.random() * 2, beh: boss ? (BS ? 'boss' : null) : T0.beh || null, cdAt: T + 1 + Math.random() * 3 };
   if (T0.fx && !boss) { e.slashColor = e.lobColor = e.beamColor = T0.fx; }
   if (dg) { e.hp = e.maxHp = e.hp * 1.35; e.dmg *= 1.3; }
   if (!boss && !forceType && Math.random() < 0.04 + scaleAct() * 0.01 + (night > 0.55 ? 0.03 : 0) + (dg ? 0.12 : 0)) {
