@@ -582,7 +582,7 @@ const endlessAct = () => (6 + Math.floor(state.stageKills / 150)) % ACTS.length;
 const tierNow = () => tierOf(state.endless ? ACTS.length - 1 : state.act);
 const quota = () => (10 + state.stage * 6 + Math.round(scaleAct() * 3)) * rmN;   // cada estagio pede mais abates (16, 22, 28, 34...)
 // quantos monstros ao mesmo tempo: sobe a cada estagio (e, no infinito, a cada 40 abates)
-const waveCap = () => Math.min(60, Math.round((state.endless ? 16 + Math.min(24, state.stageKills / 40) * 1.2 : 10 + state.stage * 4 + scaleAct() * 1.5) * rmN));
+const waveCap = () => Math.min(60, Math.round((gfx === 'low' ? 0.75 : 1) * (state.endless ? 16 + Math.min(24, state.stageKills / 40) * 1.2 : 10 + state.stage * 4 + scaleAct() * 1.5) * rmN));
 
 function realmMult() {
   const er = baseRealm(curAct().realm), hr = hero.realm;
@@ -3090,7 +3090,7 @@ function update(dt) {
     ep.x = THREE.MathUtils.clamp(ep.x + ux * e.speed * sm * mv * sp * dt, -WORLD, WORLD); ep.z = THREE.MathUtils.clamp(ep.z + uz * e.speed * sm * mv * sp * dt, -WORLD, WORLD);
     if (cave) cave.clamp(ep, 0.5, false);
     e.t += dt * 6;
-    if (e.mesh.userData.glb) { ep.y = gE + (e.jy || 0) + (e.mesh.userData.hop && sm > 0 && mv !== 0 ? Math.abs(Math.sin(e.t)) * 0.3 : 0); animateHero(e.mesh, dt, { moving: sm > 0 && mv !== 0 && (mv < 0 || d > e.radius + 0.4), spd: sm }); }
+    if (e.mesh.userData.glb) { ep.y = gE + (e.jy || 0) + (e.mesh.userData.hop && sm > 0 && mv !== 0 ? Math.abs(Math.sin(e.t)) * 0.3 : 0); { const far = gfx === 'low' && d > 22 ? 4 : 1; e.afr = ((e.afr || 0) + 1) % far; e.adt = (e.adt || 0) + dt; if (!e.afr) { animateHero(e.mesh, e.adt, { moving: sm > 0 && mv !== 0 && (mv < 0 || d > e.radius + 0.4), spd: sm }); e.adt = 0; } } }
     else {
       // pulo com inclinacao para frente ao andar e investida ao atacar
       const mvg = sm > 0 && mv !== 0 && (mv < 0 || d > e.radius + 0.4), hit = melee && d < e.radius + 0.5 && sm > 0;
