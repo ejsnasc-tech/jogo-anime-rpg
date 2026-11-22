@@ -262,7 +262,7 @@ function animateProcedural(g, dt, o) {
 
 // ---- monstrinhos animados (pacotes "Cute Animated Monsters" e "Animated Monster Pack" do Quaternius, licenca CC0) ----
 // Carregam em segundo plano: enquanto um modelo nao chegou, o jogo usa o corpo procedural antigo (creatures.js).
-const MON_FILES = ['Alien', 'Alien_Tall', 'Bat', 'Bee', 'Cactus', 'Crab', 'Cthulhu', 'Cyclops', 'Deer', 'Demon', 'Ghost', 'GreenDemon', 'Mushroom', 'Panda', 'Skull', 'Tree', 'YellowDragon', 'Yeti', 'Q_Slime', 'Q_Bat', 'Q_Dragon'];
+const MON_FILES = ['Alien', 'Alien_Tall', 'Bat', 'Bee', 'Cactus', 'Crab', 'Cthulhu', 'Cyclops', 'Deer', 'Demon', 'Ghost', 'GreenDemon', 'Mushroom', 'Panda', 'Skull', 'Tree', 'YellowDragon', 'Yeti', 'Q_Slime', 'Q_Bat', 'Q_Dragon', 'R_Warrior', 'R_Rogue', 'R_Monk', 'R_Wizard', 'R_Cleric', 'R_Ranger'];
 const monLoaded = {};
 const A0 = { idle: 'Idle', run: 'Walk', atk: 'Bite_Front', hit: 'HitRecieve', death: 'Death' };
 const FLY = { idle: 'Flying', run: 'Flying', atk: 'Bite_Front', hit: null, death: 'Death' };
@@ -274,6 +274,11 @@ const MON_ANIM = {
   Q_Bat: { idle: 'Bat_Flying', run: 'Bat_Flying', atk: 'Bat_Attack', hit: 'Bat_Hit', death: 'Bat_Death' },
   Q_Dragon: { idle: 'Dragon_Flying', run: 'Dragon_Flying', atk: 'Dragon_Attack', hit: 'Dragon_Hit', death: 'Dragon_Death' },
 };
+const H0 = { idle: 'Idle', run: 'Run', hit: 'RecieveHit', death: 'Death' };
+Object.assign(MON_ANIM, {
+  R_Warrior: Object.assign({ atk: 'Sword_Attack' }, H0), R_Rogue: Object.assign({ atk: 'Dagger_Attack' }, H0), R_Monk: Object.assign({ atk: 'Attack' }, H0),
+  R_Wizard: Object.assign({ atk: 'Staff_Attack' }, H0), R_Cleric: Object.assign({ atk: 'Staff_Attack' }, H0), R_Ranger: Object.assign({ atk: 'Bow_Attack_Shoot' }, H0),
+});
 const MON_ROT = { Q_Slime: Math.PI };   // alguns modelos olham para outro lado
 const MON_FLY = { Bat: 1.0, Bee: 0.9, YellowDragon: 0.8, Cthulhu: 0.9, Q_Bat: 1.0, Q_Dragon: 1.0, Ghost: 0.3 };
 export const hasMonster = (k) => !!monLoaded[k];
@@ -307,7 +312,7 @@ export function makeMonster(name, o) {
   root.traverse(m => {
     if (!m.isMesh) return;
     m.material = m.material.clone(); m.castShadow = true; m.frustumCulled = false;
-    if (L.tex) { m.material.map = L.tex; m.material.metalness = 0; m.material.roughness = 0.85; m.material.color.setRGB(1.6, 1.6, 1.6); m.material.needsUpdate = true; }   // as texturas sao escuras: clareia
+    if (L.tex) { m.material.map = L.tex; m.material.metalness = 0; m.material.roughness = 0.85; { const k = name.startsWith('R_') ? 1.1 : 1.6; m.material.color.setRGB(k, k, k); } m.material.needsUpdate = true; }   // as texturas sao escuras: clareia
     if (tint) { if (name.startsWith('Q_')) { if (/^(Body|Main)$/.test(m.material.name)) m.material.color.copy(tint); } else m.material.color.multiply(tint); }   // Q_: pinta o corpo direto (a cor de fabrica e verde/marrom)
   });
   const an = Object.assign({}, A0, MON_ANIM[name] || {});
