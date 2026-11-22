@@ -227,7 +227,7 @@ const terrain = (() => {
 ground.visible = false;   // começa no campo; o chão plano só aparece na cidade
 
 // ---- cenários por setor (cada reino tem o seu bioma) ----
-let trailMat = null; const TRAIL = { mares: 0xd9b77a, sombras: 0x5d5070, arcana: 0x6c68a8, planalto: 0xcfa468, primeva: 0x8a6c48, vazio: 0x3c3150 };
+let trailMat = null; const TRAIL = { mares: 0xd9b77a, sombras: 0x5d5070, arcana: 0x6c68a8, planalto: 0xcfa468, primeva: 0x8a6c48, vazio: 0x3c3150, esmeralda: 0xc9b27a };
 const biomes = {}; let biomeNotify = false, curBiome = null, biomeFar = 140, baseTrees = [], baseRock = null, mtnMat = null, capMat = null, cloudMat = null;
 function applyAct() {
   const key = ACTS[state.act].realm, r = REALMS[key], bk = baseRealm(key), bi = BIOME_INFO[key], variant = isVariant(key);
